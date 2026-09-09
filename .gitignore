@@ -1,0 +1,44 @@
+# Dependencies and build output
+node_modules/
+.next/
+dist/
+out/
+coverage/
+*.tsbuildinfo
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Local data and databases
+data/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+logs/
+*.log
+
+# Sensitive job-hunting artifacts
+private/
+resumes/
+generated-materials/
+conversation-exports/
+screenshots/
+downloads/
+browser-profiles/
+playwright/.auth/
+cookies*.json
+sessions*.json
+
+# Tooling and operating systems
+.DS_Store
+.idea/
+.vscode/
+.turbo/
+pnpm-debug.log*
+npm-debug.log*

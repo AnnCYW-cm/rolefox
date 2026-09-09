@@ -1,0 +1,27 @@
+{
+  "name": "rolefox",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "An open-source AI job hunting agent.",
+  "license": "Apache-2.0",
+  "packageManager": "pnpm@10.29.1",
+  "engines": {
+    "node": ">=20.9"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @rolefox/web dev",
+    "dev:all": "pnpm -r --parallel --if-present dev",
+    "build:packages": "tsc -b packages/domain packages/policy packages/connector-sdk apps/worker apps/runner",
+    "build": "pnpm build:packages && pnpm --filter @rolefox/web build",
+    "lint": "pnpm -r --if-present lint",
+    "typecheck": "pnpm build:packages && pnpm --filter @rolefox/web typecheck",
+    "test": "vitest run",
+    "check": "pnpm lint && pnpm typecheck && pnpm --filter @rolefox/web build && pnpm test"
+  },
+  "devDependencies": {
+    "tsx": "^4.23.13",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.0"
+  }
+}

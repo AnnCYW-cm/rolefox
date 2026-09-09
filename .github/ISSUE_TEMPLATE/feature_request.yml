@@ -1,0 +1,26 @@
+name: Feature request
+description: Propose a focused improvement to RoleFox.
+title: "[Feature]: "
+labels: ["enhancement", "triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: User problem
+      description: What job-hunting problem should this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the smallest useful solution.
+    validations:
+      required: true
+  - type: textarea
+    id: risk
+    attributes:
+      label: Automation and privacy risks
+      description: Could this send messages, submit data, store credentials, or affect a platform account?
+    validations:
+      required: true
