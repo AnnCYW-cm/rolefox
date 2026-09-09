@@ -68,4 +68,27 @@ describe("connector capability contract", () => {
       /does not implement discover/,
     );
   });
+
+  it("rejects a calendar connector missing either calendar method", () => {
+    const connector = {
+      manifest: {
+        id: "broken-calendar-demo",
+        name: "Broken Calendar Demo",
+        version: "0.1.0",
+        sdkVersion: "0.1.0",
+        configSchemaVersion: "1",
+        runtime: "server",
+        capabilities: ["calendar"],
+        supportedLocales: ["en"],
+        authentication: "oauth2",
+        permissions: ["read_calendar", "write_calendar"],
+        usesLocalCredentials: false,
+      },
+      checkAvailability: async () => ({ availability: "free" }),
+    } as unknown as ConnectorBase;
+
+    expect(() => assertCapability(connector, "calendar")).toThrow(
+      /does not implement createInterviewEvent/,
+    );
+  });
 });

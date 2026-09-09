@@ -1,11 +1,14 @@
 import type {
-  ActionPlan,
+  ActionPlanFor,
+  CalendarAvailabilityEvidence,
   CandidateProfile,
   CompensationRange,
   EmploymentType,
   JobLocation,
   JobPosting,
+  InterviewSlot,
   RiskLevel,
+  ScheduleInterviewActionPlan,
   SensitiveTopic,
   WorkMode,
 } from "@rolefox/domain";
@@ -17,6 +20,7 @@ export const CONNECTOR_CAPABILITIES = [
   "inbox",
   "reply",
   "notify",
+  "calendar",
 ] as const;
 
 export type ConnectorCapability = (typeof CONNECTOR_CAPABILITIES)[number];
@@ -34,7 +38,9 @@ export type ConnectorPermission =
   | "read_messages"
   | "submit_applications"
   | "send_messages"
-  | "send_notifications";
+  | "send_notifications"
+  | "read_calendar"
+  | "write_calendar";
 
 export interface ConnectorManifest {
   id: string;
@@ -138,9 +144,18 @@ export interface NotificationPlanInput {
   body: string;
 }
 
+export interface CalendarAvailabilityQuery {
+  workspaceId: string;
+  calendarAccountId: string;
+  slot: InterviewSlot;
+}
+
+export type CalendarAvailabilitySnapshot = CalendarAvailabilityEvidence;
+
 export interface ExecuteContext {
-  approvalToken: string;
+  authorizationToken: string;
   expectedPlanId: string;
+  expectedOperationIdempotencyKey: string;
   expectedPayloadHash: string;
   signal?: AbortSignal;
 }
@@ -167,7 +182,7 @@ export interface JobDetailConnector extends ConnectorBase {
 export interface ApplicationConnector extends ConnectorBase {
   planApplication(input: ApplyPlanInput): Promise<ActionDraft>;
   executeApplication(
-    plan: ActionPlan,
+    plan: ActionPlanFor<"submit_application">,
     context: ExecuteContext,
   ): Promise<ExecutionResult>;
 }
@@ -179,7 +194,11 @@ export interface InboxConnector extends ConnectorBase {
 export interface ReplyConnector extends ConnectorBase {
   planReply(input: ReplyPlanInput): Promise<ActionDraft>;
   executeReply(
-    plan: ActionPlan,
+    plan: ActionPlanFor<"send_reply">,
+    context: ExecuteContext,
+  ): Promise<ExecutionResult>;
+  executeInterviewConfirmation(
+    plan: ScheduleInterviewActionPlan,
     context: ExecuteContext,
   ): Promise<ExecutionResult>;
 }
@@ -187,7 +206,17 @@ export interface ReplyConnector extends ConnectorBase {
 export interface NotificationConnector extends ConnectorBase {
   planNotification(input: NotificationPlanInput): Promise<ActionDraft>;
   executeNotification(
-    plan: ActionPlan,
+    plan: ActionPlanFor<"send_notification">,
+    context: ExecuteContext,
+  ): Promise<ExecutionResult>;
+}
+
+export interface CalendarConnector extends ConnectorBase {
+  checkAvailability(
+    query: CalendarAvailabilityQuery,
+  ): Promise<CalendarAvailabilitySnapshot>;
+  createInterviewEvent(
+    plan: ScheduleInterviewActionPlan,
     context: ExecuteContext,
   ): Promise<ExecutionResult>;
 }
@@ -210,8 +239,9 @@ export function assertCapability(
     detail: ["getDetail"],
     apply: ["planApplication", "executeApplication"],
     inbox: ["readInbox"],
-    reply: ["planReply", "executeReply"],
+    reply: ["planReply", "executeReply", "executeInterviewConfirmation"],
     notify: ["planNotification", "executeNotification"],
+    calendar: ["checkAvailability", "createInterviewEvent"],
   };
   const implementation = connector as unknown as Record<string, unknown>;
 

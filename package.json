@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Local-by-default, self-hostable job-search automation controlled by the candidate.",
+  "description": "A policy-governed, open-source job-search agent from goals to booked interviews.",
   "license": "Apache-2.0",
   "packageManager": "pnpm@10.29.1",
   "engines": {

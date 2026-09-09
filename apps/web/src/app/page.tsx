@@ -1,7 +1,7 @@
 const navItems = [
   { icon: "⌂", label: "今日概览", active: true },
   { icon: "⌕", label: "岗位雷达" },
-  { icon: "✓", label: "待我确认", badge: "3" },
+  { icon: "✓", label: "校准与异常", badge: "3" },
   { icon: "↗", label: "投递看板" },
   { icon: "◷", label: "面试日程" },
 ];
@@ -13,7 +13,7 @@ const jobs = [
     company: "Atlas Labs（示例）",
     meta: "新加坡 · 混合办公 · SGD 9K–13K/月",
     reason: "工作流产品经验匹配，核心条件均已满足",
-    tag: "建议投递",
+    tag: "符合自动规则",
     tone: "strong",
   },
   {
@@ -21,8 +21,8 @@ const jobs = [
     title: "Product Operations Lead",
     company: "Northstar（示例）",
     meta: "全球远程 · USD 90K–120K/年",
-    reason: "跨团队交付经验匹配，需确认工作时区",
-    tag: "待确认",
+    reason: "跨团队交付经验匹配，工作时区尚未被当前规则覆盖",
+    tag: "规则例外",
     tone: "review",
   },
   {
@@ -31,7 +31,7 @@ const jobs = [
     company: "Acme Systems（示例）",
     meta: "德国柏林 · 混合办公 · EUR 75K–95K/年",
     reason: "产品策略经验匹配，语言要求仍需核实",
-    tag: "补充信息",
+    tag: "信息不足",
     tone: "muted",
   },
 ];
@@ -39,7 +39,7 @@ const jobs = [
 const funnel = [
   { label: "已发现", value: 24, color: "var(--forest)" },
   { label: "高匹配", value: 7, color: "var(--orange)" },
-  { label: "待确认", value: 3, color: "var(--amber)" },
+  { label: "需处理", value: 3, color: "var(--amber)" },
   { label: "已投递", value: 0, color: "var(--sage)" },
 ];
 
@@ -62,7 +62,7 @@ export default function Home() {
           </span>
           <span>
             <strong>RoleFox</strong>
-            <small>开源求职自动化</small>
+            <small>开源求职 Autopilot</small>
           </span>
         </div>
 
@@ -91,8 +91,8 @@ export default function Home() {
               <span className="status-dot" />
               安全规则预览
             </div>
-            <strong>L2 · 外部动作需确认</strong>
-            <span>M0 仅展示规则，不运行后台任务</span>
+            <strong>L2 · 校准期逐次确认</strong>
+            <span>校准后 L3 · 规则内自动，异常才打扰</span>
           </div>
           <button
             className="settings-button"
@@ -108,10 +108,10 @@ export default function Home() {
       <section className="workspace">
         <header className="topbar">
           <div>
-            <p className="eyebrow">示例工作区 · 多地区 / 多币种</p>
-            <h1>本轮有 7 个岗位值得关注</h1>
+            <p className="eyebrow">M0 通用演示 · 面试前 Autopilot</p>
+            <h1>设定目标，等面试通知</h1>
             <p className="subtitle">
-              RoleFox 已用合成数据演示搜索、去重与匹配评分。
+              完成校准后，RoleFox 将按你的规则筛选、定制、投递和沟通；只有约到面试或遇到规则例外时才打扰你。
             </p>
           </div>
           <div className="header-actions">
@@ -165,11 +165,11 @@ export default function Home() {
           </article>
           <article className="stat-card">
             <div className="stat-topline">
-              <span>示例待确认</span>
+              <span>示例需处理</span>
               <span className="stat-icon amber">✓</span>
             </div>
             <div className="stat-value">3</div>
-            <div className="stat-detail">模拟材料状态</div>
+            <div className="stat-detail">校准项与规则例外</div>
           </article>
           <article className="stat-card">
             <div className="stat-topline">
@@ -188,8 +188,8 @@ export default function Home() {
           <article className="panel job-panel">
             <div className="panel-heading">
               <div>
-                <p className="eyebrow">智能推荐</p>
-                <h2>最值得关注的岗位</h2>
+                <p className="eyebrow">Autopilot 处理队列</p>
+                <h2>RoleFox 将如何处理这些岗位</h2>
               </div>
               <button disabled title="M0 静态原型" type="button">
                 完整列表 · 规划中
@@ -264,12 +264,12 @@ export default function Home() {
             <article className="panel approval-panel">
               <div className="approval-icon">✓</div>
               <div>
-                <p className="eyebrow">需要你的决定</p>
-                <h2>3 份示例材料等待确认</h2>
-                <p>这里将用于检查简历改动和招呼语，再决定是否加入队列。</p>
+                <p className="eyebrow">校准与规则例外</p>
+                <h2>3 个示例事项需要处理</h2>
+                <p>校准期用于确认策略；稳定运行后，规则内动作自动完成，只有异常才会出现在这里。</p>
               </div>
               <button disabled title="M0 静态原型" type="button">
-                审批中心 · 规划中
+                校准与异常 · 规划中
               </button>
             </article>
           </div>

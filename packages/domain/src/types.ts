@@ -1,8 +1,23 @@
 export const AUTOMATION_LEVELS = ["L0", "L1", "L2", "L3", "L4"] as const;
 
+export const ACTION_PLAN_STATUSES = [
+  "DRAFT",
+  "AWAITING_APPROVAL",
+  "AUTHORIZED",
+  "EXECUTING",
+  "SUCCEEDED",
+  "FAILED",
+  "EXPIRED",
+  "CANCELLED",
+] as const;
+
 export const SCHEMA_VERSION = 1 as const;
 
 export type AutomationLevel = (typeof AUTOMATION_LEVELS)[number];
+
+export type ActionPlanStatus = (typeof ACTION_PLAN_STATUSES)[number];
+
+export type ActionAuthorizationSource = "policy" | "human";
 
 export type SchemaVersion = typeof SCHEMA_VERSION;
 
@@ -40,6 +55,8 @@ export type ActionKind =
   | "send_reply"
   | "schedule_interview"
   | "send_notification";
+
+export type StandardActionKind = Exclude<ActionKind, "schedule_interview">;
 
 export interface Workspace {
   id: string;
@@ -141,12 +158,52 @@ export interface JobScore {
   scoredAt: string;
 }
 
-export interface ActionPlan {
+export interface InterviewSlot {
+  readonly startsAt: string;
+  readonly endsAt: string;
+  readonly timeZone: string;
+}
+
+export interface ConnectorOperationBinding {
+  readonly connectorId: string;
+  readonly connectorVersion: string;
+  readonly idempotencyKey: string;
+  readonly payloadHash: string;
+}
+
+export interface CalendarOperationBinding extends ConnectorOperationBinding {
+  readonly calendarAccountId: string;
+}
+
+export interface CalendarAvailabilityEvidence {
+  readonly id: string;
+  readonly workspaceId: string;
+  readonly calendarConnectorId: string;
+  readonly calendarConnectorVersion: string;
+  readonly calendarAccountId: string;
+  readonly slot: InterviewSlot;
+  readonly availability: "free" | "conflict" | "unknown";
+  readonly checkedAt: string;
+}
+
+export interface InterviewScheduleReadiness {
+  readonly interviewId: string;
+  readonly replyOperation: ConnectorOperationBinding;
+  readonly calendarOperation: CalendarOperationBinding;
+  readonly slot: InterviewSlot;
+  readonly timeInterpretation: "exact" | "ambiguous";
+  readonly preauthorizationId: string;
+  readonly preauthorizationVersion: string;
+  readonly preauthorizationExpiresAt: string;
+  readonly availabilitySnapshot: CalendarAvailabilityEvidence;
+  readonly unresolvedQuestionIds: readonly string[];
+}
+
+export interface ActionPlanBase {
   readonly id: string;
   readonly workspaceId: string;
   readonly schemaVersion: SchemaVersion;
   readonly idempotencyKey: string;
-  readonly kind: ActionKind;
   readonly connectorId: string;
   readonly connectorVersion: string;
   readonly target: string;
@@ -160,6 +217,45 @@ export interface ActionPlan {
   readonly expiresAt: string;
 }
 
+export interface ActionAuthorization {
+  readonly actionPlanId: string;
+  readonly workspaceId: string;
+  readonly source: ActionAuthorizationSource;
+  readonly policyVersion: string;
+  readonly payloadHash: string;
+  readonly authorizedAt: string;
+  readonly expiresAt: string;
+}
+
+export interface StandardActionPlan<
+  Kind extends StandardActionKind = StandardActionKind,
+> extends ActionPlanBase {
+  readonly kind: Kind;
+}
+
+export interface ScheduleInterviewActionPlan extends ActionPlanBase {
+  readonly kind: "schedule_interview";
+  readonly scheduleReadiness: InterviewScheduleReadiness;
+}
+
+export type ActionPlan = StandardActionPlan | ScheduleInterviewActionPlan;
+
+export type ActionPlanFor<Kind extends ActionKind> =
+  Kind extends "schedule_interview"
+    ? ScheduleInterviewActionPlan
+    : StandardActionPlan<Extract<Kind, StandardActionKind>>;
+
+export interface SchedulePreauthorizationRef {
+  readonly id: string;
+  readonly workspaceId: string;
+  readonly version: string;
+  readonly expiresAt: string;
+  readonly calendarConnectorId: string;
+  readonly calendarConnectorVersion: string;
+  readonly calendarAccountId: string;
+  readonly allowedWindows: readonly InterviewSlot[];
+}
+
 export interface AutomationPolicy {
   workspaceId: string;
   policyVersion: string;
@@ -169,13 +265,19 @@ export interface AutomationPolicy {
   requireApproval: boolean;
   autoApply: boolean;
   autoReply: boolean;
+  autoScheduleInterviews: boolean;
   maxApplicationsPerDay: number;
   maxRepliesPerHour: number;
+  maxInterviewSchedulesPerDay: number;
+  maxAvailabilityAgeMinutes: number;
   allowedConnectorIds: string[];
+  allowedCalendarConnectorIds: string[];
+  schedulePreauthorizations: SchedulePreauthorizationRef[];
 }
 
 export interface UsageSnapshot {
   workspaceId: string;
   applicationsToday: number;
   repliesThisHour: number;
+  interviewSchedulesToday: number;
 }

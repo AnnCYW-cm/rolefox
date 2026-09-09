@@ -1,6 +1,7 @@
 import type {
   ActionPlan,
   AutomationPolicy,
+  ScheduleInterviewActionPlan,
   SensitiveTopic,
   UsageSnapshot,
 } from "@rolefox/domain";
@@ -33,9 +34,14 @@ export function createDefaultAutomationPolicy(
     requireApproval: true,
     autoApply: false,
     autoReply: false,
+    autoScheduleInterviews: false,
     maxApplicationsPerDay: 10,
     maxRepliesPerHour: 8,
+    maxInterviewSchedulesPerDay: 8,
+    maxAvailabilityAgeMinutes: 5,
     allowedConnectorIds: [],
+    allowedCalendarConnectorIds: [],
+    schedulePreauthorizations: [],
   };
 }
 
@@ -62,6 +68,262 @@ const decision = (
   reasonCode: string,
   explanation: string,
 ): PolicyDecision => ({ outcome, reasonCode, explanation });
+
+const RFC3339_INSTANT =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/;
+
+const parseInstant = (value: string): number =>
+  RFC3339_INSTANT.test(value) ? Date.parse(value) : Number.NaN;
+
+const isValidTimeZone = (value: string): boolean => {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: value }).format(0);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const slotsMatch = (
+  left: ScheduleInterviewActionPlan["scheduleReadiness"]["slot"],
+  right: ScheduleInterviewActionPlan["scheduleReadiness"]["slot"],
+): boolean =>
+  left.startsAt === right.startsAt &&
+  left.endsAt === right.endsAt &&
+  left.timeZone === right.timeZone;
+
+const hasCompleteOperationBinding = (operation: {
+  connectorId: string;
+  connectorVersion: string;
+  idempotencyKey: string;
+  payloadHash: string;
+}): boolean =>
+  Boolean(
+    operation.connectorId &&
+      operation.connectorVersion &&
+      operation.idempotencyKey &&
+      operation.payloadHash,
+  );
+
+function validateInterviewScheduleIntegrity(
+  plan: ScheduleInterviewActionPlan,
+  policy: AutomationPolicy,
+  evaluatedAt: number,
+): PolicyDecision | undefined {
+  const readiness = plan.scheduleReadiness;
+  const replyOperation = readiness.replyOperation;
+  const calendarOperation = readiness.calendarOperation;
+  const availabilitySnapshot = readiness.availabilitySnapshot;
+
+  if (
+    !hasCompleteOperationBinding(replyOperation) ||
+    replyOperation.connectorId !== plan.connectorId ||
+    replyOperation.connectorVersion !== plan.connectorVersion
+  ) {
+    return decision(
+      "deny",
+      "REPLY_CONNECTOR_MISMATCH",
+      "The interview confirmation operation does not match the action connector.",
+    );
+  }
+
+  if (
+    !hasCompleteOperationBinding(calendarOperation) ||
+    !calendarOperation.calendarAccountId
+  ) {
+    return decision(
+      "deny",
+      "INVALID_CALENDAR_OPERATION",
+      "The calendar operation binding is incomplete.",
+    );
+  }
+
+  if (
+    !policy.allowedCalendarConnectorIds.includes(
+      calendarOperation.connectorId,
+    )
+  ) {
+    return decision(
+      "deny",
+      "CALENDAR_CONNECTOR_NOT_ALLOWED",
+      "The calendar connector is not on the configured allowlist.",
+    );
+  }
+
+  const startsAt = parseInstant(readiness.slot.startsAt);
+  const endsAt = parseInstant(readiness.slot.endsAt);
+  const availabilityCheckedAt = parseInstant(availabilitySnapshot.checkedAt);
+
+  if (
+    !readiness.interviewId ||
+    !Number.isFinite(startsAt) ||
+    !Number.isFinite(endsAt) ||
+    !isValidTimeZone(readiness.slot.timeZone) ||
+    startsAt <= evaluatedAt ||
+    endsAt <= startsAt
+  ) {
+    return decision(
+      "deny",
+      "INVALID_INTERVIEW_SLOT",
+      "The proposed interview slot must use future RFC 3339 instants and a valid IANA time zone.",
+    );
+  }
+
+  if (
+    !availabilitySnapshot.id ||
+    !Number.isFinite(availabilityCheckedAt) ||
+    availabilitySnapshot.workspaceId !== plan.workspaceId ||
+    availabilitySnapshot.calendarConnectorId !== calendarOperation.connectorId ||
+    availabilitySnapshot.calendarConnectorVersion !==
+      calendarOperation.connectorVersion ||
+    availabilitySnapshot.calendarAccountId !==
+      calendarOperation.calendarAccountId ||
+    !slotsMatch(availabilitySnapshot.slot, readiness.slot)
+  ) {
+    return decision(
+      "deny",
+      "CALENDAR_SNAPSHOT_MISMATCH",
+      "The availability snapshot is not bound to this workspace, calendar, and interview slot.",
+    );
+  }
+
+  return undefined;
+}
+
+function evaluateInterviewScheduleEligibility(
+  plan: ScheduleInterviewActionPlan,
+  policy: AutomationPolicy,
+  evaluatedAt: number,
+): PolicyDecision | undefined {
+  const readiness = plan.scheduleReadiness;
+  const calendarOperation = readiness.calendarOperation;
+  const availabilitySnapshot = readiness.availabilitySnapshot;
+
+  if (policy.level === "L2") {
+    return decision(
+      "require_approval",
+      "L2_INTERVIEW_SCHEDULING_REQUIRES_APPROVAL",
+      "L2 requires explicit approval for interview scheduling.",
+    );
+  }
+
+  if (!policy.autoScheduleInterviews) {
+    return decision(
+      "require_approval",
+      "AUTO_SCHEDULING_DISABLED",
+      "Automatic interview scheduling is disabled.",
+    );
+  }
+
+  const authorization = policy.schedulePreauthorizations.find(
+    (candidate) => candidate.id === readiness.preauthorizationId,
+  );
+  const authorizationExpiresAt = authorization
+    ? parseInstant(authorization.expiresAt)
+    : Number.NaN;
+  const snapshotAuthorizationExpiresAt = parseInstant(
+    readiness.preauthorizationExpiresAt,
+  );
+
+  if (
+    !authorization ||
+    authorization.workspaceId !== policy.workspaceId ||
+    authorization.version !== readiness.preauthorizationVersion ||
+    authorization.calendarConnectorId !== calendarOperation.connectorId ||
+    authorization.calendarConnectorVersion !==
+      calendarOperation.connectorVersion ||
+    authorization.calendarAccountId !== calendarOperation.calendarAccountId ||
+    !Number.isFinite(authorizationExpiresAt) ||
+    authorizationExpiresAt <= evaluatedAt ||
+    snapshotAuthorizationExpiresAt !== authorizationExpiresAt
+  ) {
+    return decision(
+      "require_approval",
+      "CALENDAR_AUTHORIZATION_REQUIRED",
+      "A current matching schedule preauthorization is required.",
+    );
+  }
+
+  if (readiness.timeInterpretation !== "exact") {
+    return decision(
+      "require_approval",
+      "AMBIGUOUS_INTERVIEW_TIME",
+      "The proposed interview time or time zone is ambiguous.",
+    );
+  }
+
+  const startsAt = parseInstant(readiness.slot.startsAt);
+  const endsAt = parseInstant(readiness.slot.endsAt);
+
+  const isInsideAuthorizedWindow = authorization.allowedWindows.some(
+    (window) => {
+      const windowStartsAt = parseInstant(window.startsAt);
+      const windowEndsAt = parseInstant(window.endsAt);
+
+      return (
+        window.timeZone === readiness.slot.timeZone &&
+        isValidTimeZone(window.timeZone) &&
+        Number.isFinite(windowStartsAt) &&
+        Number.isFinite(windowEndsAt) &&
+        windowStartsAt <= startsAt &&
+        windowEndsAt >= endsAt
+      );
+    },
+  );
+
+  if (!isInsideAuthorizedWindow) {
+    return decision(
+      "require_approval",
+      "OUTSIDE_AUTHORIZED_WINDOW",
+      "The proposed interview is outside the preauthorized availability window.",
+    );
+  }
+
+  if (availabilitySnapshot.availability === "conflict") {
+    return decision(
+      "require_approval",
+      "CALENDAR_CONFLICT",
+      "The proposed interview conflicts with the latest calendar snapshot.",
+    );
+  }
+
+  if (availabilitySnapshot.availability !== "free") {
+    return decision(
+      "require_approval",
+      "CALENDAR_AVAILABILITY_UNKNOWN",
+      "Calendar availability could not be confirmed.",
+    );
+  }
+
+  if (readiness.unresolvedQuestionIds.length > 0) {
+    return decision(
+      "require_approval",
+      "UNRESOLVED_RECRUITER_QUESTIONS",
+      "Recruiter questions must be resolved before confirming the interview.",
+    );
+  }
+
+  const availabilityCheckedAt = parseInstant(availabilitySnapshot.checkedAt);
+  const availabilityAge = evaluatedAt - availabilityCheckedAt;
+  const maximumAvailabilityAge =
+    policy.maxAvailabilityAgeMinutes * 60 * 1_000;
+
+  if (
+    !Number.isFinite(availabilityCheckedAt) ||
+    !Number.isFinite(maximumAvailabilityAge) ||
+    maximumAvailabilityAge <= 0 ||
+    availabilityAge < 0 ||
+    availabilityAge > maximumAvailabilityAge
+  ) {
+    return decision(
+      "require_approval",
+      "STALE_AVAILABILITY",
+      "Calendar availability must be checked again before automatic scheduling.",
+    );
+  }
+
+  return undefined;
+}
 
 export function evaluateActionPlan(
   plan: ActionPlan,
@@ -165,6 +427,18 @@ export function evaluateActionPlan(
     );
   }
 
+  if (plan.kind === "schedule_interview") {
+    const integrityDecision = validateInterviewScheduleIntegrity(
+      plan,
+      policy,
+      evaluatedAt,
+    );
+
+    if (integrityDecision) {
+      return integrityDecision;
+    }
+  }
+
   if (plan.kind === "submit_application") {
     if (usage.applicationsToday >= policy.maxApplicationsPerDay) {
       return decision(
@@ -175,7 +449,7 @@ export function evaluateActionPlan(
     }
   }
 
-  if (plan.kind === "send_reply") {
+  if (plan.kind === "send_reply" || plan.kind === "schedule_interview") {
     if (usage.repliesThisHour >= policy.maxRepliesPerHour) {
       return decision(
         "deny",
@@ -183,6 +457,17 @@ export function evaluateActionPlan(
         "The hourly reply limit has been reached.",
       );
     }
+  }
+
+  if (
+    plan.kind === "schedule_interview" &&
+    usage.interviewSchedulesToday >= policy.maxInterviewSchedulesPerDay
+  ) {
+    return decision(
+      "deny",
+      "INTERVIEW_SCHEDULE_LIMIT_REACHED",
+      "The daily interview scheduling limit has been reached.",
+    );
   }
 
   if (
@@ -198,11 +483,15 @@ export function evaluateActionPlan(
   }
 
   if (plan.kind === "schedule_interview") {
-    return decision(
-      "require_approval",
-      "INTERVIEW_SCHEDULING_REQUIRES_APPROVAL",
-      "Interview scheduling always requires explicit approval.",
+    const scheduleDecision = evaluateInterviewScheduleEligibility(
+      plan,
+      policy,
+      evaluatedAt,
     );
+
+    if (scheduleDecision) {
+      return scheduleDecision;
+    }
   }
 
   if (plan.kind === "submit_application") {

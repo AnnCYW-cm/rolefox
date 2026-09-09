@@ -2,16 +2,18 @@
 
 [中文](README.md) | [English](README.en.md)
 
-> Open-source, local-by-default, self-hostable job-search automation controlled by the candidate.
+> **Set your goal. Show up for the interview.**
+>
+> An open-source, local-by-default, self-hostable autonomous job-search agent controlled by the candidate.
 
-RoleFox aims to turn a fragmented job search into an explainable, approval-driven and auditable workflow: discover roles, normalize and deduplicate listings, score fit, prepare materials, approve applications, assist with recruiter conversations and notify users about interviews.
+RoleFox aims to take over the routine work between a candidate's goals and a booked interview: discover and evaluate roles, tailor evidence-grounded materials, apply, follow up, handle pre-screen conversations and schedule interviews. After a candidate provides truthful data and a versioned delegation policy, RoleFox should interrupt them only for exceptions or a confirmed interview.
 
 This repository is currently **M0 / pre-alpha**. It includes a static product demo, domain state machine, foundational policy rules and extensibility contracts. It does not connect to real job boards or submit real applications yet.
 
 ## Principles
 
 - **Candidate-owned data** — profiles, rules, credentials and audit history stay under the user's control.
-- **Controlled automation** — an AI-generated draft never becomes an external action without policy evaluation.
+- **Policy as authorization** — low-risk L3 actions inside a versioned delegation envelope do not need per-action approval; exceptions do.
 - **Explainable outcomes** — users can inspect match reasons, supporting evidence and action risk.
 - **Replaceable infrastructure** — job sources, AI providers, storage and notifications are extensible.
 
@@ -24,9 +26,9 @@ RoleFox started from one person's real job search, but that person is the projec
 | Web workspace with synthetic demo data | Implemented demo |
 | Application state machine | Implemented |
 | Dry-run, kill switch, level matrix and limit rules | Initial implementation with unit tests |
-| Capability-based connector contract | Initial version |
+| Capability-based job, messaging, notification and calendar connector contracts | Initial version |
 | Provider-agnostic AI contract | Initial version |
-| Worker and local runner | Safe stubs; no approval service or external execution |
+| Worker and local runner | Safe stubs; no authorization store, exception workflow or external execution |
 | SQLite, matching and material generation | Planned |
 | Real job-board applications | Not implemented |
 
@@ -34,7 +36,9 @@ General-purpose does not mean every job site is supported on day one. The core s
 
 ## Safety model
 
-RoleFox starts in `L2` with `DRY_RUN=true`, so the foundational policy evaluator returns `preview_only`. M0 does not yet implement ActionPlan creation, an approval service, or execution.
+RoleFox starts in `L2` with `DRY_RUN=true`, so the foundational policy evaluator returns `preview_only`. M0 does not yet implement ActionPlan creation, authorization and exception services, or execution.
+
+The target experience is **L3 Autopilot**, not unbounded L4 autonomy. RoleFox may keep working only while the job, content, answers and calendar slot remain inside the candidate's versioned delegation policy. Missing facts, out-of-range answers, ambiguous times, calendar conflicts and high-risk commitments become exceptions.
 
 ```text
 Connector draft → core ActionPlan → policy decision
@@ -44,7 +48,7 @@ Connector draft → core ActionPlan → policy decision
                                                execution
 ```
 
-Sensitive commitments such as compensation, start date, visa status, identity claims and offer decisions are always escalated to the user. RoleFox will not solve CAPTCHAs or bypass access controls and platform safeguards.
+Compensation ranges, start dates and locations may be handled only when explicitly preauthorized and supported by candidate evidence; anything outside that range is escalated. Offer acceptance, legal declarations and unverifiable identity or experience claims always remain with the user. RoleFox will not solve CAPTCHAs or bypass access controls and platform safeguards.
 
 ## Run locally
 
@@ -66,7 +70,7 @@ Before opening a pull request:
 pnpm check
 ```
 
-See the [product scope](docs/product-scope.md), [architecture](docs/architecture.md), [roadmap](docs/roadmap.md), [open-source strategy](docs/open-source-strategy.md), and [contribution guide](CONTRIBUTING.md).
+See the [product scope](docs/product-scope.md), [Autopilot decision record](docs/adr/0001-pre-interview-autopilot.md), [architecture](docs/architecture.md), [roadmap](docs/roadmap.md), [open-source strategy](docs/open-source-strategy.md), and [contribution guide](CONTRIBUTING.md).
 
 ## License
 

@@ -1,6 +1,6 @@
 # Architecture
 
-RoleFox 采用本地默认、可自托管的模块化单体架构，并将“生成草稿、制定动作、审批、执行”拆开，避免模型或第三方连接器的输出直接变成外部动作。
+RoleFox 采用本地默认、可自托管的模块化单体架构，并将“生成草稿、制定动作、授权判断、执行”拆开。它需要持续运行到约成面试，但模型或第三方连接器的输出不能直接变成外部动作。
 
 ```text
 Job / inbox connectors
@@ -8,27 +8,28 @@ Job / inbox connectors
         ▼
 Normalize → deduplicate → hard filters → score → shortlist
                                                    │
-AI provider ─────────────── materials / reply draft│
+AI provider ───────── materials / reply / follow-up draft
                                                    ▼
-Connector ActionDraft → core ActionPlan → policy → approval when required
-                                           │       / pre-approved L3 rule
-                                           ▼
-                                    local runner / notification connector
+Connector ActionDraft → core ActionPlan → policy ─┬─ allow
+                                                  └─ require approval → human decision
+                                                             │
+                                                             ▼
+                                    local runner / calendar / notification connector
 ```
 
-## 三个运行层
+## 目标运行层职责
 
 ### Web console
 
-用于工作区初始化、求职看板、规则配置、材料差异预览和审批。Web 层不保存招聘平台 Cookie。
+用于工作区初始化、委托规则校准、求职看板、材料差异预览和异常处理。进入稳定 L3 后，Web 的主要职责是展示进展和少量例外，而不是让用户逐项审批。Web 层不保存招聘平台 Cookie。
 
 ### Worker
 
-负责任务调度、岗位标准化、去重、评分、材料生成、消息同步和漏斗统计。后台任务必须幂等，重试不能产生重复投递。
+负责任务调度、岗位标准化、去重、评分、材料生成、消息同步、到期跟进、排期协调和漏斗统计。后台任务必须幂等，重试不能产生重复投递、重复追问或重复日历事件。
 
 ### Local runner
 
-在确有需要且平台允许时，使用用户本机已有登录会话执行获批动作。Runner 只接受有时效的一次性批准，并验证计划 ID、内容哈希和过期时间；它不接受招聘页面直接发出的指令。
+在确有需要且平台允许时，使用用户本机已有登录会话执行策略允许或人工批准的动作。Runner 只接受有时效的一次性执行令牌，并验证计划 ID、内容哈希、策略版本和过期时间；它不接受招聘页面直接发出的指令。
 
 首个可用版本只支持单用户，但核心记录携带 `workspaceId`。这为以后增加多设备、职业教练协作或托管部署保留隔离边界，并不意味着现在引入多租户复杂度。
 
@@ -59,15 +60,29 @@ DISCOVERED
 → SCORED
 → SHORTLISTED
 → MATERIALS_DRAFTED
-→ AWAITING_APPROVAL
 → SUBMITTED
+→ AWAITING_RESPONSE
+→ FOLLOW_UP_DUE
 → CHATTING
 → INTERVIEW_PROPOSED
 → SCHEDULED
 → CLOSED
 ```
 
-状态只能按领域模型中声明的路径迁移。连接器只能返回不带 workspace、动作类型和连接器身份的 `ActionDraft`；核心系统根据调用入口和已注册 manifest 创建 `ActionPlan`，加入 schema、策略和连接器版本、内容哈希与过期时间。进入持久化和审批流程后，该计划必须作为不可变记录。策略引擎随后返回 `allow`、`require_approval`、`preview_only` 或 `deny`。
+`AWAITING_RESPONSE` 和 `FOLLOW_UP_DUE` 让系统可以按冷却期和次数上限处理“已读不回”，而不是让用户每天重新查看。投递动作是否等待人工确认属于 ActionPlan 生命周期，不混入申请阶段；L3 可在策略授权后从 `MATERIALS_DRAFTED` 直接进入 `SUBMITTED`。只有招聘方确认明确时段且日历写入成功后，申请才能进入 `SCHEDULED`；此时立即通知用户，并把流程交给面试准备。后续改期由独立面试记录处理，不让申请漏斗倒退。
+
+状态只能按领域模型中声明的路径迁移。连接器只能返回不带 workspace、动作类型和连接器身份的 `ActionDraft`；核心系统根据调用入口和已注册 manifest 创建 `ActionPlan`，加入 schema、策略和连接器版本、内容哈希与过期时间。进入持久化和授权流程后，该计划必须作为不可变记录。策略引擎随后返回 `allow`、`require_approval`、`preview_only` 或 `deny`。
+
+动作拥有独立生命周期，不能复用申请阶段。进入 `AUTHORIZED` 时同时记录授权来源是策略还是人工、策略版本、载荷哈希和有效期：
+
+```text
+DRAFT ── policy allow ───────────────────→ AUTHORIZED
+  └──── require approval → AWAITING_APPROVAL → AUTHORIZED
+                                               ↓
+                                           EXECUTING
+                                               ↓
+                          SUCCEEDED / FAILED / EXPIRED / CANCELLED
+```
 
 ## 连接器能力
 
@@ -79,8 +94,13 @@ DISCOVERED
 - `inbox`：同步招聘消息
 - `reply`：准备或发送回复
 - `notify`：发送提醒
+- `calendar`：检查空闲时间并创建面试日历事件
 
 每类能力有独立接口，声明 `discover` 不会隐式获得执行权限。岗位连接器只返回没有 workspace、内部 ID 和 campaign 归属的 `ExternalJobPosting`；这些可信字段由核心标准化流程写入。优先级依次为官方 API、用户主动提供的数据、公开招聘页、邮件，再到可选浏览器自动化。连接器不得绕过验证码或访问控制。
+
+执行接口按动作类型专门化：投递、普通回复、面试确认、通知和日历写入不能互相接收错误种类的 ActionPlan。执行上下文统一使用一次性 `authorizationToken`，它既可以来自策略授权，也可以来自人工批准。
+
+自动约面是核心系统协调招聘回复连接器和日历连接器的复合动作。`schedule_interview` 必须携带 Core 生成的 `InterviewScheduleReadiness`，记录精确时段、时区、两个连接器各自的版本、幂等键与载荷哈希、日历账户、预授权版本、最新空闲快照和未解决问题。预授权和空闲快照都必须绑定同一 workspace、日历账户和精确时段，连接器提供的数据只是输入，不能自行宣布“可以自动约面”。回复确认与日历写入使用独立操作绑定；任一步骤失败时申请保持 `INTERVIEW_PROPOSED` 并进入异常队列，只有两步均成功才进入 `SCHEDULED`。
 
 ## AI Provider
 
@@ -99,7 +119,7 @@ DISCOVERED
 - **当前 M0**：静态合成数据和安全桩，无真实凭证与外部执行。
 - **M1 本地单用户**：Web、Worker 和 SQLite 在用户控制的设备上运行。
 - **未来自托管服务**：可切换 PostgreSQL 和持久队列，但保持相同领域与策略接口。
-- **可选托管服务**：如果未来提供，必须与开源自托管版本保持数据可迁移和能力边界透明。
+- **可选常驻 Worker / 托管服务**：面试前 Autopilot 需要持续运行；用户可以部署在 NAS、家庭服务器或 VPS，也可以选择未来的托管 Worker。浏览器会话和本地凭证仍与常驻任务隔离，数据必须可迁移且能力边界透明。
 
 ## 后续基础设施
 
