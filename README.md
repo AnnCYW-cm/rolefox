@@ -103,6 +103,10 @@ pnpm check
 
 ## 从哪里开始
 
+- 想完整了解 v0.1 产品设计：从 [产品设计索引](docs/product/README.md) 开始
+- 想看目标用户、范围与验收指标：阅读 [v0.1 产品需求文档](docs/product/prd-v0.1.md)
+- 想看首次配置、日常自治与异常体验：阅读 [v0.1 用户体验与信息架构](docs/product/user-experience-v0.1.md)
+- 想看验证假设与 10 周实施基线：阅读 [验证计划](docs/product/validation-plan-v0.1.md) 和 [交付计划](docs/product/delivery-plan-v0.1.md)
 - 想了解产品边界：阅读 [产品范围](docs/product-scope.md)
 - 想了解为何选择面试前 Autopilot：阅读 [ADR-0001](docs/adr/0001-pre-interview-autopilot.md)
 - 想了解开发顺序：阅读 [路线图](docs/roadmap.md)
@@ -111,6 +115,8 @@ pnpm check
 - 发现漏洞：按 [安全政策](SECURITY.md) 私下报告
 
 ## 路线图
+
+M1–M5 描述长期能力成熟度，不会按模块全部做完后才验证闭环。v0.1 将从各阶段抽取最小能力，用一条纵向通道优先跑通“岗位 → 投递 → 沟通 → 约面”；具体周次和止损门槛见 [v0.1 交付计划](docs/product/delivery-plan-v0.1.md)。
 
 1. **M1 通用基础**：引导配置、候选人事实库、求职计划、SQLite、CSV/JSON 与手动链接导入。
 2. **M2 可解释匹配**：硬过滤、分项评分、推荐理由、去重与反馈闭环。

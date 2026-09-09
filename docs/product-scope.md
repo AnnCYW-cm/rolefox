@@ -123,3 +123,12 @@ SCHEDULED → 立即通知用户并移交面试
 - Web + Worker + Local Runner 足够支撑前期，不提前拆微服务。
 - 默认 L2 是建立信任的起点，L3 才是“面试前 Autopilot”的目标体验；无限制 L4 不开放。
 - 开源版本必须保持单用户完整可用；未来托管服务只能提供便利性、运维和协作增值。
+
+## v0.1 设计与实施
+
+v0.1 不追求同时覆盖多个招聘平台，而是先证明一条窄而完整的面试前闭环。详细设计见：
+
+- [v0.1 产品需求文档](product/prd-v0.1.md)
+- [v0.1 用户体验与信息架构](product/user-experience-v0.1.md)
+- [v0.1 产品验证计划](product/validation-plan-v0.1.md)
+- [v0.1 交付计划](product/delivery-plan-v0.1.md)
