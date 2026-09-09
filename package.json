@@ -12,14 +12,17 @@
   "scripts": {
     "dev": "pnpm --filter @rolefox/web dev",
     "dev:all": "pnpm -r --parallel --if-present dev",
+    "docs:check": "node scripts/validate-uml.mjs",
     "build:packages": "tsc -b packages/domain packages/policy packages/connector-sdk packages/ai-provider apps/worker apps/runner",
     "build": "pnpm build:packages && pnpm --filter @rolefox/web build",
     "lint": "pnpm -r --if-present lint",
     "typecheck": "pnpm build:packages && pnpm --filter @rolefox/web typecheck",
     "test": "vitest run",
-    "check": "pnpm lint && pnpm typecheck && pnpm --filter @rolefox/web build && pnpm test"
+    "check": "pnpm docs:check && pnpm lint && pnpm typecheck && pnpm --filter @rolefox/web build && pnpm test"
   },
   "devDependencies": {
+    "jsdom": "22.1.0",
+    "mermaid": "11.17.2",
     "tsx": "^4.23.13",
     "typescript": "^5.9.3",
     "vitest": "^5.0.0"
