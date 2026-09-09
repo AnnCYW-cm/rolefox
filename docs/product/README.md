@@ -6,6 +6,7 @@
 
 - [产品需求文档](prd-v0.1.md)：用户、问题、范围、功能要求、指标与非目标
 - [用户体验与信息架构](user-experience-v0.1.md)：首次配置、日常自治、异常处理和面试通知
+- [P0 Case 验收基线](p0-case-baseline-v0.1.md)：254 条产品、安全与故障恢复 Given/When/Then Case
 - [验证计划](validation-plan-v0.1.md)：关键假设、研究方法、实验信号与决策门
 - [交付计划](delivery-plan-v0.1.md)：10 周纵向切片、验收标准、风险与止损规则
 

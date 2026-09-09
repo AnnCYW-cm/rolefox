@@ -106,6 +106,7 @@ pnpm check
 - 想完整了解 v0.1 产品设计：从 [产品设计索引](docs/product/README.md) 开始
 - 想看目标用户、范围与验收指标：阅读 [v0.1 产品需求文档](docs/product/prd-v0.1.md)
 - 想看首次配置、日常自治与异常体验：阅读 [v0.1 用户体验与信息架构](docs/product/user-experience-v0.1.md)
+- 想核对发布阻断场景：阅读 [v0.1 P0 Case 验收基线](docs/product/p0-case-baseline-v0.1.md)
 - 想看验证假设与 10 周实施基线：阅读 [验证计划](docs/product/validation-plan-v0.1.md) 和 [交付计划](docs/product/delivery-plan-v0.1.md)
 - 想了解产品边界：阅读 [产品范围](docs/product-scope.md)
 - 想了解为何选择面试前 Autopilot：阅读 [ADR-0001](docs/adr/0001-pre-interview-autopilot.md)
