@@ -1,9 +1,9 @@
 # RoleFox 组件、部署、安全与可靠性视图
 
-- 状态：Review Draft
+- 状态：Accepted Design Baseline
 - 上级索引：[UML 设计基线](README.md)
 - 建模原则：先如实描述 M0，再给出 v0.1 目标；未来托管形态不冒充当前承诺。
-- 标注规则：节点中的 `M0` 是当前仓库事实，`v0.1 Target` 是尚未实现的目标；`<<proposed DEC-xx>>` 是待用户确认的产品选择。
+- 标注规则：节点中的 `M0` 是当前仓库事实，`v0.1 Target` 是尚未实现的目标；产品选择以已接受的 [ADR-0002](../../adr/0002-v0.1-product-decision-baseline.md) 为准。
 
 ## RF-UML-CMP-M0-01 当前 M0 真实组件
 
@@ -69,6 +69,21 @@ flowchart TB
         CleanupReconciler["Revocation Reconciler<br/>read-only remote evidence"]
     end
 
+    subgraph SafetySignals["Liveness and kill-alert safety control plane"]
+        SafetySignalSvc["Safety Signal Coordinator<br/>heartbeat or kill epoch only"]
+        SafetySignalPlan["Immutable SafetySignalActionPlan<br/>fixed schema and targetHash"]
+        SafetySignalGate["Fixed Binding Gate<br/>kind, endpoint, recipient, template and targetHash"]
+        SafetySignalAuth["Narrow Safety Authorization<br/>heartbeat slot or kill epoch"]
+        SafetySignalTx["Atomic Safety Signal Transaction"]
+        SafetySignalLedger[("SafetySignalOperation Ledger")]
+        SafetySignalOutbox[("Dedicated Safety Outbox")]
+        SafetySignalQueue["Dedicated Safety Queue"]
+        SafetySignalExecutor["Independent Safety Signal Executor"]
+        SafetySignalReconciler["Signal Reconciler"]
+    end
+
+    Watchdog["Preconfigured External Watchdog<br/>and Safety Alert Endpoint"]
+
     subgraph Authority["Core authority"]
         Plan["Immutable ActionPlan Factory"]
         Policy["Applicable Authority Evaluator<br/>business three-layer or revocation safety"]
@@ -111,6 +126,7 @@ flowchart TB
     Workflow --> InterviewSvc
     Workflow --> NotifySvc
     Workflow --> DeleteSvc
+    Workflow -->|"validated kill epoch only"| SafetySignalSvc
 
     ApplySvc --> Plan
     ReplySvc --> Plan
@@ -145,6 +161,15 @@ flowchart TB
     CleanupReconciler --> Registry
     CleanupReconciler --> Ledger
     CleanupReconciler --> Audit
+    Health -->|"fixed 60s liveness snapshot"| SafetySignalSvc
+    SafetySignalSvc --> SafetySignalPlan --> SafetySignalGate --> SafetySignalAuth --> SafetySignalTx
+    SafetySignalTx --> SafetySignalLedger
+    SafetySignalTx --> SafetySignalOutbox
+    SafetySignalTx --> AuditIntent
+    SafetySignalOutbox --> SafetySignalQueue --> SafetySignalExecutor --> Watchdog
+    SafetySignalExecutor --> SafetySignalLedger
+    SafetySignalExecutor --> Audit
+    SafetySignalExecutor --> SafetySignalReconciler --> Watchdog
 
     Discovery --> Registry
     Inbox --> Registry
@@ -161,7 +186,9 @@ flowchart TB
     Health --> Executor
 ```
 
-依赖方向固定为 `UI/API → Application Services → Domain/Policy → Ports ← Adapters`。Application Submission、Reply、Follow-up、Interview 和 Notification 都只能产生 mutation intent，并统一经过 `Plan → Policy → Authorization → atomic ExternalOperation/Reservation/AuditIntent/Outbox → Executor`；Notification 的每次主渠道与 fallback 外发也是独立 NotificationOperation。任何模块都不得直连队列或 adapter 绕过该路径。`<<proposed DEC-18>>` 决定 Kill Switch 下是否允许独立控制面白名单发送外部安全通知；确认前产品内 Inbox 可写，但外部通知失败关闭。
+依赖方向固定为 `UI/API → Application Services → Domain/Policy → Ports ← Adapters`。Application Submission、Reply、Follow-up、Interview 和 Notification 都只能产生 mutation intent，并统一经过 `Plan → Policy → Authorization → atomic ExternalOperation/Reservation/AuditIntent/Outbox → Executor`；Notification 的每次主渠道与 fallback 外发也是独立 NotificationOperation。任何模块都不得直连队列或 adapter 绕过该路径。
+
+依据 `DEC-11` 与 `DEC-18`，liveness heartbeat 和一次急停告警由独立 Safety Signal Control Plane 负责，不进入会被 Kill Switch 关闭的业务 Queue。该控制面只接受内部产生的 `publish_liveness_heartbeat` 与 `send_safety_stop_alert`：endpoint、收件人、模板、targetHash 和 credential binding 必须预配置，heartbeat slot 或 kill fencing epoch 是唯一幂等键；每次 signal 仍须持久化窄化授权、SafetySignalOperation、AuditIntent 与专用 Outbox，未知结果只能对账。它不能接受任意文本、任意收件人或任何业务 operation kind。Kill Switch 关闭全部业务 mutation；产品内 Inbox 和审计继续工作，安全信号失败关闭且不得成为通用外发旁路。
 
 Workspace 删除先关闭业务 mutation gate，再启用与 AutomationPolicy/CapabilityGrant 隔离的 `REVOCATION_ONLY` 安全控制面。它只为删除请求快照中的固定 connector/account/credential lineage 生成 `credential_revocation` 计划，并仍走同一 Plan/Auth/Operation/AuditIntent/Outbox 协议。Dispatcher 把该唯一 kind 路由到独立 Cleanup Queue/Executor；Business Executor 拒绝它，Cleanup Executor 则拒绝全部业务 kind。撤销结果未知时 Cleanup Reconciler 只读对账，不能盲重试或重新开放业务外发。
 
@@ -170,30 +197,45 @@ Workspace 删除先关闭业务 mutation gate，再启用与 AutomationPolicy/Ca
 ```mermaid
 %% @anchor EXTENSION_SANDBOX
 %% @anchor CAPABILITY_MANIFEST
-flowchart LR
+flowchart TB
     Package["第三方扩展包<br/>v0.1 Target"] --> Verify["来源、checksum、签名和版本校验"]
     Verify --> Manifest["Manifest Parser"]
     Manifest --> Conformance["Conformance Suite"]
     Conformance --> Registry["Capability Registry"]
 
-    subgraph Sandbox["最小权限扩展运行域"]
+    ReadServices["Core read services"] --> Input["Core 构建最小输入<br/>可信 workspace/subject/risk/auth 均不交给扩展决定"]
+    Executor["Mutation Executor"] --> Input
+    AIGateway["AI Gateway"] --> Input
+    Input --> ContractGate{"capability-method、permission、official scope<br/>与 request schema/version 全部匹配？"}
+    Registry --> ContractGate
+    ContractGate -->|"否"| Reject["拒绝 + 去敏安全审计<br/>零 Plan / Authorization / Operation / 外部调用"]
+
+    subgraph Sandbox["pluginId × workspaceId 独立最小权限运行域 — v0.1 Target"]
+        Runtime["独立进程/身份/IPC namespace<br/>独立 files、cache、temp 与 key-store namespace"]
         ReadCaps["Discovery, Detail, Inbox"]
         MutationCaps["Application, Reply, Calendar, Notification"]
         Provider["AI Provider"]
+        Runtime --> ReadCaps
+        Runtime --> MutationCaps
+        Runtime --> Provider
     end
 
-    Registry --> ReadCaps
-    Registry --> MutationCaps
-    Registry --> Provider
-    ReadServices["Core read services"] -->|"声明 capability 内的只读调用"| Registry
-    Executor["Mutation Executor"] -->|"不可变 Plan + operation-bound 短期 token"| Registry
-    AIGateway["AI Gateway"] -->|"最小必要上下文"| Registry
-    Sandbox -->|"仍不可信的外部或 AI 结果"| Validate["Core Schema, Evidence and Risk Validation"]
-    Validate --> Core["Core Authority"]
+    ContractGate -->|"是；启动该 plugin × workspace runtime"| Runtime
+    Broker["Core Credential Broker<br/>仅精确 connector credential binding<br/>与 operation-bound 短期 token"] --> Runtime
+    Runtime --> SecretRequest{"扩展请求 host keychain、浏览器 profile/cookie/session、<br/>其他插件或其他 Workspace credential？"}
+    SecretRequest -->|"是"| Terminate["拒绝、终止并隔离 runtime<br/>撤销短期 token + 去敏安全审计"]
+    SecretRequest -->|"否；产生 adapter/provider 结果"| Strip["Core 丢弃扩展自报<br/>workspace/internal IDs/risk/policy/auth/quota/control"]
+    Strip --> Validate{"响应 schema/version、枚举、证据与风险校验通过？"}
+    Validate -->|"否、未知枚举或越权字段"| Quarantine["quarantine 结果并停用受影响 capability<br/>零 ActionPlan / 零领域迁移"]
+    Validate -->|"是"| Core["Core Authority<br/>从可信上下文重建领域对象"]
     Core -->|"只生成计划，不把权限交给扩展"| Executor
 ```
 
-扩展 manifest 是能力声明，不是授权。空 allowlist 表示全部禁止；新增权限、条款、runtime 或 mutation 语义必须使旧授权失效并展示 Diff。Connector/Provider 不能签发 Authorization、创建 durable operation 或直接迁移领域状态。
+此图整体是 v0.1 目标安全边界，不代表当前 M0 已有进程级 sandbox。扩展 manifest 是能力声明，不是授权。空 allowlist 表示全部禁止；新增权限、official scopes、条款复核版本、runtime、capability-method、schema/enum 或 mutation 语义必须使受影响旧授权失效并展示 Diff。每次调用都重新校验冻结 manifest digest、方法、权限、official scopes、账号和 operation token，安装时通过 conformance 不能代替运行时 guard；未知方法、schema 或枚举失败关闭，不能回退 generic execute。
+
+隔离单元固定为 `pluginId × workspaceId`：进程身份、IPC/socket、文件目录、临时目录、cache 和 key-store namespace 均不得跨单元共享，任何 external id、email 或插件自选 key 都不能越过 Core 派生的 Workspace namespace。扩展永远不能读取宿主 keychain、环境变量秘密、浏览器 profile/cookie/session 或其他插件/Workspace credential；Credential Broker 只在执行时交付绑定 connector account/credential lineage/operation 的短期 token。尝试访问禁区会被拒绝、终止并隔离，且写去敏安全审计。
+
+Connector/Provider 的返回值始终是不可信数据。Core 在 schema 校验前先无条件丢弃扩展自报的 `workspaceId`、内部 entity/plan/authorization/operation id、risk、policy、quota 和 control 字段，再从可信会话、持久对象、当前策略及 operation binding 重建；校验失败或出现未知枚举时零 Plan、零 Authorization、零 ExternalOperation、零领域状态迁移。Connector/Provider 不能签发 Authorization、创建 durable operation 或直接迁移领域状态。
 
 ## RF-UML-DEP-M0-01 当前 M0 部署
 
@@ -222,12 +264,21 @@ flowchart TB
 %% @anchor LOCAL_TRUST_TOPOLOGY
 %% @anchor LOCALHOST_SECURITY
 flowchart TB
+    Start["Given: app starts with default local<br/>or container configuration"]
+    OSS004Check["When: inspect listener, authentication,<br/>CORS, CSRF, Origin and cookie"]
+    BindGate{"Listener exposure"}
+    RemoteGate{"Non-loopback requested?<br/>TLS + strong authentication + explicit trusted origins configured?"}
+    RefuseStart["Refuse startup / port publish<br/>redacted security event"]
+    SecureReady["Then: loopback-only, or authenticated TLS<br/>with explicit trusted origins"]
     subgraph Device["用户控制的单台设备 — v0.1 Target"]
         Browser["Browser"]
-        WebAPI["Web and Local API<br/>loopback only"]
+        WebAPI["Web and Local API<br/>loopback default; authenticated TLS when exposed"]
+        RequestGate{"Authenticated session?<br/>exact Host + Origin, CORS deny-by-default,<br/>state change has valid CSRF token?"}
+        RequestDeny["Uniform 403<br/>zero state change, no credential detail"]
+        SessionCookie["Server session cookie<br/>HttpOnly, host-only, SameSite=Strict, Path=/,<br/>Secure on HTTPS, short TTL + rotation<br/>never localStorage"]
         Core["Core Domain, Plan and Policy"]
-        %% SQLite v0.1 Target: <<proposed DEC-16>>
-        DB[("SQLite<br/>&lt;&lt;proposed DEC-16&gt;&gt;<br/>business, operation, outbox and audit")]
+        %% SQLite is the accepted v0.1 persistence target (DEC-16)
+        DB[("SQLite<br/>v0.1 accepted store<br/>business, operation, outbox and audit")]
         Dispatcher["Outbox Dispatcher"]
         Queue["Durable Queue"]
         Worker["Background Worker"]
@@ -236,6 +287,9 @@ flowchart TB
         ServerAdapter["server-runtime Connector Adapter"]
         RunnerGW["Authenticated Local IPC Gateway"]
         AIGateway["AI Gateway"]
+        SafetySignal["Isolated Safety Signal Control Plane<br/>fixed schema, binding and dedupe"]
+        SafetyOutbox["Dedicated Safety Outbox and Queue"]
+        SafetyExecutor["Independent Safety Signal Executor"]
 
         subgraph CredentialBoundary["本地凭证边界"]
             Runner["Local Runner<br/>local_session only"]
@@ -243,7 +297,10 @@ flowchart TB
             Profile["Optional Browser Profile"]
         end
 
-        Browser --> WebAPI --> Core
+        Browser --> RequestGate
+        RequestGate -->|"invalid, wildcard/null Origin or missing CSRF"| RequestDeny
+        RequestGate -->|"valid"| WebAPI --> Core
+        WebAPI -->|"issue/rotate after authentication"| SessionCookie --> Browser
         Core -->|"single atomic commit"| DB
         DB --> Dispatcher --> Queue --> Worker --> Executor
         Executor -->|"recheck plan, policy, control and lease"| Core
@@ -255,12 +312,24 @@ flowchart TB
         Runner --> Vault
         Runner --> Profile
         Core -->|"minimal context"| AIGateway
+        Worker -->|"60s liveness + hasPendingWork; no PII"| SafetySignal
+        Core -->|"fixed kill epoch signal"| SafetySignal
+        SafetySignal -->|"durable safety signal state"| DB
+        DB -->|"committed safety outbox only"| SafetyOutbox --> SafetyExecutor
     end
+
+    Start --> OSS004Check --> BindGate
+    BindGate -->|"loopback only, including container publish"| SecureReady
+    BindGate -->|"non-loopback"| RemoteGate
+    RemoteGate -->|"no"| RefuseStart
+    RemoteGate -->|"yes"| SecureReady
+    SecureReady --> WebAPI
 
     Job["Job Source"]
     Mail["Email or Message Service"]
     Calendar["Calendar Service"]
     Notify["Notification Channel"]
+    Watchdog["External Watchdog / Safety Alert Service<br/>preconfigured endpoint and recipient"]
     AI["Optional AI Provider"]
 
     ServerAdapter --> Job
@@ -271,10 +340,18 @@ flowchart TB
     Runner --> Mail
     Runner --> Calendar
     Runner --> Notify
+    SafetyExecutor -->|"fixed heartbeat slot or one kill alert"| Watchdog
+    Watchdog -->|"pending work + offline over 10m"| Notify
     AIGateway --> AI
 ```
 
-浏览器只访问 loopback Web/API，不能直连 Runner。Worker 只消费 durable queue，Executor 只能经 Registry 按 manifest runtime 分派：`server` adapter 在受控进程执行，`local_session` 必须进入 Runner 凭证边界。Core 和 Worker 不持有可复用 Cookie/Profile，也不直接调用外部 mutation。设备离线期间停止运行，恢复后先补采集、对账未知操作，再恢复新动作。SQLite 作为 v0.1 正式持久化实现仍是 `<<proposed DEC-16>>`；决策接受前该节点只是目标候选，不能被描述成已锁定技术栈。
+OSS-004 / `LOCALHOST_SECURITY` 的行为契约：Given 是应用以默认本机配置或容器端口映射启动；When 是启动器和集成测试检查监听、认证、CORS、CSRF、Origin 与 cookie；Then 默认只绑定 IPv4/IPv6 loopback，容器 publish 也必须限定宿主 loopback。任何 non-loopback 暴露都必须在监听前验证 TLS、强认证和显式 trusted-origin allowlist，否则拒绝启动。CORS 默认关闭，绝不允许带凭证的 `*` 或 `null` Origin；Browser 请求同时校验精确 Host/Origin，会改变状态的 API 还必须验证会话绑定、一次性/轮换 CSRF token，失败统一 403 且零状态改变。
+
+会话 cookie 由服务端签发并轮换，必须 `HttpOnly`、host-only、`SameSite=Strict`、`Path=/`、短 TTL；HTTPS（包括所有 non-loopback 模式）必须再设 `Secure`，不得设置宽泛 Domain，也不得把 session/CSRF bearer secret 放入 localStorage、URL 或客户端日志。浏览器不能直连 Runner。Worker 只消费 durable queue，Executor 只能经 Registry 按 manifest runtime 分派：`server` adapter 在受控进程执行，`local_session` 必须进入 Runner 凭证边界。Core 和 Worker 不持有可复用 Cookie/Profile，也不直接调用外部业务 mutation。设备离线期间停止运行，恢复后先补采集、对账未知操作，再恢复新动作。
+
+若要满足“整机休眠、断电或断网且有待办时，离线超过 10 分钟仍能外部告警”，部署必须配置独立于本机的 Watchdog/Safety Alert Service。Worker 每 60 秒只把 pseudonymous instance ID、序号、时间和 `hasPendingWork` 提交给本地 Safety Signal Control Plane；后者经固定 Plan、窄化授权、durable Operation、AuditIntent、专用 Outbox/Queue 和独立 Executor 向 Watchdog 发布 heartbeat。Watchdog 连续缺失两次后判定离线，并在最后状态有待办且离线超过 10 分钟时向预设通知渠道告警。未配置或未验证该绑定时，本机只能在 Core 尚存活或恢复后显示离线事实，DEC-11 对整机故障的实现验收不得标记通过。
+
+依据 `DEC-01`、`DEC-06` 与 `DEC-16`，v0.1 官方首条闭环是“开放导入或合规只读岗位源 + 邮件 + 日历 + 通知”，真实外发默认 L2 或人工交接，持久化仅承诺 SQLite；Docker Compose 正式支持 macOS、Windows 和 Linux，macOS 原生开发正式支持，Linux/Windows 原生运行时为 best effort。BOSS 直聘 Connector 与 PostgreSQL 均不阻塞 v0.1。
 
 ## RF-UML-DEP-HOSTED-01 未来托管分离模式
 
@@ -291,7 +368,7 @@ flowchart LR
     subgraph Server["NAS、家庭服务器或 VPS — future target"]
         Web["Web and API"]
         Core["Core and Three-layer Policy"]
-        DB[("Supported Store<br/>PostgreSQL candidate")]
+        DB[("Future Store Candidate<br/>PostgreSQL, not v0.1")]
         Dispatcher["Outbox Dispatcher"]
         Queue["Persistent Queue"]
         Worker["Always-on Worker"]
@@ -314,7 +391,7 @@ flowchart LR
     Runner --> SessionExternal["local-session external systems"]
 ```
 
-这是 `<<proposed DEC-16>>` 的未来兼容视图，不是 v0.1 当前承诺；托管范围、支持数据库与运维责任仍待确认。Browser 与 Runner 没有直接连接。服务端只把绑定 plan/operation/hash/kind/account/version/expiry 的一次性执行令牌交给 Runner，不传递或索取可复用 Cookie。新主机或恢复实例默认 `STOP_OUTBOUND`，凭证、token 和 L3 活跃授权不能随数据库自动恢复。恢复到 L2 后再逐 capability 重开 L3 只是 `<<proposed DEC-19>>` 建议；决策未接受时保持全部 outbound mutation 关闭，不自动恢复任何等级的外发。
+这是未来兼容视图，不是 v0.1 当前承诺；PostgreSQL、多数据库兼容和跨数据库迁移只在范围说明与相关 Case 文本中作为 Future/N/A 分支，其支持范围和运维责任留待后续版本决定；追踪 CSV 的 254 条设计映射仍统一为 `ACCEPTED / NOT_VERIFIED`，不使用 applicability 状态。Browser 与 Runner 没有直接连接。服务端只把绑定 plan/operation/hash/kind/account/version/expiry 的一次性执行令牌交给 Runner，不传递或索取可复用 Cookie。依据 `DEC-19`，新主机或恢复实例默认 `STOP_OUTBOUND`，凭证、token 和 L3 活跃授权不能随数据库自动恢复；完成只读重绑与未决操作对账后，系统只能先恢复到 L2，再由用户逐 capability 显式重开满足门槛的 L3。
 
 ## RF-UML-SEC-BOUNDARY-01 信任、Workspace 与最小数据边界
 
@@ -322,17 +399,37 @@ flowchart LR
 %% @anchor TRUST_BOUNDARIES
 %% @anchor WORKSPACE_ISOLATION
 %% @anchor DATA_MINIMIZATION
+%% @anchor AUTH_WORKSPACE_BINDING
+%% @anchor AI_CONTEXT_ISOLATION
+%% @anchor DATA_WORKSPACE_SCOPE
+%% @anchor SHARED_EXTERNAL_ID_NAMESPACE
+%% @anchor MULTIUSER_FEATURE_GATE
 flowchart LR
     External["外部 JD、消息、附件、Webhook 和网页"]
     Ingress["大小、速率、签名和 MIME Gate"]
     Sandbox["Parser and Content Sandbox"]
     Schema["Runtime Schema Validator"]
-    WorkspaceGate["Workspace Ownership Gate"]
+    Entry["UI, API or Worker Entry"]
+    MultiuserGate{"Multi-user capability implemented<br/>and explicitly enabled?"}
+    Disabled["Multi-user route, UI and API unavailable<br/>no partial tenant mode"]
+    Authority["Authoritative Workspace Context<br/>session or signed worker token"]
+    WorkspaceGate{"All claimed workspace bindings match?<br/>plan, policy, usage, subject and request"}
+    Deny["Uniform deny or not-found<br/>zero data, tool and outbound access"]
+    SecurityAudit["Redacted security event<br/>no foreign existence or identifier leak"]
+    Namespace["Server-derived workspace namespace<br/>for every resource key"]
+    ExternalIdentity["external ID, email and provider key<br/>never sufficient as a global key"]
+    ResourcePlane["DB, cache, lock, queue, file, log,<br/>backup, credential and result namespaces"]
+    Query["Query, search, export or AI task"]
+    Scope["Server-applied workspace predicate<br/>plus row ownership verification"]
     Evidence["Evidence and Risk Validators"]
     Core["Core Authority Boundary"]
     Store[("Workspace-scoped Store")]
+    ContextKey["AI context key<br/>workspace + campaign + job + thread"]
+    ContextGate{"Only same-key approved evidence<br/>and sanitized history?"}
+    Quarantine["Quarantine context mismatch<br/>invalidate contaminated cache or vector entry"]
     Minimizer["Context Minimizer and Redactor"]
     AI["AI Provider Boundary"]
+    AIResponse["Strict typed response validation<br/>still untrusted"]
     Executor["Mutation Executor"]
     Runtime["Connector Runtime Boundary"]
     Vault["Local Credential Boundary"]
@@ -340,10 +437,21 @@ flowchart LR
     Telemetry["Redacted Logs, Audit and Metrics"]
 
     External -->|"untrusted bytes"| Ingress --> Sandbox -->|"sanitized but untrusted"| Schema
-    Schema --> WorkspaceGate --> Evidence -->|"validated candidate facts and drafts"| Core
-    Core --> Store
-    Core -->|"minimum task context"| Minimizer --> AI
-    AI -->|"unknown typed output"| Schema
+    Entry --> MultiuserGate
+    MultiuserGate -->|"unsupported request"| Disabled
+    MultiuserGate -->|"supported or single-user"| Authority
+    Authority --> WorkspaceGate
+    Schema --> WorkspaceGate
+    WorkspaceGate -->|"mismatch or missing"| Deny --> SecurityAudit
+    WorkspaceGate -->|"all exact"| Namespace --> Evidence -->|"validated candidate facts and drafts"| Core
+    ExternalIdentity --> Namespace --> ResourcePlane --> Store
+    Query --> Authority
+    Authority --> Scope --> Store
+    Scope -->|"ownership mismatch"| Deny
+    Core -->|"minimum task context"| ContextKey --> ContextGate
+    ContextGate -->|"yes"| Minimizer --> AI
+    ContextGate -->|"no"| Quarantine --> SecurityAudit
+    AI -->|"unknown output + actual provider identity"| AIResponse --> Schema
     Core -->|"Plan + Authorization only"| Executor --> Runtime --> Mutation
     Runtime -->|"credential reference only"| Vault
     Core --> Minimizer --> Telemetry
@@ -351,36 +459,85 @@ flowchart LR
     Runtime --> Minimizer
 ```
 
-信任跃迁只在明确校验后发生：外部字节到受限解析数据、未知数据到 schema 合法值、合法值到 Workspace 所有权验证、草稿到 Evidence/风险绑定的 ActionPlan、计划到期限内 Authorization、远端响应到可对账证据。`workspaceId` 必须进入数据库键、缓存键、queue payload、文件路径、AI task、connector request 和日志关联字段；任何入口都不能信任调用者仅在查询条件中提供的 workspace。AI、日志和诊断只得到完成任务所需的最小字段。Core 不接触可复用凭证。
+信任跃迁只在明确校验后发生：外部字节到受限解析数据、未知数据到 schema 合法值、合法值到 Workspace 所有权验证、草稿到 Evidence/风险绑定的 ActionPlan、计划到期限内 Authorization、远端响应到可对账证据。Workspace 上下文只能来自已认证 session 或签名 worker token；请求体、URL、队列载荷和插件自报的 `workspaceId` 都只是待核对 claim。Plan、Policy、UsageSnapshot、subject 或 request 任一绑定缺失或不一致时，以统一的 deny/not-found 失败关闭，记录脱敏安全事件，且不得泄露另一 Workspace 是否存在，也不得访问其数据、工具或外部账户。
+
+`workspaceId` 必须由服务端写入数据库主键/谓词、缓存键、lock、queue payload、文件路径、日志、备份、credential namespace、AI task 和 connector request；`externalId`、邮箱或 Provider key 绝不能单独作为全局键。查询、搜索、导出和 AI 任务在服务端追加 Workspace 范围并复核行所有权。AI 缓存、向量和历史同时按 `workspace + campaign + job + thread` 隔离，只允许同键、已批准的证据进入最小化上下文；不一致内容被隔离并使受污染缓存失效。若实现尚未通过完整 tenant-isolation Gate，产品不暴露多用户 UI、route 或 API。AI、日志和诊断只得到完成任务所需的最小字段。Core 不接触可复用凭证。
 
 ## RF-UML-SEC-CRED-01 凭证、令牌、导出、备份与恢复隔离
 
 ```mermaid
 %% @anchor CREDENTIAL_ISOLATION
 %% @anchor TOKEN_BINDING
+%% @anchor AUTH_TOKEN_VALIDATION
+%% @anchor AUTH_ACTION_BINDING
+%% @anchor IPC_PEER_BINDING
+%% @anchor TOKEN_SINGLE_USE_REPLAY
 %% @anchor EXPORT_SECRET_EXCLUSION
+%% @anchor CLIENT_SECRET_ZERO
 %% @anchor REVOCATION_ONLY_CONTROL_PLANE
 flowchart TB
     User["候选人"]
-    Web["Web Console"]
+    CRED001Given["Given: recruiting Cookie, Browser Profile,<br/>refresh token or local session is connected"]
+    CRED001When["When: sync, backup, export, public log,<br/>debug upload, Git commit or release runs"]
+    CRED001Then["Then: reusable credential remains only in Vault/Profile;<br/>every other artifact is secret-zero or blocked"]
+    BKP002Given["Given: consistent snapshot contains user data<br/>and opaque Connector credential references"]
+    BKP002When["When: backup is generated, stored, read or exported"]
+    BKP002Then["Then: publish/export only after allowlist + canary,<br/>AEAD, separate key, owner-only storage and scoped access;<br/>otherwise deny before release"]
+    FrontendInput["Frontend source, dependency, config<br/>and generated page assets"]
+    BuildCanary{"Recursive build artifact scan<br/>JS/CSS/HTML/source map/static page<br/>secret canary and credential patterns = zero?"}
+    BlockBuild["Block build and release<br/>redacted security event"]
+    Web["Browser / Web Console<br/>verified secret-zero build"]
     Core["Core Authority"]
+    APIAllowlist["Public API Response Allowlist<br/>explicit safe fields and redacted account display"]
+    ResponseCanary{"Pre-serialization response scan<br/>secret canary and credential patterns = zero?"}
+    RejectResponse["Refuse response before bytes leave server<br/>generic safe error + redacted security event"]
+    ClientLogAllowlist["Client Log Allowlist and Redactor<br/>no arbitrary object, header or context dump"]
+    ClientLogCanary{"Pre-sink client log scan<br/>secret canary and credential patterns = zero?"}
+    DropClientLog["Drop log entry<br/>redacted security event"]
+    ClientLog["Secret-zero client log"]
     DB[("Business and Operation DB")]
-    Token["One-time Operation Token Issuer"]
+    Token["One-time Operation Token Issuer<br/>signed short-lived jti"]
+    Invocation["Execution Invocation<br/>token + authenticated channel evidence"]
+    ChannelGate{"Controlled channel and peer?<br/>loopback/device-bound + expected process"}
+    TokenGate{"Signature, issuer, audience,<br/>schema and expiry valid?"}
+    BindingGate{"Durable bindings all exact?<br/>workspace, plan, authorization, operation,<br/>payloadHash, kind, connector, version,<br/>account and credential lineage"}
+    TypeGate{"Typed capability dispatcher accepts<br/>this exact action kind and contract?"}
+    ReplayGate{"Atomic single-use jti claim wins<br/>and idempotency binding is unchanged?"}
+    RejectToken["Uniform reject + redacted security audit<br/>zero Vault, connector and external call"]
     Runner["Runtime Adapter or Local Runner"]
+    LocalCredential["Recruiting-site Cookie, Browser Profile,<br/>refresh token or local session"]
     Vault["OS or Dedicated Credential Store"]
     External["External Account"]
-    ExportFilter["Export Redaction and Allowlist"]
+    SyncIngressGate{"Sync/read result response allowlist<br/>credential echo + secret canary = zero?"}
+    CredentialIngressBlock["Reject/quarantine result<br/>zero business DB/public log write + security event"]
+    DiagnosticCandidate["Public log or explicit debug<br/>bundle/upload candidate"]
+    GitCandidate["Git worktree, staged diff,<br/>test fixture or release candidate"]
+    CredentialEgressGate{"Destination-specific allowlist/redaction<br/>secret canary and credential pattern = zero?"}
+    CredentialEgressBlock["Drop artifact / block upload, commit or release<br/>redacted security event"]
+    SafeDiagnostic["Sanitized diagnostic or repository artifact"]
+    ExportFilter["Portable User Export<br/>schema allowlist + redaction"]
+    ExportSecretGate{"Export secret-canary scan zero?<br/>no reusable secret or credential reference"}
     Export["Portable User Export"]
     Snapshot["Consistent Online Snapshot<br/>no outbound gate required"]
-    Backup["Encrypted Backup Artifact<br/>no secret, token or live L3 authority"]
+    BackupSerializer["Backup schema allowlist<br/>user data + opaque credential references only"]
+    BackupSecretGate{"Secret-canary scan zero?<br/>no reusable secret, token or live L3 authority"}
+    BackupReject["Destroy temporary candidate<br/>backup not published + security event"]
+    BackupEncrypt["AEAD encrypt + integrity metadata<br/>key handle remains in separate credential domain"]
+    BackupStore["Atomic restricted store<br/>owner-only file/ACL and least-privilege process"]
+    Backup["Encrypted Backup Artifact"]
+    BackupExportGate{"Authenticated owner explicitly exports<br/>one artifact to canonical destination?"}
+    BackupExport["Encrypted backup export<br/>same restrictive permissions where supported"]
+    BackupAccessDeny["Deny backup read/export<br/>redacted audit; stored artifact unchanged"]
     RestoreGate["Restore, Migrate or Delete Gate<br/>STOP_OUTBOUND"]
     RestoredDB[("Restored Store")]
     Rebind["Read-only Credential Rebind"]
     Reconcile["Remote Reconciliation"]
-    RecoveryDecision{"Accepted DEC-19 recovery policy?"}
-    Closed["All outbound mutation remains closed"]
-    FreshGrant["Explicit New Mutation Grant"]
-    Enabled["Outbound Mutation Enabled"]
+    Closed["All outbound mutation remains closed<br/>old Plan and Authorization invalid"]
+    FreshGrant["Explicit new L2 capability grant<br/>after read-only rebind and reconciliation"]
+    L2Enabled["L2 restored<br/>each mutation still requires approval"]
+    L3Gate{"Per-capability health checks,<br/>explicit confirmation and L3 thresholds pass?"}
+    L2Only["Remain at L2 for this capability"]
+    L3Enabled["New L3 grant enabled<br/>for this capability only"]
     DeleteRequest["Confirmed Workspace Delete Request"]
     DeleteGate["Business Mutation Gate CLOSED<br/>drain leases and advance fencing epoch"]
     TargetSnapshot["Immutable revocation target snapshot<br/>connector, version, account, credential lineage"]
@@ -397,17 +554,71 @@ flowchart TB
     LocalErase["Continue bounded local credential and PII deletion"]
     EndRevoke["Expire REVOCATION_ONLY control and tokens"]
 
+    CRED001Given --> LocalCredential
+    CRED001Given --> CRED001When
+    CRED001When --> SyncIngressGate
+    CRED001When --> Snapshot
+    CRED001When --> ExportFilter
+    CRED001When --> DiagnosticCandidate
+    CRED001When --> GitCandidate
+    BKP002Given --> BKP002When --> Snapshot
+    Backup --> BKP002Then
+    BackupExport --> BKP002Then
+    FrontendInput --> BuildCanary
+    BuildCanary -->|"hit or scanner unavailable"| BlockBuild
+    BuildCanary -->|"zero"| Web
     User --> Web --> Core --> DB
-    Core -->|"plan and operation bound"| Token --> Runner
+    Core -->|"public response candidate"| APIAllowlist --> ResponseCanary
+    ResponseCanary -->|"hit or scanner unavailable"| RejectResponse
+    ResponseCanary -->|"zero"| Web
+    Web -->|"structured diagnostic event only"| ClientLogAllowlist --> ClientLogCanary
+    ClientLogCanary -->|"hit or scanner unavailable"| DropClientLog
+    ClientLogCanary -->|"zero"| ClientLog
+    Core -->|"issue only from durable current bindings"| Token --> Invocation --> ChannelGate
+    ChannelGate -->|"no"| RejectToken
+    ChannelGate -->|"yes"| TokenGate
+    TokenGate -->|"no"| RejectToken
+    TokenGate -->|"yes"| BindingGate
+    DB -->|"authoritative Plan, Authorization and Operation"| BindingGate
+    BindingGate -->|"no"| RejectToken
+    BindingGate -->|"yes"| TypeGate
+    TypeGate -->|"no"| RejectToken
+    TypeGate -->|"yes"| ReplayGate
+    ReplayGate -->|"replayed, spent or changed"| RejectToken
+    ReplayGate -->|"yes, atomically mark spent"| Runner
+    LocalCredential -->|"import/connect once into local domain"| Vault
     Runner <-->|"obtain scoped credential for exact bound account"| Vault
     Runner -->|"execute bound external request"| External
-    DB --> ExportFilter --> Export
-    DB --> Snapshot --> Backup
+    External -->|"sync/read result; no credential is trusted back"| SyncIngressGate
+    SyncIngressGate -->|"hit, malformed or scanner unavailable"| CredentialIngressBlock
+    SyncIngressGate -->|"zero and schema-valid"| Core
+    Core --> DiagnosticCandidate --> CredentialEgressGate
+    GitCandidate --> CredentialEgressGate
+    CredentialEgressGate -->|"hit or scanner unavailable"| CredentialEgressBlock
+    CredentialEgressGate -->|"zero"| SafeDiagnostic
+    DB --> ExportFilter --> ExportSecretGate
+    ExportSecretGate -->|"hit or scanner unavailable"| CredentialEgressBlock
+    ExportSecretGate -->|"zero"| Export
+    DB --> Snapshot --> BackupSerializer --> BackupSecretGate
+    BackupSecretGate -->|"hit or scanner unavailable"| BackupReject
+    BackupSecretGate -->|"zero"| BackupEncrypt --> BackupStore --> Backup
+    Vault -.->|"backup encryption key handle; never same artifact"| BackupEncrypt
+    Backup --> BackupExportGate
+    BackupExportGate -->|"no, stale session or unsafe destination"| BackupAccessDeny
+    BackupExportGate -->|"yes"| BackupExport
     Backup --> RestoreGate --> RestoredDB
+    Core --> CRED001Then
+    CredentialIngressBlock --> CRED001Then
+    CredentialEgressBlock --> CRED001Then
+    SafeDiagnostic --> CRED001Then
+    Export --> CRED001Then
+    Backup --> CRED001Then
+    BackupReject --> BKP002Then
+    BackupAccessDeny --> BKP002Then
     User --> Rebind
-    RestoredDB --> Rebind --> Reconcile --> RecoveryDecision
-    RecoveryDecision -->|"not accepted"| Closed
-    RecoveryDecision -->|"accepted"| FreshGrant --> Enabled
+    RestoredDB --> Rebind --> Reconcile --> Closed --> FreshGrant --> L2Enabled --> L3Gate
+    L3Gate -->|"no"| L2Only
+    L3Gate -->|"yes, new L3 grant"| L3Enabled
     User --> DeleteRequest --> DeleteGate --> TargetSnapshot --> RevokeOnly
     RevokeOnly --> RevokePlan --> RevokePolicy --> RevokeTx --> Cleanup --> Token
     Runner -->|"revocation or read-only status<br/>for fixed account"| RevocationEndpoint --> RevokeResult
@@ -418,10 +629,17 @@ flowchart TB
     LocalErase --> EndRevoke
 ```
 
-凭证、Cookie、浏览器 Profile、refresh token 和一次性执行 token 不进入业务库、日志、普通导出或备份。令牌至少绑定 `workspace + plan + operation + payloadHash + kind + connector + account + connectorVersion + expiry`，不能持久复用；陈旧 UI、页面文本、connector 自报字段或队列消息都不是授权。
+CRED-001 / `CREDENTIAL_ISOLATION` 的行为契约：Given 是招聘网站 Cookie、Browser Profile、refresh token 或 local session 已连接；When 是 Connector 同步、备份、普通用户导出、公共日志生成、debug bundle/upload、Git stage/commit 或 release；Then 可复用凭证始终只留在授权本地 Vault/Profile 域。Runner 只按精确 operation binding 取得短期句柄，Connector 的同步响应先删除 auth/cookie echo 并通过 schema/secret-canary 门才可写业务 DB。所有诊断、上传、导出和 Git 候选都按目的地 allowlist、redaction 与 canary 扫描；命中或扫描器不可用即丢弃/隔离并阻断上传、commit 或 release，只记录不含命中值的安全事件。debug upload 默认关闭，显式开启也不能读取 Vault/Profile 路径。业务库、公共日志、Git 历史、debug 服务和用户数据导出至多得到不可用来认证的去敏账号显示信息，绝不获得 secret、原 Cookie/Profile、token 或 session。
+
+Web frontend 的编译产物必须递归扫描 JS、CSS、HTML、静态页面和 source map；命中 secret canary、credential/token/key 模式或扫描器不可用时，构建与发布均失败关闭并写不含命中值的安全事件。公开 API 只按响应 schema allowlist 序列化安全字段，并在字节离开服务端前再次扫描；命中时拒绝整个响应，只向 Browser 返回固定通用错误并写去敏安全事件，不能通过部分字段、错误堆栈或调试 header 泄漏。客户端日志只接受明确 allowlist 的结构化诊断字段，禁止序列化 request/response/header/context 任意对象；写入 sink 前的 canary 扫描命中或不可用即丢弃整条日志并记录服务端安全事件。因此页面源码、运行时响应、DOM 输入和 client log 都保持 secret-zero，而不是依靠前端隐藏字段。
+
+令牌至少绑定 `workspace + plan + authorization + operation + payloadHash + kind + connector + account + credential lineage + connectorVersion + issuer + audience + expiry + jti`，不能持久复用；陈旧 UI、页面文本、connector 自报字段或队列消息都不是授权。Runner/server adapter 先验证受控通道和预期 peer/process，再校验签名、issuer、audience、schema 与期限，并把所有 claim 与 durable Plan、Authorization、Operation 做逐字段运行时复核；类型层同时以 capability 专用接口阻止跨 action kind 调用。任一失败都统一拒绝、只写脱敏安全审计且为零 Vault、connector 和外部调用，连接器不得接受备用 token、静默降级或泄露目标是否存在。`jti` 只有在前置校验全部通过后才能以原子 CAS 声明为已使用；重放、过期或改绑账号、payload、operation、kind、connector/version 的 token 均失败关闭。
 
 Vault 只向已校验绑定的 Runner/runtime adapter 提供 scoped credential；它不与 External Account 建立网络连接。Runner 使用该凭证执行绑定请求，Core、DB 和一次性 token 中只保存 credential reference 与不可变账号绑定。
-在线备份使用一致性快照，不需要暂停正常 mutation；若无法保证一致性则备份失败关闭。Restore、跨主机 migrate 和 workspace delete 必须先进入 `STOP_OUTBOUND` 并排空/冻结执行租约。恢复后即使保留策略历史，也不恢复凭证、token 或 L3 活跃权威：用户先以最小只读权限重新绑定 connector，完成所有未决 operation 的远端对账。后续恢复等级属于 `<<proposed DEC-19>>`；只有该决策被接受并产生全新的 capability grant/authorization 后才能外发，未确认时全部 outbound mutation 持续关闭。
+
+BKP-002 / `EXPORT_SECRET_EXCLUSION` 的行为契约：Given 是一致性快照包含用户数据及 Connector credential reference；When 是生成、存储、读取或导出备份；Then serializer 只允许业务数据和不具认证能力的 opaque reference，临时产物先做 secret-canary 扫描，再用 AEAD 与完整性元数据加密，解密 key 只以独立 Vault handle 存在且绝不与 artifact 同包。生成与存储进程使用最小权限身份，目录/文件或平台 ACL 仅允许当前 owner，临时文件原子发布；导出要求重新验证的 owner 会话、单一 artifact 的 scoped read 和 canonical 安全目的地，不能列举或导出其他 Workspace 备份。任一 secret 命中、scanner/key/permission 失败或越权都在发布/读取前拒绝，销毁临时候选但不破坏既有备份，并写去敏审计。
+
+在线备份使用一致性快照，不需要暂停正常 mutation；若无法保证一致性则备份失败关闭。Restore、跨主机 migrate 和 workspace delete 必须先进入 `STOP_OUTBOUND` 并排空/冻结执行租约。恢复后即使保留策略历史，也不恢复凭证、token 或 L3 活跃权威：用户先以最小只读权限重新绑定 connector，完成所有未决 operation 的远端对账。依据 `DEC-19`，恢复只能从全局关闭进入新的 L2 capability grant；L3 必须逐 capability 重新通过健康检查、显式确认与升级门槛，旧 Plan、Authorization 与活跃授权一律失效。
 
 删除期间的 `REVOCATION_ONLY` 是独立、窄化且限时的系统安全控制面，不是解除 STOP_OUTBOUND，也不属于 `DRY_RUN / L2_CALIBRATION / L3_LIMITED` 或任一业务 CapabilityGrant。它只能对删除请求开始时冻结的固定目标执行 `credential_revocation`；每个目标仍需不可变 Plan、系统安全评估、绑定 Authorization、durable Operation、AuditIntent 与 Outbox，并由独立 Cleanup Executor 消费。Executor 对 kind、deletionRequestId、workspace、connector/version、account、credential lineage、targetHash、token audience 与 expiry 任一不符都失败关闭。
 
@@ -434,7 +652,12 @@ Vault 只向已校验绑定的 Runner/runtime adapter 提供 scoped credential�
 %% @anchor QUE_013_APPLICATION_ACTION_CAS
 flowchart LR
     Draft["Validated Mutation Intent"] --> Plan["Immutable ActionPlan"]
-    Plan --> Evaluate{"Applicable Authority Decision<br/>business three-layer or REVOCATION_ONLY safety"}
+    Plan --> IdempotencyLookup{"Workspace + operation kind + idempotency key<br/>already in durable ledger?"}
+    IdempotencyLookup -->|"same payload binding"| ExistingState{"Existing operation state"}
+    ExistingState -->|"terminal"| ReturnExisting["Return canonical stored result<br/>zero new operation, quota or adapter call"]
+    ExistingState -->|"non-terminal"| JoinExisting["Return current status / join reconciliation<br/>zero parallel adapter call"]
+    IdempotencyLookup -->|"same key, different payload"| IdempotencyConflict["Reject + Exception and security audit<br/>zero external call"]
+    IdempotencyLookup -->|"absent"| Evaluate{"Applicable Authority Decision<br/>business three-layer or REVOCATION_ONLY safety"}
     Evaluate -->|"deny or preview_only"| NoOp["No Operation Created"]
     Evaluate -->|"require approval"| Approval["Await Human Approval"]
     Approval -->|"same payload approved"| Reevaluate["Re-evaluate current safety, policy and control"]
@@ -458,35 +681,48 @@ flowchart LR
         Commit -->|"not applicable or guard won"| AuditIntent
         Commit -->|"not applicable or guard won"| Outbox
         Commit -->|"guard lost"| Conflict
+        Commit -->|"DB, AuditIntent or Outbox write fails"| AtomicFailure["Rollback whole transaction<br/>zero enqueue and zero remote call"]
         Authorization --> Operation
     end
 
     AuthCandidate --> Commit
     Conflict --> NoOp
+    AtomicFailure --> NoOp
     Outbox --> Dispatcher["Outbox Dispatcher"] --> KindRoute{"Validated operationKind"}
     KindRoute -->|"business kind"| Queue["Durable Business Queue"] --> Executor["Mutation Executor"] --> Lease["Acquire Lease and Fencing Token"]
     KindRoute -->|"credential_revocation"| CleanupQueue["Dedicated Cleanup Queue"] --> CleanupExecutor["Independent Cleanup Executor"] --> CleanupGate["REVOCATION_ONLY exact-target gate"] --> Lease
     Lease --> Recheck{"Execution-time Recheck<br/>authority, kind, target and subject stateVersion"}
     Recheck -->|"applicable authority denies, expired, stale or mismatched"| Cancel["No Remote Call<br/>Operation = CANCELLED"]
-    Recheck -->|"valid"| Adapter["Specialized Runtime Adapter"] --> Remote["External Mutation"]
-    Remote --> Result{"Three-way Result Classification"}
-    Result -->|"evidence proves success"| Success["SUCCEEDED<br/>externalRef + consume reservation"]
+    Recheck -->|"valid"| ACTP002Given["Given: Plan/Auth current and unexpired,<br/>Kill Switch off, capability healthy, Executor online"]
+    ACTP002Given --> Adapter["Specialized Runtime Adapter"] --> Remote["External Mutation"]
+    Remote --> Result{"When: classify external response<br/>using verifiable evidence"}
+    Result -->|"evidence proves success"| SuccessTx["Atomic outcome transaction<br/>Operation = SUCCEEDED + minimal external evidence<br/>ActionPlanRecord = SUCCEEDED when all required ops succeed<br/>Application stage CAS when applicable<br/>consume reservation + durable outcome AuditIntent"]
+    SuccessTx -->|"commit"| Success["Canonical stored success"]
+    SuccessTx -->|"DB, CAS or outcome-audit intent failure"| PersistFence["Do not acknowledge success<br/>fence same operation/idempotency key<br/>recover as unresolved, then reconcile only"]
     Result -->|"evidence proves no execution"| Failed["FAILED_CONFIRMED<br/>release reservation"]
     Result -->|"timeout, crash, disconnect or ambiguity"| Unknown["OUTCOME_UNKNOWN<br/>hold conservative reservation"]
     Unknown --> Reconcile["Read-only Remote Reconcile"]
-    Reconcile -->|"unique success found"| Success
+    Reconcile -->|"unique success found"| SuccessTx
     Reconcile -->|"non-execution proved"| Failed
     Reconcile -->|"cannot decide uniquely"| Manual["Manual Review<br/>no automatic retry"]
+    PersistFence --> Reconcile
+    Success --> ReturnExisting
+    Success --> AuditProjection{"Project durable outcome AuditIntent"}
+    AuditProjection -->|"sink available"| Audit
+    AuditProjection -->|"sink unavailable"| AuditRetry["Retry audit projection only<br/>never replay mutation"] --> AuditProjection
     Cancel --> Release["Release Reservation"]
     Operation --> Audit["Append-only Outcome Audit"]
     Cancel --> Audit
-    Success --> Audit
     Failed --> Audit
     Unknown --> Audit
     Manual --> Audit
 ```
 
-该协议适用于投递、撤回、普通/跟进/面试确认回复、日历创建/更新/取消、主/备用通知和删除期凭证撤销。普通计划通常创建一个 operation 与一个 operation outbox；ScheduleInterviewActionPlan 在一个事务中持久化同一 Authorization、slot/quotas、calendarOp、replyOp、AuditIntent 和一个 Saga 启动作业。两个子 operation 都是 QUEUED，但 Saga Executor 必须在 calendar 成功证据事务落盘后才开始 reply，不能靠另一个未定义的 operation 状态表达依赖。事务 outbox 消除“数据库已记 operation 但任务未入队”或“任务已入队但 operation 未落库”的双写窗口；Dispatcher 可以重放，Executor 依靠 operation idempotency、lease 与 fencing 防止并发副作用。
+ACT-P0-02 / `MUTATION_PROTOCOL` 的行为契约：Given 是不可变 ActionPlan 已由当前 policy 授权、Plan/Auth 未过期、Kill Switch 关闭、绑定 capability 健康且 Executor 在线；When 是 adapter 返回带稳定 externalRef/request ID 的可验证成功；Then 系统在一个 outcome 事务中把 ExternalOperation 置为 `SUCCEEDED`、保存最小外部证据（外部引用、发生时间、结果码与响应 hash，不保存无关正文）、在全部必需子操作成功时把 ActionPlanRecord 置为 `SUCCEEDED`、以 CAS 推进对应 Application 阶段、消费 reservation 并写 durable outcome AuditIntent。只有事务提交后才能向调用者宣称成功。
+
+相同 Workspace、operation kind 与 idempotency key 的重放先查 durable ledger：payload binding 相同则直接返回既有终态结果，非终态则返回/加入同一个对账，不新建 operation、不重复计数也不调用 adapter；同 key 不同 payload 直接拒绝并创建异常。若准备事务中的 DB/AuditIntent/Outbox 任一失败，整笔回滚且零入队、零外发；若外部成功后 outcome DB、Application CAS 或 audit intent 落盘失败，则不得返回成功或换 key 重试，必须 fence 原 operation，在存储恢复后按同一 idempotency key 只读对账并重新提交 outcome 事务。后续 Audit projection/sink 故障只从 durable AuditIntent/Outbox 重试审计投影，绝不能重放外部 mutation。
+
+该统一业务协议适用于投递、撤回、普通/跟进/面试确认回复、日历创建/更新/取消、主/备用通知和删除期凭证撤销。普通计划通常创建一个 operation 与一个 operation outbox；ScheduleInterviewActionPlan 在一个事务中持久化同一 Authorization、slot/quotas、calendarOp、replyOp、AuditIntent 和一个 Saga 启动作业。两个子 operation 都是 QUEUED，但 Saga Executor 必须在 calendar 成功证据事务落盘后才开始 reply，不能靠另一个未定义的 operation 状态表达依赖。事务 outbox 消除“数据库已记 operation 但任务未入队”或“任务已入队但 operation 未落库”的双写窗口；Dispatcher 可以重放，Executor 依靠 operation idempotency、lease 与 fencing 防止并发副作用。SafetySignal 不属于业务 mutation；它是唯一独立、窄化且同样 durable 的安全协议，必须使用固定 SafetySignalActionPlan、SafetySignalOperation、AuditIntent 和专用 Outbox。
 
 Dispatcher 必须先验证封闭 OperationKind，再把业务 kind 与 `credential_revocation` 分流。后者只进入独立 Cleanup Queue/Executor，并在获取 lease 后再次验证 REVOCATION_ONLY、删除请求和固定目标；Business Executor 遇到该 kind、Cleanup Executor 遇到任一业务 kind，都必须 quarantine 且零外发。
 
@@ -500,11 +736,13 @@ Dispatcher 必须先验证封闭 OperationKind，再把业务 kind 与 `credenti
 %% @anchor INTERVIEW_SAGA
 flowchart TB
     Readiness["InterviewScheduleReadiness<br/>exact slot, account, snapshot and preauthorization"]
-    Strategy{"Accepted saga strategy exists?"}
+    CalendarCapability{"Calendar connector exposes query/reconcile,<br/>idempotent private create, update/cancel<br/>and stable external ID?"}
     Manual["Manual Handoff<br/>Interview remains unscheduled"]
 
     Plan["One immutable ScheduleInterviewActionPlan<br/>with two operation bindings"]
     Evaluate{"Three-layer policy evaluation<br/>and approval result"}
+    L2Approval["L2 human approval<br/>exact slot, reply, payload hashes and bindings"]
+    ApprovalCAS{"Approval accepted and every binding<br/>still current under CAS?"}
 
     subgraph ScheduleTx["One atomic schedule transaction"]
         Commit["Atomic Commit"]
@@ -527,7 +765,7 @@ flowchart TB
     end
 
     Fresh{"Final availability is fresh and free?"}
-    CalMutation["Execute CalendarOperation<br/>event invite behavior governed by DEC-20"]
+    CalMutation["Execute CalendarOperation first<br/>private tentative event, no recruiter attendee"]
     CalResult{"Calendar terminal outcome"}
     CalReconcile["Reconcile Calendar Operation"]
     Stop["Cancel both before reply<br/>release slot and quotas"]
@@ -540,19 +778,24 @@ flowchart TB
     Join["Both original child operations<br/>independently SUCCEEDED"]
     Scheduled["Interview = SCHEDULED<br/>Application records INTERVIEW_SCHEDULED milestone"]
 
-    NeedComp{"Confirmed reply failure after calendar success<br/>and safe compensation supported?"}
+    NeedComp["Confirmed reply failure after calendar success<br/>mandatory cancellation compensation"]
     CompPlan["New Compensation ActionPlan<br/>compensatesOperationId = calendarOperationId"]
+    CompDecision{"Current safety authority permits<br/>the exact calendar cancellation?"}
     CompAuth["New Compensation Authorization"]
     CompOp["New Compensation ExternalOperation"]
     CompResult{"Compensation terminal outcome"}
     CompReconcile["Reconcile Compensation Operation"]
     Recovered["Saga recovered but not scheduled<br/>original Calendar Op remains SUCCEEDED"]
+    Critical["SEV-1 exception + pause interview scheduling<br/>manual remediation required"]
 
     Readiness --> Plan --> Evaluate
     Evaluate -->|"denied or not authorized"| Manual
-    Evaluate -->|"authorized"| Strategy
-    Strategy -->|"no accepted DEC-08/DEC-12 path"| Manual
-    Strategy -->|"calendar-first strategy accepted"| Commit
+    Evaluate -->|"L2 requires approval"| L2Approval --> ApprovalCAS
+    ApprovalCAS -->|"rejected, stale, expired or kill"| Manual
+    ApprovalCAS -->|"approved and exact"| CalendarCapability
+    Evaluate -->|"L3 exact preauthorization"| CalendarCapability
+    CalendarCapability -->|"no"| Manual
+    CalendarCapability -->|"yes"| Commit
     SagaOutbox --> Fresh
     Fresh -->|"no, stale or unknown"| Stop
     Fresh -->|"yes"| CalMutation --> CalResult
@@ -568,16 +811,17 @@ flowchart TB
     ReplyReconcile -->|"success found"| PersistReply
     ReplyReconcile -->|"non-execution proved"| NeedComp
     ReplyReconcile -->|"still unknown"| Manual
-    NeedComp -->|"no"| Manual
-    NeedComp -->|"yes"| CompPlan --> CompAuth --> CompOp --> CompResult
+    NeedComp --> CompPlan --> CompDecision
+    CompDecision -->|"allowed for exact cancellation"| CompAuth --> CompOp --> CompResult
+    CompDecision -->|"denied, stale or kill enabled"| Critical
     CompResult -->|"SUCCEEDED"| Recovered
-    CompResult -->|"FAILED_CONFIRMED"| Manual
-    CompResult -->|"OUTCOME_UNKNOWN"| CompReconcile --> Manual
+    CompResult -->|"FAILED_CONFIRMED"| Critical
+    CompResult -->|"OUTCOME_UNKNOWN"| CompReconcile --> Critical
 ```
 
-Calendar 与 Reply 是同一 ScheduleInterviewActionPlan、同一 ActionAuthorization 下的两个 durable child operation，但各自拥有 idempotency key、payload hash、externalRef、lease、结果和对账状态。它们与 Compensation 都执行 RF-UML-REL-MUT-01；Compensation 使用全新的计划、授权和操作。Saga 只汇总事实：成功子操作保持 SUCCEEDED，不因另一子操作失败或补偿成功而被改写；图中没有回边重新执行已成功步骤。
+Calendar 与 Reply 是同一 ScheduleInterviewActionPlan、同一 ActionAuthorization 下的两个 durable child operation，但各自拥有 idempotency key、payload hash、externalRef、lease、结果和对账状态。L2 必须由用户批准完整、不可变的双操作计划，并在原子提交前以 CAS 复核所有绑定；L3 只能命中精确 SchedulePreauthorization。它们与 Compensation 都执行 RF-UML-REL-MUT-01；Compensation 使用全新的计划、授权和操作，若当前安全权威、期限或 Kill Switch 不允许取消，不能绕过授权，直接进入 `SEV-1` 与人工处置。Saga 只汇总事实：成功子操作保持 SUCCEEDED，不因另一子操作失败或补偿成功而被改写；图中没有回边重新执行已成功步骤。
 
-`<<proposed DEC-08>>`：是否采用 calendar-first 及异常时的人机交接策略仍待确认。若接受，Calendar 成功与 externalRef 必须先事务落盘，同一个 Saga Executor 才能开始预创建的 ReplyOperation。`<<proposed DEC-12>>`：自动取消日历是否为必选 connector 补偿能力仍待确认。`<<proposed DEC-20>>`：日历事件是否邀请招聘方并触发平台通知仍待确认。三项未接受前，自动约面只能停在人工确认；不能悄悄选择执行顺序、自动撤销或 attendee 行为。只有两个**原始**子操作均有明确成功证据时，Interview 才进入 `SCHEDULED`，Application 只记录 `INTERVIEW_SCHEDULED` milestone。
+依据 `DEC-08`、`DEC-12` 与 `DEC-20`，v0.1 约面采用 calendar-first：先创建不邀请招聘方、不触发外部邀请通知的私密 tentative 日历事件，成功与 externalRef 事务落盘后，同一个 Saga Executor 才能执行预创建的 ReplyOperation。L3 日历 Connector 必须同时具备查询/对账、幂等创建私密事件、更新/取消和稳定 external ID；若回复明确失败，必须创建独立补偿计划取消事件，补偿失败或结果持续未知升级为 `SEV-1` 并暂停约面能力。只有两个**原始**子操作均有明确成功证据时，Interview 才进入 `SCHEDULED`，Application 只记录 `INTERVIEW_SCHEDULED` milestone。导入或损坏状态中的 legacy reply-first 只能只读对账；仅当两侧都有唯一、可验证且绑定一致的成功证据时记录真实 `BOTH_SUCCEEDED`，否则人工接管，绝不自动补建缺失事件或重发回复。
 
 ## RF-UML-REL-BOOT-01 初始化、协议版本与本地文件启动门
 
@@ -677,12 +921,21 @@ flowchart TB
 %% @anchor EXT_002_REFRESH_SINGLE_FLIGHT
 %% @anchor EXT_017_TLS_REDIRECT_REVALIDATION
 %% @anchor COM_015_CALENDAR_ETAG_CONFLICT
+%% @anchor CONNECTOR_TARGET_ALLOWLIST
 flowchart TB
-    Operation["Authorized ExternalOperation<br/>expected connector, account, org and workspace"]
+    Operation["Authorized ExternalOperation<br/>immutable URL or file target plus<br/>expected connector, account, org and workspace"]
+    TargetKind{"Closed target kind<br/>network_url or sandbox_file?"}
+    UrlCanonical["Strict URL parse and canonicalize<br/>scheme, IDNA host, port and path<br/>resolve every address before target access"]
+    NetworkGate{"HTTPS and canonical destination allowlisted?<br/>No localhost, loopback, private/link-local/reserved IP,<br/>cloud metadata host/IP or DNS rebinding"}
+    FileCanonical["Decode once and normalize relative path<br/>against pre-opened connector workspace root"]
+    FileGate{"Operation-specific path/type allowlisted?<br/>No absolute path, traversal, NUL, outside-root,<br/>symlink escape, device or special file"}
+    FileOpen["Brokered openat from fixed root<br/>no-follow every component, then fstat"]
+    FileResult["Validated sandbox file result evidence"]
+    TargetDeny["Fail closed + redacted security event<br/>zero target file content I/O, zero request to rejected host<br/>and zero external mutation"]
     Credential["Credential Broker lookup by exact binding<br/>no default-account fallback"]
     TLS{"HTTPS, certificate, hostname and destination allowlist valid?"}
     Redirect{"Redirect received?"}
-    Hop["Resolve next hop<br/>repeat scheme, certificate, DNS and host allowlist checks"]
+    Hop["Treat next hop as a new target<br/>strip cross-origin credentials, canonicalize again"]
     TransportDeny["Fail closed<br/>no HTTP downgrade or mutation"]
     Identity["Remote identity preflight<br/>whoami, account and organization"]
     IdentityMatch{"Identity equals immutable Plan binding?"}
@@ -702,10 +955,19 @@ flowchart TB
     Conflict["412/version conflict<br/>FAILED_CONFIRMED, zero overwrite<br/>re-read then create a new Plan"]
     Result["Three-way execution result evidence"]
 
-    Operation --> Credential --> TLS
+    Operation --> TargetKind
+    TargetKind -->|"unknown"| TargetDeny
+    TargetKind -->|"network_url"| UrlCanonical --> NetworkGate
+    NetworkGate -->|"invalid or ambiguous"| TargetDeny
+    NetworkGate -->|"valid"| Credential --> TLS
+    TargetKind -->|"sandbox_file"| FileCanonical --> FileGate
+    FileGate -->|"invalid or ambiguous"| TargetDeny
+    FileGate -->|"valid"| FileOpen
+    FileOpen -->|"symlink, race, special file or error"| TargetDeny
+    FileOpen -->|"safe regular file inside root"| FileResult --> Result
     TLS -->|"invalid"| TransportDeny
     TLS -->|"valid"| Redirect
-    Redirect -->|"yes"| Hop --> TLS
+    Redirect -->|"yes within bounded hop count"| Hop --> UrlCanonical
     Redirect -->|"no"| Identity --> IdentityMatch
     IdentityMatch -->|"mismatch or ambiguous"| IdentityDeny
     IdentityMatch -->|"exact match"| Calendar
@@ -722,6 +984,10 @@ flowchart TB
     Refresh -->|"success"| Rotate --> Retry --> TLS
     Refresh -->|"failure or revoked"| CapabilityOff
 ```
+
+所有 Connector URL、network destination 和 file target 都先从不可变 Plan 读取，再经过严格解析、单次解码、canonicalization 与 operation-specific allowlist；运行时输入、页面文字、插件返回值或重定向头不能扩展 allowlist。URL 只允许 HTTPS，规范化 scheme、IDNA hostname、显式 port 与 path 后，解析出的**全部**地址都必须仍在许可目的地范围；`localhost`、loopback、RFC1918/private、link-local、unspecified/reserved/multicast 地址、云 metadata hostname/IP（包括 `169.254.169.254`）及 DNS rebinding 一律拒绝。每个 redirect hop 都当成新目标重新 canonicalize、解析 DNS、验证地址/host allowlist、证书和 hostname，限制跳数且跨 origin 不转发 credential；任一 hop 失败都不会向被拒目标发送请求或 mutation。
+
+文件 target 必须是相对于预配置 `pluginId × workspaceId` connector root 的 allowlisted 相对路径。拒绝 absolute path、盘符/UNC、NUL、重复或编码 traversal、规范化后的 `..`、root 外路径、symlink/hard-link escape、device/socket/FIFO 等特殊文件；实际打开只能从预打开 root 使用逐级 no-follow 的 `openat` 并在使用前 `fstat` 复验，竞态或无法证明归属即拒绝。失败路径在读取/写入任何目标内容、访问 Vault 或调用 Connector 前结束，写入不含原始秘密/路径的安全事件，保证零目标文件内容 I/O、零向被拒 host 的 outbound 与零外部 mutation。
 
 远端 identity preflight 是 mutation 的执行时门禁，必须验证账号、组织/租户和 Workspace 绑定；不一致、缺字段或多义结果都拒绝，Connector 不能回退到 SDK 默认账号、最近登录账号或其他 Workspace 凭据。
 
@@ -772,8 +1038,8 @@ CI 对不可信 PR 不注入发布秘密，工作流 token 默认只读且按 jo
 2. `workspaceId` 必须贯穿数据库、缓存、队列、outbox、文件、日志、AI task 和 Connector 请求，并在每个边界重新校验所有权。
 3. DB、AuditIntent、Operation Ledger、Outbox、Authorization 或凭证服务不可用时，外部 mutation 失败关闭。
 4. 外部内容、Connector 和 AI 都不能创建 Policy、Authorization/Token、ExternalOperation，不能直调 mutation adapter，也不能直接迁移领域状态。
-5. 所有 mutation 都走同一 durable 协议；Notification、补偿、人工批准后的执行和删除期 credential revocation 都没有 durable intent、授权、审计或 outbox 旁路。
-6. 在线备份必须一致且排除秘密；恢复、迁移和删除必须 gate mutation。恢复后先只读重绑与对账；`DEC-19` 未接受时全部 outbound mutation 保持关闭，不得仅因配置或历史等级恢复而签发执行授权。
+5. 所有业务 mutation 与删除期 `credential_revocation` 都走统一 durable 协议；Notification、补偿和人工批准后的执行都没有 durable intent、授权、审计或 outbox 旁路。SafetySignal 是唯一独立、窄化的安全协议，也必须具备固定 Plan、窄化授权、durable Operation、AuditIntent、专用 Outbox、执行前复核与三态对账。
+6. 在线备份必须一致且排除秘密；恢复、迁移和删除必须 gate mutation。恢复后先只读重绑与对账，再以新授权恢复 L2；L3 必须逐 capability 重新满足健康检查、显式确认与升级门槛，不得仅因配置或历史等级恢复执行权威。
 7. 单一 Connector、账号或 capability 故障只造成局部降级；Workspace 级 STOP_OUTBOUND 与全局急停除外。
 8. 所有发布物必须经过依赖、许可证、secret、PII、checksum、SBOM 和 provenance 检查。
 9. 初始化和 migration 只有一个跨进程 owner；未知协议/schema、无法收紧的本地权限或密钥解密失败一律拒绝启动，不得按空实例或默认字段继续。

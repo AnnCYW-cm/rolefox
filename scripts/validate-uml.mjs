@@ -5,8 +5,11 @@ import { JSDOM } from "jsdom";
 
 const root = process.cwd();
 const umlDirectory = path.join(root, "docs", "product", "uml");
+const umlReadmePath = path.join(umlDirectory, "README.md");
+const umlTraceabilityDocPath = path.join(umlDirectory, "07-traceability.md");
 const baselinePath = path.join(root, "docs", "product", "p0-case-baseline-v0.1.md");
 const traceabilityPath = path.join(umlDirectory, "case-to-uml-v0.1.csv");
+const decisionPath = path.join(root, "docs", "adr", "0002-v0.1-product-decision-baseline.md");
 const diagramIdSource = String.raw`RF-UML-(?:CTX|UC|CD|SM|ACT|SEQ|CMP|DEP|SEC|REL)(?:-[A-Z0-9]+)+-\d{2}`;
 const diagramIdPattern = new RegExp(`^${diagramIdSource}$`);
 
@@ -16,6 +19,30 @@ const fail = (message) => {
 const read = (file) => fs.readFileSync(file, "utf8");
 
 const baseline = read(baselinePath);
+const decisionRecord = read(decisionPath);
+const decisionRows = Array.from(
+  decisionRecord.matchAll(/^\| (DEC-\d{2}) \| ([A-Z0-9_-]+) \|/gm),
+  (match) => ({ id: match[1], status: match[2] }),
+);
+const expectedDecisionIds = Array.from(
+  { length: 20 },
+  (_, index) => `DEC-${String(index + 1).padStart(2, "0")}`,
+);
+if (
+  decisionRows.length !== expectedDecisionIds.length ||
+  new Set(decisionRows.map(({ id }) => id)).size !== expectedDecisionIds.length
+) {
+  fail("ADR-0002 must contain exactly one registry row for each of DEC-01 through DEC-20.");
+}
+for (const decisionId of expectedDecisionIds) {
+  const decision = decisionRows.find(({ id }) => id === decisionId);
+  if (!decision) fail(`ADR-0002 is missing ${decisionId}.`);
+  const expectedStatus =
+    decisionId === "DEC-13" ? "RESERVED_MERGED_INTO_DEC-04" : "ACCEPTED";
+  if (decision.status !== expectedStatus) {
+    fail(`${decisionId} must have status ${expectedStatus}, not ${decision.status}.`);
+  }
+}
 const appendixA = baseline.split("## 附录 A：")[1]?.split("## 附录 B：")[0];
 const appendixB = baseline.split("## 附录 B：")[1]?.split("## 附录 C：")[0];
 const appendixC = baseline.split("## 附录 C：")[1];
@@ -143,9 +170,26 @@ const diagramMarkdownFiles = fs
   .map((file) => path.join(umlDirectory, file));
 const diagramSections = new Map();
 let mermaidBlocks = 0;
+const forbiddenDecisionMarkers = [
+  /<<\s*(?:proposed|pending)\s+DEC-\d{2}\s*>>/i,
+  /\b(?:proposed|pending)\s+DEC-\d{2}\b/i,
+  /DEC-\d{2}.{0,48}(?:待确认|未接受)/,
+  /(?:待确认|未接受).{0,48}DEC-\d{2}/,
+];
+const assertNoOpenDecisionMarker = (content, file) => {
+  if (forbiddenDecisionMarkers.some((pattern) => pattern.test(content))) {
+    fail(
+      `Accepted UML contains a proposed or pending decision marker in ${path.relative(root, file)}.`,
+    );
+  }
+};
 
 for (const file of diagramMarkdownFiles) {
   const content = read(file);
+  if (!/^- 状态：Accepted Design Baseline$/m.test(content)) {
+    fail(`${path.relative(root, file)} must declare Accepted Design Baseline status.`);
+  }
+  assertNoOpenDecisionMarker(content, file);
   const fences = content.match(/^```/gm)?.length ?? 0;
   if (fences % 2 !== 0) {
     fail(`Unbalanced Markdown code fences in ${path.relative(root, file)}.`);
@@ -174,7 +218,7 @@ for (const file of diagramMarkdownFiles) {
     }
     mermaidBlocks += 1;
     const anchorList = Array.from(
-      section.matchAll(/%%\s*@anchor\s+([A-Z][A-Z0-9_-]+)/g),
+      blocks[0][1].matchAll(/%%\s*@anchor\s+([A-Z][A-Z0-9_-]+)/g),
       (match) => match[1],
     );
     const anchors = new Set(anchorList);
@@ -195,6 +239,17 @@ if (diagramSections.size === 0 || mermaidBlocks !== diagramSections.size) {
   );
 }
 
+const umlReadme = read(umlReadmePath);
+if (!/^- 状态：Accepted Product and Design Baseline$/m.test(umlReadme)) {
+  fail("UML README must declare Accepted Product and Design Baseline status.");
+}
+assertNoOpenDecisionMarker(umlReadme, umlReadmePath);
+const traceabilityDoc = read(umlTraceabilityDocPath);
+if (!/^- 状态：Accepted Design Baseline$/m.test(traceabilityDoc)) {
+  fail("UML traceability document must declare Accepted Design Baseline status.");
+}
+assertNoOpenDecisionMarker(traceabilityDoc, umlTraceabilityDocPath);
+
 const dom = new JSDOM("<!doctype html><html><body></body></html>");
 globalThis.window = dom.window;
 globalThis.document = dom.window.document;
@@ -212,7 +267,7 @@ for (const [diagramId, diagram] of diagramSections) {
 }
 dom.window.close();
 
-const allowedReviewStatuses = new Set(["DRAFT", "NEEDS_PRODUCT_CONFIRMATION"]);
+const requiredReviewStatus = "ACCEPTED";
 const expectedInvariantIds = new Set(
   Array.from({ length: 12 }, (_, index) =>
     `INV-${String(index + 1).padStart(2, "0")}`,
@@ -277,8 +332,8 @@ for (const row of rows) {
     }
     referencedGold.add(goldId);
   }
-  if (!allowedReviewStatuses.has(row.review_status)) {
-    fail(`${row.case_id} has invalid review_status ${row.review_status}.`);
+  if (row.review_status !== requiredReviewStatus) {
+    fail(`${row.case_id} must have review_status ${requiredReviewStatus}.`);
   }
   if (row.implementation_status !== "NOT_VERIFIED") {
     fail(`${row.case_id} must remain NOT_VERIFIED until linked tests pass.`);
@@ -307,7 +362,6 @@ if (unreferencedDiagrams.length) {
   fail(`Diagrams without any Case reference: ${unreferencedDiagrams.join(" ")}.`);
 }
 
-const traceabilityDoc = read(path.join(umlDirectory, "07-traceability.md"));
 const validateTraceTable = (pattern, expectedIds, label) => {
   const matches = Array.from(traceabilityDoc.matchAll(pattern));
   const ids = matches.map((match) => match[1]);
@@ -365,6 +419,10 @@ const reviewedByStatus = rows.reduce((counts, row) => {
   counts[row.review_status] = (counts[row.review_status] ?? 0) + 1;
   return counts;
 }, {});
+const implementedByStatus = rows.reduce((counts, row) => {
+  counts[row.implementation_status] = (counts[row.implementation_status] ?? 0) + 1;
+  return counts;
+}, {});
 console.log(
   [
     "RoleFox UML validation passed.",
@@ -372,9 +430,14 @@ console.log(
     `Diagrams discovered: ${diagramSections.size}`,
     `Mermaid diagrams parsed: ${diagramSections.size}`,
     `Case-referenced diagrams: ${referencedDiagrams.size}`,
-    `Review status: ${Object.entries(reviewedByStatus)
+    `Design review status: ${Object.entries(reviewedByStatus)
       .map(([status, count]) => `${status} ${count}`)
       .join(", ")}`,
+    `Implementation status: ${Object.entries(implementedByStatus)
+      .map(([status, count]) => `${status} ${count}`)
+      .join(", ")}`,
+    `Accepted decision registry: ${decisionRows.length} stable IDs (19 accepted, 1 reserved)`,
+    "Accepted UML status headers: 01-07 and README",
     `Golden scenarios referenced: ${referencedGold.size}`,
     `System invariants referenced: ${referencedInvariants.size}`,
     `Markdown files checked: ${allMarkdown.length}`,

@@ -34,7 +34,7 @@ RoleFox 由真实求职需求发起，但核心代码、默认配置和公共测
 | 能力 | 状态 | 说明 |
 | --- | --- | --- |
 | Web 工作台 | 已实现（演示） | 使用完全虚构的跨地区、多币种岗位展示产品流程 |
-| 求职申请状态机 | 已实现 | 对岗位从发现到关闭的状态迁移做显式约束 |
+| 求职申请状态机 | 已实现（M0 基础版） | 现有字符串迁移可运行；尚未对齐 Accepted 基线中的 Interview 独立生命周期、Operation/Saga 证据与 CAS guard |
 | 自动化策略判断 | 已实现（基础版） | dry-run、急停、等级矩阵、限额与敏感问题规则已有单元测试；授权记录、异常服务和真实计数器尚未实现 |
 | 连接器 SDK 契约 | 已实现（基础版） | 按发现、投递、消息、回复、通知、日历拆分能力 |
 | AI Provider 契约 | 已实现（基础版） | 为结构化生成与向量能力提供厂商无关接口 |
@@ -95,6 +95,8 @@ pnpm dev
 
 打开 [http://localhost:3000](http://localhost:3000)。当前页面只使用虚构演示数据。
 
+v0.1 的正式安装目标是 Docker Compose 支持 macOS、Windows 和 Linux；macOS 原生开发正式支持，Linux/Windows 原生运行时为 best effort。当前 M0 尚未完成这组安装矩阵验证。
+
 提交改动前运行：
 
 ```bash
@@ -107,10 +109,11 @@ pnpm check
 - 想看目标用户、范围与验收指标：阅读 [v0.1 产品需求文档](docs/product/prd-v0.1.md)
 - 想看首次配置、日常自治与异常体验：阅读 [v0.1 用户体验与信息架构](docs/product/user-experience-v0.1.md)
 - 想核对发布阻断场景：阅读 [v0.1 P0 Case 验收基线](docs/product/p0-case-baseline-v0.1.md)
-- 想评审开发前完整设计：阅读 [v0.1 UML 设计基线](docs/product/uml/README.md)（待确认草案）
+- 想评审开发前完整设计：阅读已接受的 [v0.1 UML 设计基线](docs/product/uml/README.md)
 - 想看验证假设与 10 周实施基线：阅读 [验证计划](docs/product/validation-plan-v0.1.md) 和 [交付计划](docs/product/delivery-plan-v0.1.md)
 - 想了解产品边界：阅读 [产品范围](docs/product-scope.md)
 - 想了解为何选择面试前 Autopilot：阅读 [ADR-0001](docs/adr/0001-pre-interview-autopilot.md)
+- 想查看 v0.1 已确认产品决策：阅读 [ADR-0002](docs/adr/0002-v0.1-product-decision-baseline.md)
 - 想了解开发顺序：阅读 [路线图](docs/roadmap.md)
 - 想贡献连接器：先阅读 [架构](docs/architecture.md) 和 [贡献指南](CONTRIBUTING.md)
 - 想了解开源与未来商业化边界：阅读 [开源策略](docs/open-source-strategy.md)

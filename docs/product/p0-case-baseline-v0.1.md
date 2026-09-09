@@ -1,4 +1,4 @@
-# RoleFox v0.1 P0 Case 全量评审稿（254 Cases）
+# RoleFox v0.1 P0 Case 验收基线（254 Cases）
 
 - 状态：Accepted Product Baseline
 - 确认日期：2026-09-09
@@ -14,7 +14,7 @@ RoleFox 的完整性不能只用一条“发现岗位 → 投递 → 约面”�
 ## 2. 已确认的产品基线
 
 1. 首次使用必须支持登记或导入已有申请，避免重复投递。
-2. v0.1 在首次进入 `SCHEDULED` 后完成核心交付；后续改期和取消继续监控并立即提醒，默认由用户处理。
+2. v0.1 在 Interview 首次进入 `SCHEDULED`、且 Application 记录 `INTERVIEW_SCHEDULED` 里程碑后完成核心交付；后续改期和取消继续监控并立即提醒，默认由用户处理。
 3. 自动跟进默认关闭；用户显式开启后，v0.1 最多自动跟进一次。
 4. 自动回答默认无授权，按事实、问题类别和回答区间逐项开启。
 5. 暂停分为“暂停新机会”“停止所有外发”“全局急停”。
@@ -61,7 +61,7 @@ Case 的“通过”分为两层：
 4. 外部结果不确定时必须先对账，绝不盲目重试。
 5. 内部任务允许至少处理一次，但同一个逻辑动作对外最多产生一次副作用。
 6. 空白执行白名单表示全部禁止，不表示允许全部。
-7. 只有招聘方确认与日历正式写入都成功，Interview 才能进入 `SCHEDULED`。
+7. 只有招聘方确认与候选人私有 tentative event 明确写入都成功，Interview 才能进入 `SCHEDULED`。
 8. 一个 Connector 或一种能力失败，默认只暂停关联范围。
 9. 恢复、升级、解除暂停后，所有非终态动作必须按最新状态重新核验。
 10. Offer、法律声明、背调授权、身份承诺和规避 CAPTCHA 永远不能自动完成。
@@ -112,14 +112,14 @@ flowchart LR
 | GOLD-04 | 用户主要使用不受支持的平台 | 手动链接/CSV → 筛选 → 材料 → 深链接交接 | 清楚显示人工步骤，不把交接标成自动成功 |
 | GOLD-05 | 简历存在矛盾或禁外用事实 | 解析 → 冲突检查 → 材料生成 | 相关内容被冻结，不由模型选择“更有利”的事实 |
 | GOLD-06 | 岗位高匹配但证据不足 | 评分通过 → Evidence 校验失败 | 高分不能绕过事实门槛，动作进入异常或停止 |
-| GOLD-07 | L3 正常闭环 | 发现 → 去重 → 评分 → 材料 → 投递 → 回复 → 约面 | 双方确认且日历成功后进入 `SCHEDULED` 并通知用户 |
+| GOLD-07 | L3 正常闭环 | 发现 → 去重 → 评分 → 材料 → 投递 → 回复 → 约面 | 双方确认且日历成功后 Interview 进入 `SCHEDULED`、Application 记录里程碑并通知用户 |
 | GOLD-08 | 投递后始终没有回复 | 等待 → 冷却 → 一次跟进 → 继续无回复 | 达到上限后停止，不形成骚扰或自动回复循环 |
 | GOLD-09 | 招聘方提出普通问题 | 关联 Application → 分类 → Evidence/答案授权 → 回复 | 只回答被明确授权且有证据的内容 |
 | GOLD-10 | 一条消息同时含普通和敏感问题 | 分类到地点/到岗问题与法律/Offer 问题 | 整条回复升级人工，不能只回答安全部分制造误解 |
-| GOLD-11 | 招聘方提供唯一明确面试时段 | 解析 → 时区 → 日历 → 授权 → 确认 → 正式事件 | 两个外部操作均证实成功后才通知“已约成” |
+| GOLD-11 | 招聘方提供唯一明确面试时段 | 解析时区与授权 → 本地锁 → 新鲜日历复查 → 私有 tentative event → 落盘 → 回复确认 | 两个外部操作均证实成功后才通知“已约成” |
 | GOLD-12 | 招聘方提供多个时段或全部冲突 | 应用时段优先规则 → 检查授权替代时间 | 不随机选择；无规则时询问用户 |
-| GOLD-13 | 日历成功、确认回复失败 | 创建占位 → 回复失败或未知 → 补偿/对账 | 不进入 `SCHEDULED`，不创建重复事件 |
-| GOLD-14 | 回复成功、日历失败 | 招聘方收到确认 → 日历写入失败 | 立即产生高优先级异常，不重发确认，不报假成功 |
+| GOLD-13 | 日历成功、确认回复失败 | 私有 tentative event → 结果落盘 → 回复失败或未知 → 取消/对账 | 不进入 `SCHEDULED`；取消失败或未知进入 `SEV-1` 并暂停约面 |
+| GOLD-14 | 异常历史中出现回复成功、日历失败 | 导入旧结果或检测损坏/越序执行 → 对账 | 立即产生 `SEV-1` 异常，不重发确认，不报假成功；新 calendar-first 流程不得产生此顺序 |
 | GOLD-15 | 外部提交响应丢失 | 请求可能送达 → `OUTCOME_UNKNOWN` → 远端对账 | 找到已有结果并补记，或人工裁决；绝不盲目重试 |
 | GOLD-16 | Worker/Runner 离线后恢复 | 显示覆盖空窗 → 补拉岗位与消息 → 重校验积压动作 | 去重恢复，不延长旧授权，不重复外发 |
 | GOLD-17 | 用户在执行中撤销策略或急停 | 取消排队动作 → 在途动作进入对账 | 未开始动作全部停止；已发生的外部事实不被伪装回滚 |
@@ -129,7 +129,7 @@ flowchart LR
 
 ## 8. 故障注入矩阵
 
-每一种真实 mutation——投递、回复、跟进、日历创建/更新/取消、通知——都必须覆盖以下切点：
+每一种真实业务 mutation——投递、回复、跟进、日历创建/更新/取消、通知——都必须覆盖以下切点；删除期撤权和隔离 SafetySignal 在各自窄化执行器上应用同一故障语义：
 
 | 切点 | 注入位置 | 必须观察到的结果 |
 | --- | --- | --- |
@@ -156,7 +156,7 @@ flowchart LR
 | --- | --- | --- |
 | G0 | 处理真实简历、消息、附件或凭证 | 数据隔离、最小化、凭证、注入、危险附件、删除与导出 P0 |
 | G1 | 真实 L2 投递、回复、日历或通知 | G0 + 授权、哈希、幂等、审计、对账、急停、平台条款和崩溃恢复 P0 |
-| G2 | 真实 L3 Autopilot | G0/G1 + 分能力授权、限额、异常、跟进、约面补偿、通知必达和 shadow 验证 |
+| G2 | 真实 L3 Autopilot | G0/G1 + 分能力授权、限额、异常、跟进、约面补偿、通知事实持久化/外部失败可见和 shadow 验证 |
 | G3 | 稳定开源版本 | 安装升级、备份恢复、兼容矩阵、供应链、无障碍和运维演练 |
 
 每个 Gate 的通过条件：
@@ -201,25 +201,19 @@ flowchart LR
 
 ## 12. P1 / P2 后续范围
 
-P1 重点包括：多 Campaign、复杂 OCR、更多跟进、自动改期、多设备冲突、完整移动端、更多无障碍组合、AI/Connector 降级、告警降噪、RPO/RTO 和连接器维护体验。
+P1 重点包括：多个活跃 Campaign 并行、复杂 OCR、更多跟进、自动改期、多设备冲突、完整移动端、更多无障碍组合、AI/Connector 降级、告警降噪、RPO/RTO 和连接器维护体验。
 
 P2 重点包括：多用户/教练协作、托管 SaaS、多个真实写入平台、插件市场、RTL、长期个性化模型、大规模性能、审计哈希链和社区安全治理。
 
 P1/P2 可以排期，但不能通过引入新能力破坏 P0 不变量。
 
-## 13. 仍需产品确认的决策
+## 13. 已接受的产品与目标设计决策
 
-前述 8 项产品基线已确认。进入 v0.1 具体设计前，还需要确认：
+v0.1 的 19 项开放决策已经由产品负责人分四组全部确认，权威记录见 [ADR-0002](../adr/0002-v0.1-product-decision-baseline.md)。`DEC-13` 已合并到 `DEC-04`，编号保留且不复用。
 
-1. **首条真实通道**：岗位入口、投递方式、消息源和日历的具体组合。
-2. **L3 校准门槛**：5–10 次人工校准后，还采用连续 7 天、50 个候选决策，还是两者同时满足。
-3. **硬上限数值**：每日投递、回复、跟进和约面的系统级最大值。
-4. **通知组合**：v0.1 的首选渠道与高优先级备用渠道。
-5. **数据保留期**：原始消息、附件、审计摘要和备份分别保留多久。
-6. **安装支持矩阵**：macOS、Linux、Docker 中哪些是 v0.1 正式支持，哪些是社区尽力支持。
-7. **面试准备包**：v0.1 必须包含的最少信息和生成时点。
+本基线据此固定首条真实通道、分 capability 的 L3 门槛、默认值和硬上限、通知组合、数据保留期、安装支持矩阵、准备包、calendar-first Saga、去重与关闭语义、离线阈值、日历能力、Campaign 约束、SQLite 范围、严重度、急停和恢复规则。`RES-003` 的 PostgreSQL pool 分支、`OSS-008` 的 SQLite↔PostgreSQL 迁移分支，以及其他 PostgreSQL/跨库测试在 v0.1 明确为未来范围/N/A；SQLite 与支持 OS 相关部分仍适用。
 
-这些决策不影响本稿作为通用 P0 基线，但会决定哪些 Case 在 v0.1 标记为适用、哪些标记为 `N/A`。
+产品与设计接受不等于实现通过。各 Case 必须绑定实际测试证据后，相关能力才能跨过 G0/G1/G2/G3。
 
 ## 附录 A：产品与用户层 72 条 P0
 
@@ -304,7 +298,7 @@ P1/P2 可以排期，但不能通过引入新能力破坏 P0 不变量。
 - **前置条件（Given）**：用户已提交连接器授权，但认证可能失败、过期或权限不足。
 - **When**：系统进行健康和能力验证。
 - **Then**：系统逐项报告可读、可写、不可用和需要重新授权的能力；单一连接器失败不会删除其他配置或默认暂停整个 Campaign。
-- **不变量 / 关联状态**：失败连接器进入 `DEGRADED`、`EXPIRED` 或 `REVOKED`；依赖它的外部动作不得进入 `AUTHORIZED`。
+- **不变量 / 关联状态**：普通局部故障进入 `DEGRADED`；凭证提供方报告的 `EXPIRED/REVOKED` 是外部检测事实，统一使该账号/credential lineage 的 RuntimeHealth 进入 `AUTH_REQUIRED`；条款或官方 scope 不允许则进入 `POLICY_BLOCKED`。依赖它的外部动作不得进入 `AUTHORIZED`。
 
 #### ONB-P0-05 — Dry-run 校准与显式开启 L3
 
@@ -403,14 +397,14 @@ P1/P2 可以排期，但不能通过引入新能力破坏 P0 不变量。
 - **前置条件（Given）**：L3 策略设置了每日投递、每小时回复、每日约面上限或授权到期时间。
 - **When**：动作将超过上限或策略已经到期。
 - **Then**：动作排队、过期或进入异常；只读同步继续；系统不会临时扩大上限或延长授权。
-- **不变量 / 关联状态**：所有限额按 Workspace 与动作类型原子计数；自动确认面试同时计入回复和约面限额。
+- **不变量 / 关联状态**：默认值为每日投递 10、每小时回复 8、每日自动约面 3；普通配置硬上限分别为 25、12、8；每个 Application 最多一次自动跟进。所有限额按 Workspace 与动作类型原子计数；自动确认面试同时计入回复和约面限额。
 
 #### POL-P0-06 — 分级暂停与全局急停
 
 - **前置条件（Given）**：Campaign 正在 L3 运行或存在已授权待执行动作。
 - **When**：用户选择“暂停新机会”“停止全部外发”或触发 Kill Switch。
-- **Then**：“暂停新机会”停止发现和新投递但继续只读监听已有申请；“停止全部外发”保留只读同步；Kill Switch 拒绝全部新外部动作，并将执行中动作标记为需要对账。
-- **不变量 / 关联状态**：任何连接器或模型都不能降低暂停级别；恢复前必须重新核验策略、连接器、岗位新鲜度和积压计划。
+- **Then**：“暂停新机会”停止发现和新投递但继续只读监听已有申请；“停止全部外发”保留只读同步；Kill Switch 拒绝全部业务外发，并将执行中动作标记为需要对账。内部审计和产品 Inbox 继续写入；只有隔离、预配置且幂等的安全通道可发送一次停止告警。
+- **不变量 / 关联状态**：任何连接器或模型都不能降低暂停级别；旧 Plan 和授权不复活。完成对账后由用户按 capability 先恢复到 L2，健康检查和明确确认通过后才可恢复 L3。
 
 ---
 
@@ -435,7 +429,7 @@ P1/P2 可以排期，但不能通过引入新能力破坏 P0 不变量。
 - **前置条件（Given）**：标准化岗位明确违反至少一个 Campaign 硬条件。
 - **When**：执行过滤。
 - **Then**：申请关闭并显示具体原因，不调用语义评分、材料生成或外部执行。
-- **不变量 / 关联状态**：`FILTERED → CLOSED` 必须带 `closureReason=filtered_out`；LLM 不能推翻确定性规则。
+- **不变量 / 关联状态**：`ELIGIBILITY_CHECKED → CLOSED` 必须带 `closedReason=hard-filter-failed`；LLM 不能推翻确定性规则。
 
 #### JOB-P0-04 — 未达阈值或没有合格岗位时保持安静
 
@@ -573,7 +567,7 @@ P1/P2 可以排期，但不能通过引入新能力破坏 P0 不变量。
 - **前置条件（Given）**：招聘方明确拒绝、岗位关闭或要求不再联系。
 - **When**：系统确认消息意图。
 - **Then**：Application 进入 `CLOSED`，记录具体 closure reason，取消所有未执行跟进和回复动作，不再自动联系。
-- **不变量 / 关联状态**：停止联系请求不可被后续营销式规则覆盖；历史审计保留但不用于再次触达。
+- **不变量 / 关联状态**：`CLOSED` 是终态。停止联系请求不可被后续营销式规则覆盖；只有出现新的外部事实或用户明确重新申请时，才创建关联的新 Application，旧实例不得倒退或复活。
 
 #### EXC-P0-06 — Exception 提供单一、可理解决策
 
@@ -593,7 +587,7 @@ P1/P2 可以排期，但不能通过引入新能力破坏 P0 不变量。
 
 - **前置条件（Given）**：用户未在截止时间前处理异常，或系统检测疑似越权、账号风险、数据泄漏或错误外发。
 - **When**：异常到期或风险被触发。
-- **Then**：普通异常保持暂停或按预先声明的保守规则关闭；高风险异常立即暂停受影响能力并发出 P0 通知；系统不得代替用户扩大授权。
+- **Then**：普通异常保持暂停或按预先声明的保守规则关闭；高风险异常立即暂停受影响能力并发出 `SEV-0` 通知；系统不得代替用户扩大授权。
 - **不变量 / 关联状态**：一个 Application 的异常不阻断无依赖的申请；全局风险可以触发 Kill Switch，但必须记录原因和恢复条件。
 
 ---
@@ -604,8 +598,8 @@ P1/P2 可以排期，但不能通过引入新能力破坏 P0 不变量。
 
 - **前置条件（Given）**：招聘方给出唯一明确的未来时段和时区；问题已解决；日历、回复连接器及 SchedulePreauthorization 均有效。
 - **When**：最新空闲快照显示该精确时段可用且位于授权窗口内。
-- **Then**：系统建立绑定回复与日历操作的排期计划并执行；两项均成功后进入 `SCHEDULED`。
-- **不变量 / 关联状态**：预授权、空闲快照、日历账户、连接器版本和精确时段必须属于同一 Workspace 并完全匹配。
+- **Then**：系统先锁定本地时段并重新检查同一 Provider 账户下的 busy 日历并集，在唯一写入日历创建候选人私有 tentative event；日历明确成功且结果落盘后才发送招聘确认，两项均成功后进入 `SCHEDULED`。
+- **不变量 / 关联状态**：预授权、空闲快照、日历账户、连接器版本和精确时段必须属于同一 Workspace 并完全匹配；事件不含招聘方 attendee，也不触发日历邀请邮件。
 
 #### INT-P0-02 — 多时段或无可用时段按规则处理
 
@@ -619,27 +613,27 @@ P1/P2 可以排期，但不能通过引入新能力破坏 P0 不变量。
 - **前置条件（Given）**：时间/时区无法唯一解释、空闲快照过期、日历冲突、授权过期或招聘方仍有未回答问题。
 - **When**：系统评估自动约面条件。
 - **Then**：自动确认被拒绝，系统重新查空闲、询问招聘方或生成一个明确 Exception。
-- **不变量 / 关联状态**：任何一项就绪条件失败都不能进入 `SCHEDULED`；展示时间必须同时保留原始文本和规范化 instant/时区。
+- **不变量 / 关联状态**：任何一项就绪条件失败都不能让 Interview 进入 `SCHEDULED`；展示时间必须同时保留原始文本和规范化 instant/时区。
 
-#### INT-P0-04 — 回复与日历部分成功时补偿
+#### INT-P0-04 — 日历与回复部分成功时补偿
 
 - **前置条件（Given）**：自动约面由招聘回复和日历写入两个外部操作组成。
-- **When**：其中一项成功而另一项失败或结果不确定。
-- **Then**：系统保留已成功事实，执行可证明安全的补偿或对账，并立即生成高优先级 Exception；不得重复发送确认或创建重复事件。
-- **不变量 / 关联状态**：Application 保持 `INTERVIEW_PROPOSED`；只有两个操作都被证实成功才进入 `SCHEDULED`。
+- **When**：calendar-first 流程中的日历创建已成功，而回复明确失败或结果不确定；或导入/恢复时发现旧版本的越序部分结果。
+- **Then**：回复未知先对账；回复明确失败时用新的补偿 Plan/Operation 取消 tentative event。取消失败或未知时生成 `SEV-1` Exception、暂停自动约面 capability，并保留全部 externalRef；不得重复发送确认或创建事件。
+- **不变量 / 关联状态**：Application 保持 `INTERVIEW_PROPOSED`；只有原始日历与回复两个操作都被证实成功，Interview 才进入 `SCHEDULED`、Application 才记录 `INTERVIEW_SCHEDULED`。不能安全查询/对账、幂等创建、更新/取消或返回稳定 external ID 的 Calendar Connector 不得开放 L3。
 
 #### INT-P0-05 — 已约成面试的成功通知
 
-- **前置条件（Given）**：双方已确认精确时间，日历事件写入成功，Application 准备进入 `SCHEDULED`。
+- **前置条件（Given）**：双方已确认精确时间，日历事件写入成功，Interview 准备进入 `SCHEDULED`，Application 准备记录 `INTERVIEW_SCHEDULED`。
 - **When**：状态提交成功。
-- **Then**：立即通知用户，内容包含公司、岗位、日期时间和时区、形式/地点/链接、联系人、日历状态、材料版本、沟通历史和准备包入口。
+- **Then**：立即通知用户并生成核心准备包，包含 JD 快照与来源、公司/岗位摘要、匹配理由、实际投递材料版本、沟通时间线、联系人、已确认日期时间/时区/地点/会议链接和日历写入状态。
 - **不变量 / 关联状态**：“已约成”只用于外部确认且日历成功的面试；通知主操作为查看准备包，不是再次接受面试。
 
 #### INT-P0-06 — 通知失败不改写面试事实
 
 - **前置条件（Given）**：Interview 已进入 `SCHEDULED`，但首选通知渠道失败。
 - **When**：系统完成有限重试。
-- **Then**：保持 `SCHEDULED`，在 Web 显示未送达的高优先级状态，并按用户已验证的备用渠道发送；不重复建立面试。
+- **Then**：保持 `SCHEDULED`；产品内 Inbox 保留权威事实并显示邮件未送达。若用户已配置可选 Webhook 则按其策略尝试；不要求 v0.1 必有第二个外部备用渠道，也不重复建立面试。
 - **不变量 / 关联状态**：通知状态与 Interview 状态分离；通知失败不得把申请退回，也不得标记为用户已知晓。
 
 #### INT-P0-07 — 已排面试的改期或取消
@@ -663,8 +657,8 @@ P1/P2 可以排期，但不能通过引入新能力破坏 P0 不变量。
 #### OFF-P0-01 — Worker 离线时诚实显示覆盖空窗
 
 - **前置条件（Given）**：本地 Worker 因电脑休眠、关机、进程退出或网络中断停止运行。
-- **When**：用户查看概览或服务恢复。
-- **Then**：系统显示最后在线时间、未覆盖时段、受影响能力和恢复进度；不得显示“Autopilot 正常持续运行”。
+- **When**：60 秒心跳连续缺失两次、达到 120 秒，或用户查看概览/服务恢复。
+- **Then**：系统判定 Worker 离线，显示最后在线时间、未覆盖时段、受影响能力和恢复进度；有待处理任务且离线超过 10 分钟时发送外部告警。恢复后显示覆盖空窗及回补结果，不得显示“Autopilot 正常持续运行”。
 - **不变量 / 关联状态**：运行状态是可验证事实，不根据 Campaign 为 ACTIVE 就推断 Worker 在线。
 
 #### OFF-P0-02 — Runner 离线时动作等待或过期
@@ -692,7 +686,7 @@ P1/P2 可以排期，但不能通过引入新能力破坏 P0 不变量。
 
 - **前置条件（Given）**：用户把 Workspace 备份恢复到同一设备重装环境或另一设备。
 - **When**：数据迁移和 schema 校验完成。
-- **Then**：事实、Campaign、历史和审计可恢复；凭证、浏览器会话和一次性 token 不恢复；全部外发能力保持关闭，直到重新连接和明确授权。
+- **Then**：事实、Campaign、历史和审计可恢复；凭证、浏览器会话和一次性 token 不恢复；完成远端对账后由用户按 capability 恢复，首先进入 L2，健康检查和明确确认通过后才可重新进入 L3。
 - **不变量 / 关联状态**：恢复不能复活旧 `AUTHORIZED` ActionPlan、过期策略或已撤销连接。
 
 ---
@@ -752,12 +746,12 @@ P1/P2 可以排期，但不能通过引入新能力破坏 P0 不变量。
 - **Then**：系统立即停止发现和新外发，列出仍在推进的申请、待回复和面试，让用户明确选择继续只读监听、逐项关闭或保留记录。
 - **不变量 / 关联状态**：结束 Campaign 不能自动替用户撤回申请、取消面试或向招聘方发送消息；默认不再产生新外部动作。
 
-#### EXIT-P0-02 — 归档与恢复 Campaign
+#### EXIT-P0-02 — 归档 Campaign 与创建新周期
 
 - **前置条件（Given）**：Campaign 已暂停或结束，用户希望保留历史并稍后复用。
-- **When**：用户归档后再次恢复。
-- **Then**：历史、材料和指标保持可读；恢复前重新确认目标、岗位新鲜度、Policy、连接器、答案和日历授权，不执行旧积压计划。
-- **不变量 / 关联状态**：`ARCHIVED → ACTIVE` 不能复活旧 ActionPlan 或过期授权；恢复形成新的运行周期。
+- **When**：用户归档后希望再次求职。
+- **Then**：历史、材料和指标保持可读；系统复制仍有效的稳定输入并创建新的 Campaign，重新确认目标、岗位新鲜度、Policy、连接器、答案和日历授权，不执行旧积压计划。
+- **不变量 / 关联状态**：`ARCHIVED` 不回到 `ACTIVE`；旧 ActionPlan 或过期授权不能复活，新周期使用新的 Campaign 身份。
 
 #### EXIT-P0-03 — 新 Campaign 只复用稳定事实
 
@@ -770,7 +764,7 @@ P1/P2 可以排期，但不能通过引入新能力破坏 P0 不变量。
 
 - **前置条件（Given）**：Campaign 含有已成功投递、消息或面试记录。
 - **When**：用户请求永久删除 Campaign。
-- **Then**：系统先取消未执行动作并明确说明本地删除不能召回招聘平台上的申请、附件、消息或日历邀请；用户确认后清除本地 Campaign 数据。
+- **Then**：系统先取消未执行动作并明确说明本地删除不能召回招聘平台上的申请、附件、消息或已创建的日历事件；用户确认后清除本地 Campaign 数据。
 - **不变量 / 关联状态**：硬删除与可恢复归档必须是不同操作；不能通过删除本地状态把外部成功事实改写为未发生。
 
 #### EXIT-P0-05 — 删除 Workspace 的完整清理顺序
@@ -829,9 +823,9 @@ P1/P2 可以排期，但不能通过引入新能力破坏 P0 不变量。
 
 ---
 
-### 14. 当前产品流程的主要缺口
+### 14. 当前 M0 实现的主要缺口
 
-现有高层流程已经表达“配置 → 校准 → L3 → 发现 → 材料 → 投递 → 跟进 → 沟通 → 约面 → 通知”，但要通过上述 P0 验收，还缺少以下一等流程或状态：
+已接受的 UML 已完整表达“配置 → 校准 → L3 → 发现 → 材料 → 投递 → 跟进 → 沟通 → 约面 → 通知”，并覆盖以下一等流程与状态；当前 M0 代码尚未实现或验证它们：
 
 1. **已有求职进度接管**：历史申请导入、关联和重复投递防护。
 2. **Onboarding 生命周期**：中断恢复、授权失败、放弃和临时数据清理。
@@ -844,7 +838,7 @@ P1/P2 可以排期，但不能通过引入新能力破坏 P0 不变量。
 9. **数据生命周期**：结束求职、归档复用、永久删除、导出和恢复。
 10. **无障碍与地区语义**：键盘、屏幕阅读器、非颜色表达、时区、币种和 Unicode。
 
-建议后续将这些 case 映射到状态图、活动图、Sequence 图和端到端测试编号，避免 UML 与验收用例形成两套无法追踪的事实来源。
+全部 Case 到状态图、活动图、Sequence 图及其他 UML 视图的映射已记录在 [追踪矩阵](uml/07-traceability.md) 和 [机器可检查 CSV](uml/case-to-uml-v0.1.csv)。下一实施阶段必须建立 Case ID 到自动化测试/演练证据的正式映射；在此之前实现状态保持 `NOT_VERIFIED`。
 
 ## 附录 B：安全、隐私与合规层 82 条 P0
 
@@ -872,7 +866,7 @@ P1/P2 可以排期，但不能通过引入新能力破坏 P0 不变量。
 | AUTH-008 | Workspace 处于 L2，即使 `autoApply`、`autoReply` 或自动约面开关被错误开启 | 投递、回复或约面计划进入评估 | 始终返回需要人工批准；内部草稿仍可生成 | G1 |
 | AUTH-009 | Workspace 处于 L3，动作位于有效的公司、岗位、答案、连接器、时段、数量和期限范围内 | 动作进入评估 | 可以由 policy 授权；若任一维度越界，只阻塞该动作并创建异常 | G2 |
 | AUTH-010 | 用户创建了看似宽泛的委托策略 | 动作涉及 Offer 接受或拒绝、法律声明、背景调查授权、竞业或无法核实的身份事实 | 固定要求本人处理；普通白名单和全局开关不能覆盖该限制 | G1 |
-| AUTH-011 | Kill switch 在动作创建前、排队中或外部请求进行中被开启 | Worker、Runner 或连接器观察到开关变化 | 禁止新执行，安全取消未开始步骤；对结果不确定的在途动作进入对账异常，不盲目重试 | G1 |
+| AUTH-011 | Kill switch 在动作创建前、排队中或外部请求进行中被开启 | Worker、Runner 或连接器观察到开关变化 | 禁止全部业务外发，安全取消未开始步骤；内部审计/Inbox 继续；隔离且幂等的安全通道最多发送一次停止告警；不确定的在途动作进入对账 | G1 |
 | AUTH-012 | 相同 idempotency key、ActionPlan 或 token 被重复、并发或跨 Worker 提交，且多个 Campaign 共享全局限额 | 系统处理并发请求 | 最多产生一次外部效果；用量计数原子更新，不能通过并发或多 Campaign 突破上限 | G1 |
 
 ### B. 提示注入与恶意内容
@@ -899,7 +893,7 @@ P1/P2 可以排期，但不能通过引入新能力破坏 P0 不变量。
 | DATA-005 | 用户上传简历、附件或图片并完成解析，或任务被取消和失败 | 清理任务运行 | 临时文件、中间 OCR、缓存和未采用草稿按策略删除，不遗留明文副本 | G0 |
 | DATA-006 | 用户请求删除 Workspace | 删除流程执行 | 删除业务数据、附件、缓存、向量和可识别日志；撤销授权和凭证；明确报告仍保留的最小安全摘要及期限 | G0 |
 | DATA-007 | 用户请求完整导出 | 导出流程执行 | 包含资料、证据、Campaign、策略、材料、申请、异常和审计；不包含可复用 Cookie、token 或密钥 | G0 |
-| DATA-008 | 用户删除数据与安全审计的完整性发生冲突 | 系统应用保留策略 | 删除正文和直接标识，只保留有明确期限的伪匿名安全摘要；不得虚假宣称零保留 | G0 |
+| DATA-008 | Campaign 结束、用户删除数据或安全审计完整性发生冲突 | 系统应用保留策略 | 活跃期保留必要数据；结束 90 天删原始 JD/消息正文/附件；结构化申请历史、材料版本和最小审计摘要保留 1 年；滚动备份 30 天；用户可随时删除或明确 opt-in 更久 | G0 |
 | DATA-009 | 日志、错误报告或执行截图含姓名、邮箱、电话、地址、薪资、身份证明或消息正文 | 内容被保存或发送到诊断系统 | 默认关闭敏感截图并自动脱敏；日志只保存必要摘要和稳定引用 ID | G0 |
 | DATA-010 | 启用可能保留数据、跨境传输或用于训练的 AI、通知或托管服务 | 用户首次连接或服务条款发生变化 | 在发送数据前披露提供商、目的、地域和保留方式并取得选择；不同意则保持本地或禁用该能力 | G0 |
 
@@ -945,7 +939,7 @@ P1/P2 可以排期，但不能通过引入新能力破坏 P0 不变量。
 
 | ID | Given | When | Then | 最晚发布门槛 |
 | --- | --- | --- | --- | --- |
-| EXEC-001 | 提交、回复或日历请求超时，无法确认外部系统是否已处理 | Worker 收到未知结果 | 标记 `RESULT_UNKNOWN`，优先查询和对账，不自动重复写入 | G1 |
+| EXEC-001 | 提交、回复或日历请求超时，无法确认外部系统是否已处理 | Worker 收到未知结果 | 标记 `OUTCOME_UNKNOWN`，优先查询和对账，不自动重复写入 | G1 |
 | EXEC-002 | Worker 在外部成功后、内部记录成功前崩溃 | Worker 重启 | 使用幂等键、外部引用和对账恢复真实状态，不能再次执行 | G1 |
 | EXEC-003 | 岗位在评分或材料生成后关闭，或标题、地点、薪资、JD 发生实质变化 | 投递前最后校验运行 | 原 ActionPlan 失效，重新获取、评分和授权 | G1 |
 | EXEC-004 | 平台新增必填问题，答案库无事实或授权范围 | 自动填表执行 | 暂停该申请并创建异常；不得猜测、留假值或静默跳过必填项 | G1 |
@@ -957,8 +951,8 @@ P1/P2 可以排期，但不能通过引入新能力破坏 P0 不变量。
 | EXEC-010 | 同一招聘消息同时包含普通问题和 Offer、法律、身份等不可委托问题 | 自动回复规划运行 | 整条回复进入异常；不能只回答安全部分后让上下文看似已完整解决 | G2 |
 | EXEC-011 | 面试日期、时间、时区、持续时长、线上或线下信息存在歧义 | 自动约面规划运行 | 不确认；使用授权模板澄清或创建异常 | G2 |
 | EXEC-012 | 日历快照未知、过期、有冲突、账户或时段与预授权不一致 | 自动约面评估运行 | 返回需要处理或拒绝，不写入 `SCHEDULED` | G2 |
-| EXEC-013 | 招聘确认回复成功而日历写入失败，或日历占位成功而回复失败 | 复合约面动作部分成功 | 执行补偿或对账，保持 `INTERVIEW_PROPOSED`，不得发送“已约成”通知 | G2 |
-| EXEC-014 | 两个任务同时尝试占用同一日历时段 | 自动约面执行 | 使用原子占位或串行协调，最多一个进入 SCHEDULED，另一个进入冲突处理 | G2 |
+| EXEC-013 | 日历 tentative event 成功而招聘确认失败，或恢复时发现旧版越序的“回复成功、日历失败”事实 | 复合约面动作部分成功 | calendar-first 路径取消 event；取消失败/未知进入 `SEV-1` 并暂停约面；旧版越序只对账/人工处理；保持 `INTERVIEW_PROPOSED` | G2 |
+| EXEC-014 | 两个任务同时尝试占用同一日历时段 | 自动约面执行 | 使用原子占位或串行协调，最多一个 Interview 进入 `SCHEDULED`，另一个进入冲突处理 | G2 |
 | EXEC-015 | 招聘方或用户在 SCHEDULED 后改期、取消、修改日历或缺少会议链接 | 后续同步运行 | 使用独立 Interview 生命周期更新；必要时立即通知，不让 Application 状态倒退 | G2 |
 
 ### H. 审计、删除与可追责性
@@ -985,8 +979,8 @@ P1/P2 可以排期，但不能通过引入新能力破坏 P0 不变量。
 
 | ID | Given | When | Then | 最晚发布门槛 |
 | --- | --- | --- | --- | --- |
-| NOTIF-001 | Worker 停止心跳、队列积压或连接器长期离线 | 用户查看 UI 或健康检查运行 | UI 显示最后成功时间和降级范围，不能继续显示“Autopilot 正常运行” | G1 |
-| NOTIF-002 | 已确认面试、账号安全事件或临近截止异常的主要通知渠道发送失败 | 通知执行 | 使用经用户配置的备用渠道重试，并在 UI 保持未送达异常 | G2 |
+| NOTIF-001 | Worker 的 60 秒心跳连续缺失两次、队列积压或连接器长期离线 | 用户查看 UI 或健康检查运行 | 120 秒判定离线并显示最后成功时间/降级范围；有待办且离线超 10 分钟外部告警；恢复展示覆盖空窗和回补结果 | G1 |
+| NOTIF-002 | 已确认面试、账号安全事件或临近截止异常的默认邮件通知发送失败 | 通知执行 | 产品内 Inbox 保留事实与未送达状态；若配置可选 Webhook 则按策略尝试；第二个必需外部备用渠道为 P1 | G2 |
 | NOTIF-003 | 同一根因影响多个动作，或多渠道产生相同通知 | 异常和通知聚合运行 | 合并为一个可展开异常并按事件 ID 去重；高优先级可绕过安静时间，普通摘要延后 | G2 |
 | NOTIF-004 | 用户长期不处理异常，关联 ActionPlan 或岗位即将过期 | 到期调度运行 | 计划安全过期、跳过或关闭，不默认扩大授权；其他不相关任务继续运行 | G2 |
 
@@ -1000,7 +994,7 @@ P1 在公开 L3 Beta 前完成，重点包括：
 - 平台条款定期复审、连接器维护状态和只读降级。
 - 夏令时、跨午夜、多日历、通勤缓冲和会议链接补全。
 - 消息发送前最后刷新、外部平台截断或改写内容的差异检测。
-- 异常合并、通知备用渠道、安静时间和告警疲劳控制。
+- 异常合并、第二个必需外部备用通知渠道、安静时间和告警疲劳控制。
 - 招聘骗局多信号聚合、误报申诉与安全举报流程。
 - Workspace、Campaign 和账户三级限额及异常使用监控。
 - 连接器包来源、签名、SBOM、依赖漏洞和可复现构建。
@@ -1046,7 +1040,7 @@ P2 在稳定版和连接器生态扩大前完成，重点包括：
 - 未经授权、越权或超过限额的投递、回复、约面、取消或其他外部动作；
 - 同一逻辑动作产生重复外部副作用；
 - 错误账号、workspace、招聘方、邮件线程、日历或时间被使用；
-- Application 或 ActionPlan 显示成功/SCHEDULED，但远端事实未被确认；
+- Interview 错误显示 `SCHEDULED`、Application 错误记录 `INTERVIEW_SCHEDULED`，或 ActionPlan 显示成功但远端事实未被确认；
 - 数据、授权、审计、幂等账本不可恢复地丢失或损坏；
 - 凭据、简历、邮件、聊天或跨 workspace 数据泄露；
 - 迁移、恢复、插件或混合版本运行扩大既有权限。
@@ -1057,7 +1051,7 @@ P2 在稳定版和连接器生态扩大前完成，重点包括：
 
 1. 外部 mutation 调用前，`operationId`、`idempotencyKey`、`payloadHash`、账号、Connector/version、授权和 policy/version 已持久化。
 2. 远端结果无法证明成功或失败时，执行记录进入 `OUTCOME_UNKNOWN`，不得映射成普通 `FAILED` 并自动重试。
-3. `schedule_interview` 是至少两个独立子 operation：沟通回复与日历 mutation；只有两者均确认成功才可进入 `SCHEDULED`。
+3. `schedule_interview` 是至少两个独立子 operation：沟通回复与日历 mutation；只有两者均确认成功，Interview 才可进入 `SCHEDULED`，Application 才可记录 `INTERVIEW_SCHEDULED`。
 4. 执行时重新校验授权、policy、额度、账号、Connector/version、payload、slot 和时效；批准时通过不代表执行时仍可执行。
 5. 状态更新使用版本/CAS/fencing，旧 attempt 不得覆盖新状态。
 6. 所有拒绝、未知、补偿和人工接管都留下脱敏、可关联、不可静默覆盖的审计。
@@ -1091,7 +1085,7 @@ P2 在稳定版和连接器生态扩大前完成，重点包括：
 
 ### 3. 队列、崩溃切点、重复与并发（20）
 
-> 本节必须对所有 mutation 类型参数化运行：`application.submit`、`message.reply`、`calendar.create/update/cancel`，以及任何具有用户可见副作用的通知。
+> 本节必须参数化覆盖所有业务 mutation：`application.submit`、`message.reply`、`calendar.create/update/cancel` 与任何具有用户可见副作用的通知；删除期 `credential_revocation` 和隔离 SafetySignal 还要分别在各自窄化执行器上运行同样的 crash-window 与三态收敛验证。
 
 | ID | Given | When | Then | 可自动化方式 |
 |---|---|---|---|---|
@@ -1109,7 +1103,7 @@ P2 在稳定版和连接器生态扩大前完成，重点包括：
 | QUE-012 | 多个 worker 同时逼近日投递、回复或约面限额 | 并发预留并执行最后一个可用额度 | 额度在外部调用前原子预留；成功 mutation 数永不超过 limit | property+IT：并发 N>limit；多随机 seed 验证计数 |
 | QUE-013 | 同一 Application 上有互斥动作，例如取消与投递、旧回复与新回复 | 动作同时进入执行 | 状态版本/CAS 只允许合法胜者；失败者不产生副作用 | model-based test：随机动作序列与并发 interleaving |
 | QUE-014 | queued Plan 在执行前被取消、过期、撤权，或 policy/version 改变 | worker 获取任务 | 执行时重校验失败；任务终止且零 outbound | E2E：在 enqueue/claim 间修改每个绑定字段 |
-| QUE-015 | kill switch 已开启，队列仍含 mutation jobs | worker 调度 | 所有 mutation 停止；读取、对账、备份和 UI 仍可用 | E2E：切换 kill switch；断言 endpoint 调用分类 |
+| QUE-015 | kill switch 已开启，队列仍含 mutation jobs | worker 调度 | 所有业务 mutation 停止；读取、对账、内部审计、产品 Inbox、备份和 UI 仍可用；隔离幂等安全通道最多一次停止告警 | E2E：切换 kill switch；断言 endpoint 调用分类和告警去重 |
 | QUE-016 | mutation 网络调用已发出 | 调用中开启 kill switch 或取消 Plan | 不宣称已取消；结果进入未知/对账；用户收到异常通知 | FIT：request barrier 后切换开关；校验状态、审计和告警 |
 | QUE-017 | 已使用或已过期的 authorization/idempotency token 被重放，或被用于不同账号/payload/operation | runner 接收执行请求 | 验证绑定和单次语义后拒绝；零外部调用 | SEC+IT：对 token 的每个 claim 做 mutation/fuzz/replay |
 | QUE-018 | queue store、operation ledger 或幂等索引损坏/缺失 | worker 启动 | mutation 全部冻结并进入恢复模式；不得将缺失账本当作未执行 | DR+IT：删除/篡改表页与索引；断言 fail-closed health |
@@ -1124,7 +1118,7 @@ P2 在稳定版和连接器生态扩大前完成，重点包括：
 | EXT-002 | token 过期/撤销，且多个 worker 同时刷新 | 执行 Connector 调用 | refresh single-flight；刷新失败关闭该 capability；不串用其他账号 token | CT+CHAOS：并发 401 与 refresh；验证 token lineage |
 | EXT-003 | Connector write 返回 timeout、5xx 或连接重置，无法证明请求未执行 | retry scheduler 处理失败 | 标记 OUTCOME_UNKNOWN，调用 reconcile；未经对账不得再次 write | CT：fault server 在 commit 前后分别断开；断言不同分类 |
 | EXT-004 | Connector 返回缺字段、错误类型、未知枚举或 schema 漂移 | 标准化或策略流程消费结果 | runtime validation 拒绝；未知字段不取危险默认值；后续自动动作被阻断 | CT+fuzz：生成 malformed payload；断言无 ActionPlan execution |
-| EXT-005 | 外部平台返回重复或不稳定的 external ID | 多轮 discovery/sync | 按账号、规范 URL、内容指纹等复合身份收敛；同一岗位不重复投递 | CT+property：变换 ID、顺序、分页；验证 canonical entity 数量 |
+| EXT-005 | 外部平台返回重复或不稳定的 external ID | 多轮 discovery/sync | 仅稳定 connector + externalId 或规范 URL 指纹可精确关联；公司/岗位/地点/发布时间/内容指纹只建立疑似重复组并阻断自动投递，必须人工消歧 | CT+property：变换 ID、顺序、分页；断言精确键才合并，跨源疑似组不自动合并 |
 | EXT-006 | Connector 跟随恶意 URL、开放重定向、私网/localhost/metadata 或 file URL | 发起抓取/下载 | 协议和主机 allowlist 阻断请求；重定向每跳重新校验 | SEC：SSRF corpus + 本地 canary server；断言零命中 |
 | EXT-007 | 岗位、邮件或网页内容含 prompt injection/tool instructions | AI/Connector 处理不可信内容 | 内容仅作为数据；不能修改 policy、读 secret、直接调用 mutation tool | SEC+E2E：注入攻击语料与 secret canary；断言无泄漏/调用 |
 | EXT-008 | Connector 返回压缩炸弹、超大正文、深层 JSON 或无限流 | runner 解析响应 | 在下载、解压和解析前按大小/深度/时间限制终止；核心服务保持可用 | SEC+CHAOS：恶意 fixture；监测内存、CPU 和进程存活 |
@@ -1146,17 +1140,17 @@ P2 在稳定版和连接器生态扩大前完成，重点包括：
 | COM-001 | slot、calendar account、Connector/version、policy snapshot 或 authorization 与 Plan 不一致 | 自动约面开始执行 | 在邮件和日历任一子 operation 前拒绝；零外部副作用 | UT+E2E：逐字段 mutation；断言两 fake provider 均零调用 |
 | COM-002 | 预授权窗口或 Plan 已过期 | 到达执行时间 | 不自动回复/约面；进入人工确认并记录原因 | 虚拟时钟 E2E：推进边界前后毫秒值 |
 | COM-003 | availability snapshot 超过允许新鲜度 | worker 尝试创建事件 | 必须重新拉取 free/busy；刷新失败则不约面 | CT+E2E：过期 snapshot + calendar outage |
-| COM-004 | free/busy 检查后、event create 前出现新冲突 | 创建事件 | 最终写入前再次校验或使用 provider 条件写；有冲突即停止 | FIT：在 check/create barrier 插入 busy event |
+| COM-004 | free/busy 检查后、event create 前出现新冲突 | 创建候选人私有 tentative event | 最终写入前再次校验或使用 provider 条件写；有冲突即停止；事件不得含招聘方 attendee 或发送邀请邮件 | FIT：在 check/create barrier 插入 busy event；断言 attendee/通知为空 |
 | COM-005 | busy interval 只在 buffer、通勤、工作时间或 blackout 上冲突 | 评估候选 slot | 按完整政策区间判为冲突，不创建事件 | UT property test：边界、相邻和跨午夜区间 |
-| COM-006 | 用户配置多个 busy calendars 和独立写入 calendar | 检查并创建事件 | busy 使用配置集合并集；写入目标单独绑定，不能漏看或写错日历 | CT+E2E：在非写入日历制造冲突 |
+| COM-006 | 用户在同一 Provider 账户配置多个 busy calendars 和一个独立写入 calendar | 检查并创建事件 | busy 使用同账户配置集合并集；唯一写入目标单独绑定，不能漏看或写错日历；跨账户聚合在 v0.1 为 N/A | CT+E2E：在非写入日历制造冲突 |
 | COM-007 | calendar/account ID 无效或指向其他账号 | Connector 尝试 fallback 到默认日历 | 禁止 fallback；要求重新授权，零事件创建 | CT：删除/交换 calendar ID |
 | COM-008 | slot 含非法 RFC3339/IANA timezone、DST 不存在时间或重复时间 | 验证/执行约面 | 只有唯一 UTC instant 才可继续；歧义进入人工确认 | UT：IANA tzdb 边界与 DST corpus |
 | COM-009 | 招聘方未说明时区、给出相对日期或多个可解释时间 | AI 提议确认面试 | 不猜测、不创建事件；生成澄清草稿或升级人工 | E2E：自然语言时间歧义 fixture |
 | COM-010 | event 已在远端创建，但响应丢失 | worker 恢复 | 按 idempotency/externalRef/严格指纹对账；只保留一个 live event | fake calendar commit-then-drop；恢复循环 1,000 次 |
-| COM-011 | Calendar Provider 不支持 idempotency，且指纹查询得到多个候选事件 | scheduler 恢复未知 operation | 不自动重试或删除；进入人工裁决并展示候选 externalRefs | CT：预置零/一/多匹配三种 reconcile 结果 |
-| COM-012 | 日历事件成功、招聘方回复失败 | 复合约面动作结束 | Application 不进入 SCHEDULED；保留 eventRef；仅按预授权补偿，否则人工处理；不重复建事件 | E2E：calendar success/mail fail fault matrix |
-| COM-013 | 招聘方回复成功、日历事件失败 | 复合约面动作结束 | Application 不进入 SCHEDULED；立即通知用户；不重发邮件，补建前重新检查冲突 | E2E：mail success/calendar fail fault matrix |
-| COM-014 | 复合动作需要撤销日历或补发确认，但补偿动作也失败/未知 | compensation runner 执行 | 进入 COMPENSATION_REQUIRED；保留全部 externalRef 和 attempt；停止自动推进 | FIT：primary 与 compensation 双故障矩阵 |
+| COM-011 | Calendar Provider 缺少查询/对账、幂等创建、更新/取消或稳定 external ID 任一能力 | scheduler 评估 L3 或恢复未知 operation | 禁止为该 Connector 开启 L3；不自动重试或删除，进入人工裁决并展示候选 externalRefs | CT：逐 capability 删除；预置零/一/多匹配三种结果 |
+| COM-012 | 候选人私有 tentative event 成功、招聘方回复明确失败 | calendar-first 复合约面动作结束 | Interview 不进入 `SCHEDULED`，Application 不记录 `INTERVIEW_SCHEDULED`；用新 Plan/Operation 取消 event 并保留 eventRef；不重复建事件 | E2E：calendar success/mail fail/cancel success fault matrix |
+| COM-013 | 恢复或导入时发现旧版本越序产生“招聘方回复成功、日历事件失败” | 恢复对账运行 | Interview 不进入 `SCHEDULED`，Application 不记录 `INTERVIEW_SCHEDULED`；创建 `SEV-1` 异常并暂停约面；不重发邮件，只能人工协调 | E2E：legacy mail success/calendar fail reconciliation |
+| COM-014 | 取消 tentative event 的补偿动作失败或结果未知 | compensation runner 执行 | Saga 进入 `MANUAL_HANDOFF`，compensation operation 保留 `FAILED_CONFIRMED` / `OUTCOME_UNKNOWN`；创建 `SEV-1` 异常并暂停 scheduling capability；保留全部 externalRef 和 attempt | FIT：primary 与 compensation 双故障矩阵 |
 | COM-015 | 用户在自动化读取后手动修改/删除事件 | 自动化提交更新 | etag/version 冲突导致停止；不得覆盖人工修改 | CT：read 后更新远端版本再执行 conditional write |
 | COM-016 | 两位招聘方并发选择同一 slot | 两个 schedule Plan 同时执行 | 本地原子 slot reservation + 最终 free/busy；最多一场确认 | CHAOS+E2E：barrier 并发 10,000 次 |
 | COM-017 | calendar cancellation/reschedule webhook 延迟或乱序 | 同步本地 Application | 按 provider revision 合并；旧事件不回退最新状态，不自动接受超授权新时间 | IT：全排列 webhook 顺序 |
@@ -1188,7 +1182,7 @@ P2 在稳定版和连接器生态扩大前完成，重点包括：
 |---|---|---|---|---|
 | RES-001 | durable PREPARED 之前数据库/磁盘空间耗尽 | operation 准备执行 | 外部请求不发送；失败可重试且数据库不损坏 | FIT：filesystem quota/fault FS 在 commit 前报 ENOSPC |
 | RES-002 | 远端 mutation 后，本地持久化因磁盘满、DB 断开或 OOM 失败 | worker 恢复 | operation 进入未知并对账；远端副作用总数不增加 | FIT：commit-then-ENOSPC/DB disconnect/OOM 三类注入 |
-| RES-003 | SQLite 锁竞争、Postgres pool/事务容量耗尽 | 多 worker 同时预留额度和执行 | backpressure/有界等待；未原子预留成功的任务不得发外部请求 | CHAOS+IT：锁表、缩小 pool、并发压测 |
+| RES-003 | SQLite 锁竞争（PostgreSQL pool/事务容量分支在 v0.1 为 Future/N/A） | 多 worker 同时预留额度和执行 | backpressure/有界等待；未原子预留成功的任务不得发外部请求 | CHAOS+IT：SQLite 锁表、并发压测；PostgreSQL 后续版本再测 |
 | RES-004 | CPU 饱和、event loop stall、FD/socket 耗尽导致 lease heartbeat 失败 | 第二 worker 尝试接管 | fencing 保证旧 worker 无权提交；远端结果不明时先对账 | CHAOS：CPU/FD 限制 + worker freeze |
 | RES-005 | secret/key 服务、持久审计存储或 operation ledger 暂不可用 | scheduler 收到 mutation job | fail closed；不得把 secret 降级缓存为明文，也不得执行无法审计的动作 | IT+CHAOS：逐依赖断开；断言 outbound 为零 |
 
@@ -1199,7 +1193,7 @@ P2 在稳定版和连接器生态扩大前完成，重点包括：
 | OBS-001 | 任一外部 mutation 成功、拒绝、失败、未知或补偿 | 查询审计链 | 能由 correlation ID 串联 source、Application、Plan、operation、attempt、actor、policy/version、payloadHash、账号、Connector/version 和 externalRef | E2E：schema assertion + trace correlation checker |
 | OBS-002 | operation 为 OUTCOME_UNKNOWN 或复合约面部分成功 | UI、API、指标和告警展示状态 | 四个出口均不得显示普通失败、成功或 SCHEDULED；必须提供下一步对账/人工入口 | E2E snapshot/API contract/metrics assertion |
 | OBS-003 | token、cookie、简历字段、邮件正文和 secret canary 进入异常路径 | 生成日志、trace、metrics、DLQ 和诊断包 | 所有出口零 canary 命中，且仍保留足够的 operation 元数据用于排障 | SEC：全产物扫描与 redaction golden test |
-| OBS-004 | 发生未授权执行尝试、疑似重复、unknown 超时、kill switch 绕过或跨 workspace 访问 | alert pipeline 运行 | 产生高优先级安全告警；告警本身幂等且不泄露敏感数据 | E2E：逐安全事件注入，断言 alert payload/次数 |
+| OBS-004 | 发生未授权执行尝试、疑似重复、unknown 超时、kill switch 绕过或跨 workspace 访问 | alert pipeline 运行 | 产生 `SEV-0` 安全告警；告警本身幂等且不泄露敏感数据 | E2E：逐安全事件注入，断言 alert payload/次数 |
 | OBS-005 | 审计记录被删除、修改、插入或乱序 | integrity verifier 运行 | 检测篡改并冻结相关 mutation；不以重新生成审计掩盖问题 | SEC+IT：审计链 bit flip/delete/reorder |
 | OBS-006 | 运维人员生成诊断包或启用遥测 | 数据被导出 | 默认遥测关闭或明确 opt-in；诊断包限定 workspace/时间范围并可预览；不包含 PII/secret | SEC+E2E：双 workspace canary 与 export scan |
 
@@ -1214,13 +1208,13 @@ P2 在稳定版和连接器生态扩大前完成，重点包括：
 | OSS-005 | 多用户/多 workspace 模式被启用 | 用户尝试访问、搜索、导出、执行或备份其他 workspace 数据 | DB、cache、queue、file、log、backup 全链路拒绝越权；若尚未支持则产品不可开启多用户入口 | SEC：tenant-isolation matrix 与 IDOR fuzz |
 | OSS-006 | DB、backup、credential、socket 或配置文件权限过宽 | 服务启动或创建文件 | 自动收紧或拒绝启动；其他本机用户不可读写敏感文件 | SEC：POSIX permission matrix，容器 UID/GID 测试 |
 | OSS-007 | release artifact、依赖、容器或锁文件被篡改，或存在 critical 漏洞/泄露 secret | CI/CD 准备发布 | checksum/signature/SBOM/provenance 校验失败即阻断；critical 漏洞和 secret scan 零容忍 | CI+SEC：SLSA/SBOM、签名验证、依赖与 secret scanner |
-| OSS-008 | SQLite↔Postgres、x64↔arm64 或支持 OS 间迁移数据，且存在 queued/unknown operations | 在目标环境恢复并启动 | canonical 数据、时区、Unicode、审计和幂等 ledger 无损；未知 operation 先对账，禁止重复外部动作 | DR+compat matrix：跨环境 backup/restore + provider ledger |
+| OSS-008 | 在 v0.1 支持 OS/架构间迁移 SQLite 数据且存在 queued/unknown operations；SQLite↔PostgreSQL 为 Future/N/A | 在目标环境恢复并启动 | canonical 数据、时区、Unicode、审计和幂等 ledger 无损；未知 operation 先对账，禁止重复外部动作 | DR+compat matrix：SQLite 跨支持环境 backup/restore + provider ledger |
 
 ### 10. P1/P2 附录摘要
 
 #### P1：正式支持前应关闭
 
-- 支持 OS、Node/pnpm、SQLite/Postgres、rootless Docker 的 clean-install 矩阵。
+- Docker Compose 的 macOS/Windows/Linux、macOS 原生开发、Node/pnpm、SQLite 与 rootless Docker clean-install 矩阵；Linux/Windows 原生运行时 best effort。
 - Connector read timeout、429、403、token refresh、schema drift 的降级与恢复体验。
 - AI Provider 停机、配额耗尽、token overflow、本地模型 OOM 的 pending/manual fallback。
 - poison job、DLQ、backoff、circuit breaker、queue backlog 与优先级调度。
@@ -1241,7 +1235,7 @@ P2 在稳定版和连接器生态扩大前完成，重点包括：
 
 #### 11.1 外部 mutation 标准切点
 
-对每种 mutation、每个 Connector 和每个数据库后端执行下列切点：
+对每种 v0.1 mutation、相应 Connector 或窄化安全 endpoint，以及每个 v0.1 支持的数据库后端（仅 SQLite）执行下列切点：
 
 | 切点 | 注入位置 | 必须观察到的结果 |
 |---|---|---|
@@ -1263,9 +1257,9 @@ P2 在稳定版和连接器生态扩大前完成，重点包括：
 
 必须覆盖：
 
-1. 回复未执行，日历未执行；
+1. 日历未执行，回复必须未执行；
 2. 日历成功、回复失败/未知；
-3. 回复成功、日历失败/未知；
+3. 仅以 legacy/import/corrupt fixture 覆盖回复成功、日历失败/未知；新 calendar-first 流程断言此顺序不可达；
 4. 两者成功，但任一本地 commit/ack 丢失；
 5. 主动作失败且补偿成功；
 6. 主动作失败且补偿失败/未知；
@@ -1281,7 +1275,7 @@ P2 在稳定版和连接器生态扩大前完成，重点包括：
 
 #### 11.4 资源与网络 Chaos
 
-- 注入 ENOSPC、SQLite lock、Postgres pool exhaustion、worker OOM、CPU stall、FD exhaustion、SIGTERM。
+- 注入 ENOSPC、SQLite lock、worker OOM、CPU stall、FD exhaustion、SIGTERM；PostgreSQL pool exhaustion 在 v0.1 为 Future/N/A。
 - 注入 DNS/TLS 错误、连接重置、commit-then-drop、迟到响应、重复/乱序 webhook 和网络分区。
 - 在 fault storm 下验证 backpressure、mutation gate、fencing、对账队列和安全告警仍有效。
 

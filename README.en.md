@@ -24,7 +24,7 @@ RoleFox started from one person's real job search, but that person is the projec
 | Capability | Status |
 | --- | --- |
 | Web workspace with synthetic demo data | Implemented demo |
-| Application state machine | Implemented |
+| Application state machine | M0 foundation implemented; accepted Interview lifecycle, Operation/Saga evidence, and CAS guards are not yet implemented |
 | Dry-run, kill switch, level matrix and limit rules | Initial implementation with unit tests |
 | Capability-based job, messaging, notification and calendar connector contracts | Initial version |
 | Provider-agnostic AI contract | Initial version |
@@ -64,13 +64,15 @@ pnpm dev
 
 Open [http://localhost:3000](http://localhost:3000). The current UI uses synthetic data only.
 
+The accepted v0.1 support target is Docker Compose on macOS, Windows, and Linux, plus supported native development on macOS. Native Linux and Windows runtimes are best effort. M0 has not completed that installation matrix yet.
+
 Before opening a pull request:
 
 ```bash
 pnpm check
 ```
 
-See the [product scope](docs/product-scope.md), [Autopilot decision record](docs/adr/0001-pre-interview-autopilot.md), [architecture](docs/architecture.md), [roadmap](docs/roadmap.md), [open-source strategy](docs/open-source-strategy.md), and [contribution guide](CONTRIBUTING.md).
+See the [product scope](docs/product-scope.md), [Autopilot decision record](docs/adr/0001-pre-interview-autopilot.md), [accepted v0.1 decision baseline](docs/adr/0002-v0.1-product-decision-baseline.md), [architecture](docs/architecture.md), [roadmap](docs/roadmap.md), [open-source strategy](docs/open-source-strategy.md), and [contribution guide](CONTRIBUTING.md).
 
 ## License
 

@@ -14,10 +14,15 @@ REQUIRE_APPROVAL=true
 AUTO_APPLY=false
 AUTO_REPLY=false
 AUTO_SCHEDULE_INTERVIEWS=false
-MAX_INTERVIEW_SCHEDULES_PER_DAY=8
+MAX_APPLICATIONS_PER_DAY=10
+MAX_REPLIES_PER_HOUR=8
+MAX_INTERVIEW_SCHEDULES_PER_DAY=3
+MAX_AUTOMATIC_FOLLOW_UPS_PER_APPLICATION=1
 ```
 
-`DRY_RUN` 的设计语义是只生成计划与预览，不允许真正发送或提交；当前 M0 只实现策略判断并返回 `preview_only`。`KILL_SWITCH=true` 时所有外部动作立即拒绝。
+`DRY_RUN` 的设计语义是只生成计划与预览，不允许真正发送或提交；当前 M0 只实现策略判断并返回 `preview_only`。普通配置不得突破每日投递 25、每小时回复 12、每日自动约面 8 的系统硬上限，也不得把单个 Application 的自动跟进次数提高到 1 次以上。
+
+`KILL_SWITCH=true` 时所有业务外发立即拒绝，内部审计和产品 Inbox 仍可写。只有与业务执行器隔离、预配置且幂等的安全通知通道可以发送一次停止告警；它不是普通 Notification Connector 的旁路权限。当前 M0 代码与示例配置尚未完全符合上述目标默认值，进入真实执行前必须修复并测试。
 
 ## 自动化等级
 
@@ -32,6 +37,17 @@ MAX_INTERVIEW_SCHEDULES_PER_DAY=8
 `autoApply`、`autoReply` 和 `autoScheduleInterviews` 只在 L3 生效。空白连接器名单代表“不允许任何外部连接器执行”，绝不解释为“允许全部”。L3 是有边界的 Autopilot，不是无限制 L4。
 
 当前 M0 对所有敏感话题仍采用保守的人工升级策略。M5 引入版本化 `AnswerPreauthorization` 后，薪资、到岗时间、地点等问题才能在有事实依据且答案落入授权范围时自动回复；Offer、法律声明和身份承诺始终不能委托。
+
+## L3 开放门槛
+
+L3 按 capability 独立开放，不存在一次开启全部能力的授权。任何真实外发能力都必须先完成连续 7 天 Shadow；此外：
+
+- 匹配和材料各至少积累 50 个决策；
+- 投递和回复各至少完成 20 次真实 L2 动作；
+- 自动约面至少完成 5 次真实 L2 动作，并通过至少 20 个合成异常 Case；
+- 未授权、重复、虚构和错误排期事件必须全部为 0。
+
+解除 `STOP_OUTBOUND`、Kill Switch 或完成备份恢复后，旧 ActionPlan 和授权永不复活。系统先对账，再由用户按 capability 恢复到 L2；健康检查和明确确认通过后才可重新进入 L3。
 
 ## 自动执行的异常条件
 
@@ -56,8 +72,13 @@ RoleFox 只有同时满足以下条件，才能自动接受明确面试时段并
 - 最新日历快照绑定同一 workspace、日历账户和精确时段，结果为 `free`，且没有超过允许的新鲜度
 - 招聘方问题已经回答完毕
 - 动作不含敏感话题，也不是高风险或关键风险
+- 日历 Connector 支持查询/对账、幂等创建、更新/取消和稳定 external ID
 
-如果招聘方只是询问可用时间，RoleFox 可以按规则发送候选时段，但申请仍停留在 `INTERVIEW_PROPOSED`。只有确认回复与日历写入全部成功后，状态才能进入 `SCHEDULED` 并通知用户。
+如果招聘方只是询问可用时间，RoleFox 可以按规则发送候选时段，但 Application 仍停留在 `INTERVIEW_PROPOSED`。只有确认回复与日历写入全部成功后，Interview 才能进入 `SCHEDULED`、Application 记录 `INTERVIEW_SCHEDULED` 里程碑，并通知用户。
+
+正常 Saga 顺序固定为：本地时段锁 → 新鲜日历复查 → 创建候选人私有 tentative event → 持久化日历结果 → 通过已授权 Reply Connector 发送招聘方确认 → 两侧明确成功后进入 `SCHEDULED`。日历与回复使用独立 Operation、幂等键和结果；任何未知结果只允许对账。候选人私有事件不含招聘方 attendee，也不触发日历邀请邮件。
+
+若日历成功而回复明确失败，系统必须取消 tentative event；取消失败或结果未知时创建 `SEV-1` Exception，暂停自动约面 capability 并交给用户处理。缺少上述补偿能力的日历 Connector 不得开放 L3 自动约面。
 
 ## 执行约束
 
@@ -71,6 +92,10 @@ RoleFox 只有同时满足以下条件，才能自动接受明确面试时段并
 - 保存审计摘要；敏感截图默认关闭或自动脱敏。
 - 连接器只能提交动作草稿；风险级别、最终计划和策略决策由核心系统生成。
 
+产品内 Inbox 是通知和异常的强制事实来源；邮件是默认外部通知，Webhook 是可选适配器。第二个必需外部备用渠道属于 P1。
+
 ## 隐私
 
-只收集完成任务所需的最少数据。真实简历、通信内容和浏览器会话不进入代码仓库，也不用于公共测试。开发与 CI 只能使用虚构数据和模拟招聘站。
+只收集完成任务所需的最少数据。Campaign 活跃期间保留推进所需数据；结束 90 天后删除原始 JD、消息正文和附件，结构化申请历史、材料版本及不可反推个人的最小审计摘要保留 1 年，滚动备份保留 30 天。用户可随时导出或删除，也可明确选择更长保留期。
+
+真实简历、通信内容和浏览器会话不进入代码仓库，也不用于公共测试。开发与 CI 只能使用虚构数据和模拟招聘站。

@@ -1,6 +1,6 @@
 # RoleFox v0.1 活动流程
 
-- 状态：Review Draft
+- 状态：Accepted Design Baseline
 - 上级索引：[UML 设计基线](README.md)
 - 范围：覆盖首次配置、日常自治、异常、面试、暂停、退出和发布生命周期。
 
@@ -9,6 +9,10 @@
 ```mermaid
 flowchart TB
     %% @anchor WORKSPACE_ONBOARDING
+    %% @anchor ONBOARDING_REQUIRED_CONFIG
+    %% @anchor ONBOARDING_CHECKPOINT_RESUME
+    %% @anchor EVIDENCE_THREE_WAY_CONFIRMATION
+    %% @anchor EVIDENCE_CONFLICT_USER_RESOLUTION
     %% @anchor HISTORY_DECLARED
     %% @anchor HISTORY_NONE
     %% @anchor PARSE
@@ -19,18 +23,28 @@ flowchart TB
     Demo --> DemoGuard[禁止真实凭证与 outbound]
     DemoGuard --> EndDemo([退出或转入真实配置])
 
-    Choice -->|真实配置| Init[初始化 Workspace]
-    Init --> Locale[设置语言、时区与币种]
-    Locale --> Resume[导入简历或手工填写]
+    Choice -->|真实配置| Init[初始化本地 Workspace]
+    Init --> GateClosed[未完成 onboarding 时 mutation gate 保持 CLOSED]
+    GateClosed --> Locale[设置界面语言、IANA 时区、默认币种与通知偏好]
+    Locale --> Storage[展示本地数据保存位置、运行方式与凭证隔离边界]
+    Storage --> Resume[导入简历或手工填写]
     Resume --> Parse{解析是否成功}
     Resume -.用户取消解析.-> ParseCancelled[终止解析任务]
     ParseCancelled --> CleanupCancelled[删除临时文件、OCR 产物、中间缓存和未采用草稿]
     CleanupCancelled --> Manual
-    Parse -->|否| CleanupFailed[清理失败解析的临时文件、OCR 产物和中间缓存]
-    CleanupFailed --> Manual[按用户选择保留原文件并手工补充]
-    Parse -->|是| Review[逐条核对 Evidence]
+    Parse -->|否或仅部分成功| ParseFailure[记录解析器版本与失败原因；<br/>成功提取的片段保留为 UNVERIFIED，禁止虚构占位和外用]
+    ParseFailure --> CleanupFailed[清理失败解析的临时文件、OCR 产物和中间缓存；<br/>原文件仅按用户选择保留]
+    CleanupFailed --> Recovery{用户选择恢复方式}
+    Recovery -->|重新上传| Resume
+    Recovery -->|手工补充| Manual[编辑已提取片段或手工填写；仍须逐项确认]
+    Parse -->|是| Review[逐条显示来源并三选：确认且可外用、<br/>正确但仅本地、待确认或修改]
     Manual --> Review
-    Review --> CleanupParsed[清理解析临时文件、中间缓存和未采用草稿；只保留已采用 Evidence]
+    Review --> Conflict{日期、职级、教育、技能或其他事实<br/>是否存在未解决语义矛盾}
+    Conflict -->|是| ConflictView[并列显示每个值、来源、版本与影响；<br/>模型不得替用户选择，依赖材料/回复保持阻断]
+    ConflictView --> ConflictChoice{用户选择、修正或禁用冲突事实}
+    ConflictChoice --> ConflictRevision[创建新 Evidence revision 并使旧依赖 stale]
+    ConflictRevision --> Review
+    Conflict -->|否| CleanupParsed[清理解析临时文件、中间缓存和未采用草稿；只保留已采用 Evidence]
     CleanupParsed --> Critical{关键事实均明确}
     Critical -->|否| Save[自动保存进度]
     Save --> Later([稍后继续])
@@ -47,6 +61,15 @@ flowchart TB
     Degraded --> DryRun
     DryRun --> L2[进入 L2 校准]
     L2 --> Done([首次配置完成])
+
+    Locale -.每一步完成.-> Checkpoint[以 workspace + step + inputHash<br/>持久化幂等 checkpoint]
+    Review -.每一步完成.-> Checkpoint
+    Campaign -.每一步完成.-> Checkpoint
+    Declared -.每一步完成.-> Checkpoint
+    Connect -.每一步完成.-> Checkpoint
+    DryRun -.每一步完成.-> Checkpoint
+    Checkpoint -.页面、应用或设备中断后.-> Reload[读取最后已提交 checkpoint；标记已完成、待完成、验证失败]
+    Reload --> ResumeSaved[从精确 nextStep 继续并复核副作用；<br/>复用既有 Evidence/Connector，禁止重复导入或授权]
 
     Init -.任意步骤放弃.-> Abandon{确认清理临时数据}
     Abandon --> Cleanup[删除临时文件、OCR 产物、中间缓存和未采用草稿]
@@ -71,13 +94,12 @@ flowchart TB
     Input --> Normalize[规范公司、岗位、地点、来源与时间]
     Normalize --> Validate{字段足以识别吗}
     Validate -->|否| NeedInfo[创建补充信息 Exception]
-    Validate -->|是| Exact{命中 externalRef 或来源 ID}
+    Validate -->|是| Exact{命中 connector + externalId<br/>或规范 URL 指纹}
     Exact -->|是| Merge[合并到已有 Application]
     Exact -->|否| Fingerprint[计算规范链接与内容指纹]
-    Fingerprint --> Candidate{跨来源候选匹配}
-    Candidate -->|唯一高置信度| Merge
-    Candidate -->|多个或中等置信度| Disambiguate[用户消歧]
-    Candidate -->|无匹配| Create[按历史事实创建 Application]
+    Fingerprint --> Candidate{公司、岗位、地点、发布时间、内容<br/>构成跨来源疑似重复组吗}
+    Candidate -->|是；任何置信度| Disambiguate[用户消歧；禁止自动合并]
+    Candidate -->|否| Create[按历史事实创建 Application]
     Disambiguate -->|已有申请| Merge
     Disambiguate -->|确为新记录| Create
     Merge --> Preserve[保留来源与合并审计]
@@ -91,7 +113,7 @@ flowchart TB
     Declared --> Scan
 ```
 
-任何“不确定”都不能被当作“未投递”。疑似重复的默认结果是阻止新投递并请求消歧。Workspace 级唯一性字段和指纹版本由 `<<proposed DEC-09>>` 确认；跨 Campaign 去重边界由 `<<proposed DEC-15>>` 确认。
+任何“不确定”都不能被当作“未投递”。只有稳定 connector + externalId 或规范 URL 指纹命中才自动关联；跨来源指纹只建立疑似组并请求消歧，绝不自动合并。每个 Workspace 对同一已确认机会最多一个活跃 Application；历史/顺序 Campaign 不能绕过 Workspace 全局去重与硬限额。
 
 ## RF-UML-ACT-CAL-01 Dry-run、L2 校准与按能力开启 L3
 
@@ -100,7 +122,15 @@ flowchart TB
     %% @anchor L3_CALIBRATION
     %% @anchor POLICY_CONSTRAINTS
     %% @anchor QUOTA_LIMITS
-    Select[选择发现、材料、投递、回复、跟进或约面能力] --> Dry[Dry-run 预览]
+    %% @anchor HARD_VS_PREFERENCE
+    %% @anchor POLICY_AMBIGUITY_BLOCK
+    Define[创建或编辑 Campaign 条件] --> Classify[逐项明确：硬条件或评分偏好]
+    Classify --> Normalize{薪资币种/周期、地点与远程/搬迁、<br/>到岗时间/时区等语义是否唯一}
+    Normalize -->|否| Clarify[要求补齐，或显式标为不得用于硬判断；<br/>相关硬过滤与外发能力保持关闭]
+    Clarify --> Define
+    Normalize -->|是| PreviewCases[预览典型岗位：先执行确定性硬条件；<br/>任何模型评分都不能覆盖硬失败]
+    PreviewCases --> Select[选择发现、材料、投递、回复、跟进或约面能力]
+    Select --> Dry[Dry-run 预览]
     Dry --> Review[用户保留、修改或拒绝]
     Review --> Record[记录原因与校准证据]
     Record --> Enough{达到该能力的校准门槛}
@@ -122,7 +152,7 @@ flowchart TB
     Downgrade --> L2
 ```
 
-一次修改或批准不能自动升级为长期授权。L3 的实际门槛值由 `<<proposed DEC-02>>` 确认。
+一次修改或批准不能自动升级为长期授权。L3 按 capability 独立开放：任何真实外发先连续 7 天 Shadow；匹配/材料各 50 个决策；投递/回复各 20 次真实 L2；自动约面 5 次真实 L2 并通过 20 个合成异常 Case；未授权、重复、虚构和错误排期均为 0。
 
 ## RF-UML-ACT-JOB-01 岗位发现、判断与进入候选队列
 
@@ -155,21 +185,37 @@ flowchart TB
 ```mermaid
 flowchart TB
     %% @anchor MATERIAL_EVIDENCE_GATE
+    %% @anchor MATERIAL_SOURCE_FACT_INTEGRITY
+    %% @anchor MATERIAL_CONFIDENCE_CONTRADICTION_GATE
+    %% @anchor LOCAL_ONLY_ZERO_DISCLOSURE
     %% @anchor SCOPE
     %% @anchor L2_DIFF_PREVIEW
     Qualified[岗位已通过硬条件与阈值] --> Select[只选择完成任务必要的 Evidence]
     Select --> Eligible{Evidence 已确认且允许外用}
-    Eligible -->|否| Exception[创建缺失或冲突事实 Exception]
+    Eligible -->|否| LocalOnly[从 Provider、材料、回复、Connector、日志、通知与 debug<br/>排除该事实原文；内部也仅按用户选择用途]
+    LocalOnly --> Needed{删除后仍能完成当前材料吗}
+    Needed -->|否| Exception[创建缺失或冲突事实 Exception]
+    Needed -->|是，以其余 Evidence 继续| Generate
     Eligible -->|是| Generate[AI Provider 生成 typed draft]
     Generate --> Schema{输出 schema 合法}
     Schema -->|否| Retry{仍在有限内部重试预算内}
     Retry -->|是| Generate
     Retry -->|否| Block[阻断材料]
     Schema -->|是| Claims[抽取每一条对外声明]
-    Claims --> Trace{每条声明均可追溯 Evidence}
+    Claims --> SourceView[为每条声明绑定原始来源、片段、版本和位置]
+    SourceView --> Validity{置信度达到阈值、Evidence 引用存在且同 Workspace/current、<br/>无未解决语义矛盾}
+    Validity -->|否| Unknown[把无证据、低置信度或矛盾声明对应字段显式设为 unknown；<br/>记录原因并把任何依赖 mutation 升级为人工 Exception]
+    Unknown --> Block[阻断材料与 outbound，不用猜测值补齐]
+    Validity -->|是| FactInvariant{风格改写是否保持姓名、公司、职级、日期、<br/>数值、范围与限定语义不变}
+    FactInvariant -->|否| Block
+    FactInvariant -->|是| Trace{每条声明均可追溯 Evidence}
     Trace -->|否| Block
     Trace -->|是| Diff[生成与基础材料的完整 Diff]
-    Diff --> Mode{当前能力模式}
+    Diff --> FullPreview[同屏展示基础版、生成版、附件、目标公司/岗位及 Connector/账号、<br/>完整外发文本、逐声明 Evidence、风险与所有隐藏字段]
+    FullPreview --> PreviewHash{预览是否由最终 canonical payload 渲染，<br/>附件/收件目标/hash 完全相同且隐藏字段确认零外发}
+    PreviewHash -->|否| Block
+    PreviewHash -->|是| Mode{当前能力模式}
+    Mode -->|Demo 或 Dry-run| PreviewOnly[只保存 PREVIEW_ONLY 结果与诊断；<br/>零 Plan、Authorization、Operation 与 outbound]
     Mode -->|L2| UserReview[用户审阅]
     UserReview -->|拒绝| Archive[归档本版本]
     UserReview -->|修改| Scope{修改属于哪一类}
@@ -185,12 +231,16 @@ flowchart TB
     Freeze --> Ready[READY_FOR_PLAN]
 ```
 
+用户审阅页必须同时展示完整 Diff 与逐声明来源，不能只展示润色后的成品。低置信度、非法或跨 Workspace 的 Evidence 引用、过期 revision、未解决矛盾，以及风格改写造成的数值或事实变化都统一失败关闭；有限内部重试也不能降低这些门槛。
+
 ## RF-UML-ACT-AUTH-01 通用 ActionPlan、授权、执行与对账
 
 ```mermaid
 flowchart TB
     %% @anchor ACTION_AUTHORIZATION
     %% @anchor QUOTA_LIMITS
+    %% @anchor AUTH_EXPIRY_QUOTA_OUTCOME
+    %% @anchor CONFIRMED_FAILURE_NEW_PLAN
     %% @anchor POST_CHALLENGE_REPLAN
     %% @anchor CAPABILITY_FAILURE_HANDOFF
     Draft[Connector 只返回 ActionDraft] --> Build[Core 重建 kind、workspace、风险与 Connector 身份]
@@ -202,8 +252,16 @@ flowchart TB
     Policy -->|deny| Denied[拒绝并记录原因]
     Policy -->|require_approval| Approval{用户批准且当前绑定未变}
     Approval -->|否| Cancel[取消或过期]
-    Approval -->|是| ExecIntent{能否原子提交 Authorization、Reservation、ExternalOperation、AuditIntent 和 OutboxJob}
-    Policy -->|allow| ExecIntent
+    Approval -->|是| Limits{授权未过期且 Workspace 动作限额<br/>仍可原子预留}
+    Policy -->|allow| Limits
+    Limits -->|否| LimitOutcome{预先声明的安全结果}
+    LimitOutcome -->|下个窗口仍在授权期内| Deferred[只排队重新评估，不创建 Authorization/Operation<br/>且不提前消耗额度]
+    LimitOutcome -->|策略或 Plan 到期| Expired[Plan 安全进入 EXPIRED]
+    LimitOutcome -->|无法安全等待或临近业务截止| QuotaException[创建单问题 Exception]
+    Deferred --> ReadOnlyContinue[只读同步和无关任务继续]
+    Expired --> ReadOnlyContinue
+    QuotaException --> ReadOnlyContinue
+    Limits -->|是| ExecIntent{能否原子提交 Authorization、Reservation、ExternalOperation、AuditIntent 和 OutboxJob}
     ExecIntent -->|否| FailClosed
     ExecIntent -->|是| Dispatch[Outbox Dispatcher 发放已提交 operation]
     Dispatch --> Lease[Worker 获取 lease 与 fencing token]
@@ -240,14 +298,25 @@ flowchart TB
     Reread --> NewDraft[丢弃旧 Plan、DOM、token 与 payload；创建全新 ActionDraft]
     NewDraft --> Build
     Result -->|明确成功| Commit[提交 externalRef、审计与业务状态]
-    Result -->|明确失败| Failed[原 Plan 终态；如需重试创建新 Plan]
+    Result -->|明确失败| Failed[原 Operation FAILED_CONFIRMED；原 Plan 保持 FAILED 终态]
     Result -->|未知| Unknown[OUTCOME_UNKNOWN]
     Unknown --> Reconcile[按 externalRef、幂等键或严格指纹对账]
     Reconcile -->|唯一成功| Commit
     Reconcile -->|证明未执行| Failed
     Reconcile -->|无法唯一裁决| Manual[Operation 进入 MANUAL_REVIEW；Plan 保持 EXECUTING]
     Commit --> Ack
-    Failed --> Ack
+    Failed --> FailedAck[释放旧 reservation、追加审计并 ACK 旧 OutboxJob]
+    FailedAck --> RetryClass{错误是否明确可重试}
+    RetryClass -->|否| RetryStop[保留原 FAILED；不创建新计划]
+    RetryClass -->|是| Attempts{是否低于持久化最大重试次数}
+    Attempts -->|否| RetryException[创建达到重试上限的 Exception]
+    Attempts -->|是| Cooldown[等待持久化 cooldown 或 Retry-After；<br/>绝不把旧 Plan 改回 AUTHORIZED]
+    Cooldown --> RetryCurrent{Evidence、目标、Policy、账号、限额、<br/>Control 与期限是否仍有效}
+    RetryCurrent -->|否| RetryException
+    RetryCurrent -->|是| RetryDraft[创建带 retryOf 的全新 ActionDraft/Plan]
+    RetryDraft --> Build
+    RetryStop --> Done
+    RetryException --> Done
     Manual --> Ack[释放可释放 reservation、追加审计并 ACK 当前 OutboxJob]
     Ack --> Done[重放只读已持久化状态]
 ```
@@ -261,6 +330,7 @@ flowchart TB
     %% @anchor MESSAGE_INTENT
     %% @anchor RISK_EXCEPTION
     %% @anchor ANSWER_PREAUTH
+    %% @anchor SENSITIVE_WHOLE_MESSAGE_HANDOFF
     Receive[Webhook 或 polling 收到消息] --> Verify{签名、时间窗与来源通过}
     Verify -->|否| RiskException[隔离内容，创建高风险 Exception 与安全事件]
     Verify -->|是| Dedupe[按账户、thread、external ID 去重排序]
@@ -276,15 +346,19 @@ flowchart TB
     Intent -->|面试邀请| Interview[进入排期活动]
     Intent -->|投递确认或普通状态更新| Update[更新 Application 事实并继续只读监听]
     Intent -->|补充材料请求或常规问题| Mixed{是否混有敏感、未知、身份或承诺问题}
-    Intent -->|敏感、混合、未知或低置信度| Human
-    Mixed -->|是| Human
+    Intent -->|敏感、混合、未知或低置信度| SensitiveHuman[整条消息零回复；创建有截止时间的单问题 Exception<br/>只暂停关联 Application，Offer/法律承诺永不进入 L3]
+    Mixed -->|是| SensitiveHuman
     Mixed -->|否| Evidence{每个答案均有 Evidence 和显式预授权}
     Evidence -->|否| Human
-    Evidence -->|是| Draft[生成完整回复草稿]
+    Evidence -->|是| AnswerBinding[记录原始问题、thread revision、Evidence IDs<br/>及 AnswerPreauthorization ID/version]
+    AnswerBinding --> Draft[生成完整回复草稿]
     Draft --> Recipient{收件人、CC、thread 和 payload 未变化}
     Recipient -->|否| Human
-    Recipient -->|是| Plan[创建 send_reply ActionPlan]
-    RiskException --> Blocked[禁止自动回复并触发高优先级通知]
+    Recipient -->|是| Plan[创建绑定上述事实与完整 payload 的 send_reply ActionPlan]
+    Plan --> ReplyGate{Policy、用户/L3 Authorization、执行前 revision/CAS<br/>与 durable Operation 协议是否全部成功}
+    ReplyGate -->|否或结果未知| Human[保持零重发；创建或更新 Exception，并仅按 operation 证据对账]
+    ReplyGate -->|外部证据明确成功| Sent[记录原始问题、Evidence、预授权版本、payload hash、<br/>external result 与审计事实后标记已回复]
+    RiskException --> Blocked[禁止自动回复并触发 SEV-0 或 SEV-1 通知]
 ```
 
 “隔离”只处理不可信内容载荷，不代表风险已经解决；诈骗、身份伪造、恶意附件或提示注入必须形成可见的 Exception。空 AnswerPreauthorization 等同于全部问题禁止自动回答。
@@ -333,7 +407,7 @@ flowchart TB
     %% @anchor EXACT
     Invite[已验证且已关联的面试邀请] --> Parse[保留原文并解析日期、时间、时区、时长和方式]
     Parse --> Exact{是否唯一映射到 UTC instant 与 IANA 时区}
-    Exact -->|否| Clarify[按授权模板澄清或创建 Exception]
+    Exact -->|否| Clarify[创建澄清草稿；仅在模板预授权且完整经过 Reply Plan/Auth/Operation 时外发，否则创建 Exception]
     Exact -->|是| Questions{招聘方问题是否全部解决}
     Questions -->|否| Exception[整条排期进入 Exception]
     Questions -->|是| Slots{时段数量}
@@ -341,35 +415,63 @@ flowchart TB
     Rule -->|否| Exception
     Rule -->|是| Select[选择唯一候选时段]
     Slots -->|一个| Select
-    Select --> Auth{命中 SchedulePreauthorization}
-    Auth -->|否| Exception
-    Auth -->|是| Busy[读取已配置 busy calendars，应用 buffer、blackout 和工作窗口]
+    Select --> Busy[读取同一 Provider 账户的 busy calendars 并集，<br/>应用前后 buffer、blackout、工作窗口与通勤区间的完整 Policy]
     Busy --> Fresh{free/busy 快照是否仍在新鲜度窗口}
     Fresh -->|否| Refresh[刷新 free/busy]
     Refresh --> RefreshOK{刷新成功吗}
     RefreshOK -->|否| Exception
     RefreshOK -->|是| Conflict
     Fresh -->|是| Conflict{候选时段是否冲突}
-    Conflict -->|是| Alternative{允许提出替代时段吗}
+    Conflict -->|是| NoCreate[保持零 reservation、零 Calendar event 与零招聘回复]
+    NoCreate --> Alternative{允许提出替代时段吗}
     Alternative -->|否| Exception
     Alternative -->|是| Clarify
     Conflict -->|否| Reserve[原子预留本地 slot]
     Reserve --> Readiness[创建绑定两个 operation 的 readiness]
     Readiness --> Plan[创建 schedule_interview ActionPlan]
-    Plan --> FinalBusy[紧邻外发前再次查询最终 free/busy]
+    Plan --> PolicyDecision{Policy 对当前 Plan 的结果}
+    PolicyDecision -->|L3 且精确命中 SchedulePreauthorization| Commit[TX 创建 Authorization、双 Operation、reservation、AuditIntent 与 Saga Outbox]
+    PolicyDecision -->|L2 require approval| Approval[展示精确时段、时区、写入/忙碌日历、回复正文、风险、期限与两个外部动作]
+    Approval --> UserDecision{用户决定}
+    UserDecision -->|拒绝| ApprovalDenied[Plan DENIED；释放 reservation；零 Operation/Outbox]
+    UserDecision -->|批准当前 hash| ApprovalCAS{Plan、slot、日历集合、账号、Connector、Policy 与 control 仍一致吗}
+    ApprovalCAS -->|否| ApprovalStale[Plan INVALIDATED；释放 reservation并创建单问题 Exception]
+    ApprovalCAS -->|是| Commit
+    PolicyDecision -->|deny 或 Connector 不足以安全执行| PolicyDenied[Plan DENIED；释放 reservation并创建 Exception]
+    Commit --> FinalBusy[紧邻外发前再次查询最终 free/busy]
     FinalBusy --> FinalFree{仍空闲且本地 reservation 有效}
-    FinalFree -->|否| Release[释放 reservation 并使旧 Plan 失效]
+    FinalFree -->|否| Release[两个未派发 Operation 与父 ActionPlanRecord 进入 CANCELLED<br/>释放 reservation]
     Release --> Alternative
-    FinalFree -->|是| Saga[执行可对账的日历与回复 operation]
-    Saga --> Both{两项是否均证实成功}
-    Both -->|是| Scheduled[Interview 首次进入 SCHEDULED]
-    Both -->|否，明确失败或未知| Partial[Interview 保持未排定；立即进入高优先级 Exception 与对账]
+    FinalFree -->|是| Calendar[在唯一写入日历执行 CalendarOperation<br/>创建候选人私有 tentative event]
+    Calendar --> CalendarResult{日历结果}
+    CalendarResult -->|明确失败| ProviderFailure[标记 calendarOp FAILED_CONFIRMED<br/>取消未派发 replyOp；释放 reservation]
+    ProviderFailure --> ProviderException[Provider failure Exception<br/>零招聘回复；重新取证/授权后才可重计划]
+    CalendarResult -->|未知| CalReconcile[calendarOp OUTCOME_UNKNOWN<br/>replyOp 不可派发；只读对账]
+    CalReconcile --> CalEvidence{对账证据}
+    CalEvidence -->|唯一成功| Persist
+    CalEvidence -->|证明未创建| ProviderException
+    CalEvidence -->|仍歧义| Partial[Interview 保持 PROPOSED；人工裁决，禁止发送回复]
+    CalendarResult -->|明确成功| Persist[持久化 event external ID 与日历成功事实]
+    Persist --> Reply[执行独立 ReplyOperation 向招聘方确认]
+    Reply --> ReplyResult{回复结果}
+    ReplyResult -->|明确成功| Scheduled[Interview 首次进入 SCHEDULED]
+    ReplyResult -->|未知| ReplyReconcile[replyOp OUTCOME_UNKNOWN<br/>禁止重发并只读对账]
+    ReplyReconcile --> ReplyEvidence{对账证据}
+    ReplyEvidence -->|唯一成功| Scheduled
+    ReplyEvidence -->|证明未发送| Cancel
+    ReplyEvidence -->|仍歧义| Partial
+    ReplyResult -->|明确失败| Cancel[以新 Plan/Operation 取消 tentative event]
+    Cancel --> CancelResult{取消结果}
+    CancelResult -->|明确成功| Compensated[保持 PROPOSED；释放 slot/额度]
+    CancelResult -->|失败或未知| Sev1[SEV-1 Exception；暂停自动约面 capability]
     Scheduled --> Milestone[Application 只记录 INTERVIEW_SCHEDULED 里程碑]
     Milestone --> Notify[创建独立成功通知]
     Notify --> Handoff[生成准备包并移交用户]
 ```
 
-多个 busy calendars 与单一写入日历的组合由 `<<proposed DEC-14>>` 确认；日历与回复的 Saga 顺序由 `<<proposed DEC-08>>` 确认；日历事件是否邀请招聘方由 `<<proposed DEC-20>>` 确认。未确认前真实 L3 自动约面保持关闭。
+v0.1 固定一个 Calendar Provider 账户和一个写入日历，读取同账户多个 busy calendars 的并集；跨账户聚合延期。Calendar Connector 只有具备查询/对账、幂等创建、更新/取消和稳定 external ID 才能开放 L3。L2 不要求预先存在 SchedulePreauthorization，而是让用户批准当前完整双动作 Plan；批准后仍走相同的 calendar-first Saga，并在真正外发前再次进行 CAS 与 free/busy 复核。事件为候选人私有 tentative event，不含招聘方 attendee、不会触发日历邀请；招聘确认只走已授权 Reply Connector。准备包包含已接受的核心事实字段，AI 面试建议为 P1。
+
+时间歧义或无可用时段时，`Clarify` 不直接调用消息 Connector：系统先生成绑定当前 thread revision、收件人、模板、Evidence 和期限的 Reply ActionPlan，并完整复用 `RF-UML-SEQ-MSG-01` 的 Policy、Authorization、Operation、Outbox、执行前复核与三态对账路径。缺少模板预授权或任一绑定不完整时只创建 Exception，保持零外发。
 
 ## RF-UML-ACT-EXC-01 Exception 处理与精确恢复
 
@@ -377,13 +479,21 @@ flowchart TB
 flowchart TB
     %% @anchor EXCEPTION_LIFECYCLE
     %% @anchor CHOICE
+    %% @anchor EXCEPTION_HIGH_RISK_FAIL_CLOSED
+    %% @anchor EXCEPTION_EXPIRY_SAFE_CLOSE
     Trigger[策略、事实、身份、执行或排期出现不可自动决定的问题] --> Atom[建立一个问题对应一个 Exception]
-    Atom --> Context[附上原因、原文、Evidence、影响、建议、截止和恢复点]
-    Context --> Severity{严重度与时间}
-    Severity -->|高风险或临近截止| Immediate[立即通知并暂停关联能力]
+    Atom --> Context[附上关联岗位/Application、原始消息与来源、Evidence、<br/>判断置信度、原因、建议、截止、恢复点及不处理的明确后果]
+    Context --> Deadline{已经到达且无人处理的截止时间吗}
+    Deadline -->|是| SafeClose[按预先声明的保守规则关闭或保持暂停；<br/>关联 job/Plan 安全过期，不扩大授权，无关任务继续]
+    Deadline -->|否| Severity{严重度与时间}
+    Severity -->|疑似越权、账号风险、数据泄漏或错误外发| Immediate[立即暂停受影响账号和 capability 并发送 SEV-0；<br/>只有全局相关风险才触发有记录原因/恢复条件的 Kill Switch]
+    Severity -->|仅临近截止| DeadlineNotice[发送到期提醒；不得延长 Plan 或授权]
     Severity -->|普通| Inbox[进入产品内异常 Inbox]
     Immediate --> Read
+    DeadlineNotice --> Read
     Inbox --> Read[用户打开时刷新所有相关状态]
+    Inbox -.截止时间到达.-> SafeClose
+    Immediate -.截止时间到达.-> SafeClose
     Read --> Fresh{UI、Plan、岗位、消息和 Policy 仍是最新吗}
     Fresh -->|否| Rebuild[失效旧选项并重建 Exception]
     Fresh -->|是| Choice{选择互斥处理方式}
@@ -420,10 +530,11 @@ flowchart TB
     Preserve --> Kind{控制类型}
     Kind -->|暂停新机会| PauseNew[停止新抓取；未投递机会只读保留且不创建新 Plan]
     Kind -->|停止所有外发| StopOutbound[阻止所有新的外部 mutation]
-    Kind -->|全局急停| Kill[最高优先级拒绝全部 mutation]
+    Kind -->|全局急停| Kill[最高优先级拒绝全部业务 mutation]
     PauseNew --> Existing[已有申请可按原边界继续，只读与对账继续]
     StopOutbound --> CancelQueued[取消未开始动作；只读、审计与对账继续]
-    Kill --> CancelQueued
+    Kill --> SafetyAlert[内部 Audit/Inbox 继续；隔离幂等安全通道最多一次停止告警]
+    SafetyAlert --> CancelQueued
     CancelQueued --> InFlight{外部请求处于哪种事实状态}
     InFlight -->|可证明未发出| Cancel[安全取消]
     InFlight -->|已有明确结果| CommitResult[按真实成功或失败提交]
@@ -437,11 +548,12 @@ flowchart TB
     Command -->|是| Recheck[核验 RuntimeHealth、Evidence、Policy、Connector、账号、额度与时间]
     Recheck --> Valid{当前绑定是否全部有效}
     Valid -->|否| Controlled
-    Valid -->|是| SettleOld[仅未外发旧 Plan 保持失效；PREPARED 或 EXECUTING operation 按外部三态收敛]
-    SettleOld --> Resume[未决 Plan 继续阻断同目的重发；其他新动作按解除后的控制层计算]
+    Valid -->|是| SettleOld[旧 Plan/授权永不复活；PREPARED 或 EXECUTING operation 按外部三态收敛]
+    SettleOld --> L2[用户逐 capability 发布新授权并先恢复到 L2]
+    L2 --> Resume[健康检查和明确确认后，符合门槛的 capability 才可另开 L3]
 ```
 
-该活动只处理人工三级控制；普通离线恢复见 `RF-UML-ACT-OFF-01`。`STOP_OUTBOUND` / `KILL_SWITCH` 解除后是否一律先回 L2、再逐能力重开 L3，尚待 `<<proposed DEC-19>>` 确认；未确认前采用失败关闭。
+该活动只处理人工三级控制；普通离线恢复见 `RF-UML-ACT-OFF-01`。`STOP_OUTBOUND` / `KILL_SWITCH` 解除前必须完成对账；旧 Plan 与授权不复活，用户逐 capability 首先恢复到 L2，健康检查和明确确认后才可重开 L3。
 
 ## RF-UML-ACT-OFF-01 Worker、Runner 离线与普通恢复
 
@@ -449,20 +561,27 @@ flowchart TB
 flowchart TB
     %% @anchor OFFLINE_GAP
     %% @anchor RECOVERY_REVALIDATE
-    Missing[超过组件心跳阈值] --> Component{哪个组件离线}
-    Component -->|Worker| WorkerGap[记录最后在线时间和监控覆盖空窗]
-    WorkerGap --> UIReachable{本地 UI 或独立控制面是否仍可达}
-    UIReachable -->|是| Visible[明确显示 Worker 离线；不声称仍在监控]
-    UIReachable -->|否| Deferred[只持久化可用事实；整台设备离线时无法保证即时告警]
-    Component -->|Runner| RunnerStop[停止向该 Runner 派发新的执行]
+    %% @anchor RUNNER_OFFLINE_ORIGINAL_AUTHORITY
+    Missing[60 秒心跳连续缺失两次，达到 120 秒] --> Component{哪个组件离线}
+    Component -->|Worker| WorkerGap[本机可用时记录最后在线时间和监控覆盖空窗]
+    WorkerGap --> Watchdog{独立 Watchdog 绑定是否已配置并验证}
+    Watchdog -->|是| Pending{最后 heartbeat 是否有待办且离线超过 10 分钟}
+    Watchdog -->|否| UIReachable
+    Pending -->|是| Alert[外部 Watchdog 通过预设渠道发送幂等告警]
+    Pending -->|否| UIReachable
+    Alert --> ExternalAlert[记录外部告警 accepted/delivered/unknown<br/>本机 UI 不可达也不否定该外部事实]
+    UIReachable{本地 UI 是否仍可达} -->|是| Visible[明确显示 Worker 离线；不声称仍在监控]
+    UIReachable -->|否| Deferred[未配置 Watchdog 且整台设备离线时<br/>只能在恢复后展示空窗，不保证即时告警]
+    Component -->|Runner| RunnerStop[停止向该 Runner 派发新的执行；<br/>禁止改派其他设备、账号或 credential lineage]
     RunnerStop --> WorkerOnline{Worker 是否在线}
     WorkerOnline -->|是| ReadOnly[Worker 继续获准的读取、同步与对账]
     WorkerOnline -->|否| WorkerGap
     RunnerStop --> InFlight{Runner 是否可能已有请求发出}
-    InFlight -->|否| SafeWait[保持 queued 或按期限安全过期]
+    InFlight -->|否| SafeWait[只在原 Plan/Authorization 有效期内保持 queued；<br/>临近截止建 Exception，到期进入 EXPIRED，绝不延权]
     InFlight -->|是或不明| Unknown[标记 OUTCOME_UNKNOWN，禁止直接重发]
     Visible --> Recovered
     Deferred --> Recovered
+    ExternalAlert --> Recovered
     ReadOnly --> Recovered
     SafeWait --> Recovered
     Unknown --> Recovered
@@ -473,10 +592,11 @@ flowchart TB
     Reconcile --> Recheck[按最新 Evidence、Policy、ControlOverlay、账号、额度和时效重校验积压]
     Recheck --> Controlled{人工三级控制仍在生效吗}
     Controlled -->|是| Stay[保持原控制，不自动解除]
-    Controlled -->|否| Resume[仅恢复当前仍有效的 capability mode 与操作]
+    Controlled -->|否| Backfill[展示覆盖空窗和回补结果]
+    Backfill --> Resume[仅恢复当前仍有效的 capability mode 与操作]
 ```
 
-普通短时离线恢复不强制把能力模式改成 L2，也不解除人工暂停。积压重校验只直接取消或失效未外发的 `DRAFT`、`AWAITING_APPROVAL`、`AUTHORIZED` Plan；已有 `PREPARED` / `EXECUTING` operation 时，证明未发才取消，可能已发则进入 `OUTCOME_UNKNOWN → RECONCILING`，父 Plan 保持 `EXECUTING` 并阻止同目的重发。备份恢复属于 `RF-UML-ACT-REL-01`：凭证与 L3 授权必须保持关闭，不能套用本活动的普通恢复路径。心跳阈值由 `<<proposed DEC-11>>` 确认。
+普通短时离线恢复不强制把能力模式改成 L2，也不解除人工暂停。积压重校验只直接取消或失效未外发的 `DRAFT`、`AWAITING_APPROVAL`、`AUTHORIZED` Plan；已有 `PREPARED` / `EXECUTING` operation 时，证明未发才取消，可能已发则进入 `OUTCOME_UNKNOWN → RECONCILING`，父 Plan保持 `EXECUTING` 并阻止同目的重发。备份恢复属于 `RF-UML-ACT-REL-01`：凭证与 L3 授权保持关闭，完成对账后逐 capability 先恢复 L2。
 
 ## RF-UML-ACT-DATA-01 数据生命周期操作路由
 
@@ -510,14 +630,15 @@ flowchart TB
     Settled -->|否| LongUnknown[建立长期 unknown inventory 与 Exception；保留 operation 和 EXECUTING Plan]
     LongUnknown --> Inventory[列出已投递、沟通中、等待回复、已排面试和未决 operation]
     Inventory --> Choice{已有申请如何继续}
-    Choice -->|继续只读监听| Monitoring[Campaign 进入 ENDED_MONITORING]
+    Choice -->|继续只读监听| Monitoring[Campaign 进入 LISTENING]
     Monitoring --> Observe[只同步入站、拒绝、no-contact、岗位关闭、改期和取消]
-    Observe --> Notify[按通知规则提醒；禁止自动回复、跟进和约面 mutation]
+    Observe --> Notify[按通知规则提醒；禁止发现、投递、自动回复、跟进和约面 mutation]
+    Monitoring --> NewCycle[可另建新 Campaign；旧 Campaign 继续只读且不复制 Plan/Auth]
     Choice -->|停止全部跟踪| Ended[Campaign 进入 ENDED]
     Choice -->|尚未决定| Hold[保持结束确认页，不自动归档]
 ```
 
-结束 Campaign 不撤回任何已投申请，也不删除申请、沟通、面试、operation 或审计事实。有界对账超时不会无限阻塞 `ENDED` / `ENDED_MONITORING`；未决 operation 以长期 inventory 和 Exception 保留，继续对账但禁止普通重发。只有用户后续明确选择归档，才进入 `RF-UML-ACT-CAMARCH-01`。
+结束 Campaign 不撤回任何已投申请，也不删除申请、沟通、面试、operation 或审计事实。有界对账超时不会无限阻塞 `ENDED` / `LISTENING`；未决 operation 以长期 inventory 和 Exception 保留，继续对账但禁止普通重发。历史 `LISTENING` 可与一个新的 `CALIBRATING`/`ACTIVE` Campaign 并存，但 Workspace 全局去重与硬限额仍覆盖全部 Campaign。
 
 ## RF-UML-ACT-CAMARCH-01 归档 Campaign 与开启新周期
 
@@ -528,11 +649,11 @@ flowchart TB
     Request[用户请求归档 Campaign] --> State{当前 Campaign 状态}
     State -->|ACTIVE| EndFirst[先执行 RF-UML-ACT-CAMEND-01]
     EndFirst --> EndState{结束后的状态}
-    EndState -->|ENDED_MONITORING| ConfirmStop
+    EndState -->|LISTENING| ConfirmStop
     EndState -->|ENDED| Prepare
     EndState -->|用户尚未完成结束选择| Keep
-    State -->|ENDED_MONITORING| ConfirmStop{是否确认停止只读监听}
-    ConfirmStop -->|否| Keep[保持 ENDED_MONITORING]
+    State -->|LISTENING| ConfirmStop{是否确认停止只读监听}
+    ConfirmStop -->|否| Keep[保持 LISTENING]
     ConfirmStop -->|是| Prepare
     State -->|DRAFT、CALIBRATING 或 ENDED| Prepare[准备归档]
     Prepare --> Invalidate[只取消或失效 DRAFT、AWAITING_APPROVAL、AUTHORIZED 的未外发旧 Plan]
@@ -542,12 +663,13 @@ flowchart TB
     Settle --> Settled{窗口结束时是否全部收敛}
     Settled -->|是| Archive
     Settled -->|否| LongUnknown[建立长期 unknown inventory 与 Exception；保留 operation 和 EXECUTING Plan]
-    LongUnknown --> Archive[保留不可变业务、未决执行与审计事实，状态进入 ARCHIVED]
+    LongUnknown --> Archive[保留不可变业务、未决执行与审计事实，状态进入 ARCHIVED；<br/>历史申请、材料、消息、面试与指标继续只读可见]
     Archive --> NewCycle{是否开始新的求职周期}
     NewCycle -->|否| Done[只读保留归档]
     NewCycle -->|是| NewCampaign[创建新 Campaign ID 与新版本]
-    NewCampaign --> Copy[仅复制仍有效的稳定 Evidence 与用户偏好]
-    Copy --> Calibrate[不复制 Application、执行令牌、旧 Plan 或 L3 授权]
+    NewCampaign --> CarryDraft[仅把仍有效的稳定 Evidence 与偏好作为待确认草稿；<br/>旧 Campaign 反馈不得静默成为新方向规则]
+    CarryDraft --> Reconfirm[逐项重新确认目标、岗位新鲜度、Policy、答案预授权、<br/>Connector allowlist、限额与日历窗口]
+    Reconfirm --> Calibrate[不复制 Application、执行令牌、旧 Plan 或 L3 授权；<br/>校准完成前 mutation gate 保持关闭]
 ```
 
 归档不是删除，也不是恢复入口；有界对账超时不无限阻塞归档，未决 operation 和父 Plan 继续保留并对账。对归档 Campaign 的“继续求职”必须创建新 Campaign，不能复活旧执行状态。
@@ -576,11 +698,28 @@ flowchart TB
 
 ```mermaid
 flowchart TB
+    %% @anchor RETENTION_SCHEDULE
     %% @anchor DELETE_PII_FIRST
     %% @anchor EXTERNAL_RESIDUAL
+    RetentionTick[每日幂等保留期调度] --> RetentionRead[读取版本化 retention policy、Campaign endedAt、extendedUntil 与数据类别]
+    RetentionRead --> Due{已达类别期限，且不受活跃 Campaign 必要数据或当前 extendedUntil 保护吗}
+    Due -->|否| Retain[保留并记录下次检查时间]
+    Due -->|是| PendingRefs{仍有未决 operation 需要对账引用吗}
+    PendingRefs -->|是| MinimizeRefs[先提取不可反推个人的 operation ID、externalRef hash、状态与时间<br/>不得保留原始 JD、消息正文或附件]
+    PendingRefs -->|否| RetentionClass
+    MinimizeRefs --> RetentionClass{数据类别}
+    RetentionClass -->|原始 JD、消息正文、附件：结束后 90 天| PurgeRaw[按 workspace + record + policyVersion 幂等删除正文与派生副本]
+    RetentionClass -->|结构化申请历史、材料版本、最小审计：1 年| PurgeStructured[幂等删除或不可逆脱敏]
+    RetentionClass -->|滚动备份：30 天| PurgeBackup[删除到期 backup generation]
+    PurgeRaw --> RetentionVerify{删除提交与范围校验}
+    PurgeStructured --> RetentionVerify
+    PurgeBackup --> RetentionVerify
+    RetentionVerify -->|成功| RetentionAudit[记录类别、policyVersion、数量和完成时间；不保留被删正文]
+    RetentionVerify -->|失败或部分完成| RetentionFailure[保持到期标记；有界重试并创建数据维护 Exception]
+
     Request[用户请求永久删除] --> Target{删除范围}
     Target -->|单个 Campaign| CampaignState{Campaign 是否为 DRAFT、ENDED 或 ARCHIVED}
-    CampaignState -->|否：CALIBRATING、ACTIVE 或 ENDED_MONITORING| RejectCampaignDelete[拒绝删除；先结束或归档 Campaign]
+    CampaignState -->|否：CALIBRATING、ACTIVE 或 LISTENING| RejectCampaignDelete[拒绝删除；先结束或归档 Campaign]
     CampaignState -->|是| CampaignImpact[仅展示将删除的 Campaign 规则、偏好副本、未采用草稿和可安全再生数据]
     Target -->|整个 Workspace| WorkspaceImpact[展示全部本地数据、连接器、凭证和受管备份范围]
     CampaignImpact --> Warn[明确说明外部投递、消息、日历事件不能靠本地删除召回]
@@ -611,7 +750,7 @@ flowchart TB
     WorkspaceResidual --> Minimal[仅留限时、不可反推个人的残留说明]
 ```
 
-Campaign 删除不是聚合级联删除：历史 Application、Interview、Message、ExternalOperation 和 Audit 保留，或只在后续 Workspace 删除时按 Workspace 策略删除/脱敏。本地清理或存储失败时保持 `DELETING` 并创建高优先级 Exception，不能谎报删除完成。最小摘要和受管备份的保留类别、期限与删除证明由 `<<proposed DEC-05>>` 确认。
+Campaign 删除不是聚合级联删除：历史 Application、Interview、Message、ExternalOperation 和 Audit 保留，或只在后续 Workspace 删除时按 Workspace 策略删除/脱敏。本地清理或存储失败时保持 `DELETING` 并创建 `SEV-1` Exception，不能谎报删除完成。Campaign 活跃期保留必要数据；结束 90 天后删原始 JD、消息正文与附件；结构化申请历史、材料版本和最小审计摘要保留 1 年；滚动备份保留 30 天。未决对账只能保留不可反推个人的最小 operation 引用/hash，不能延长正文或附件期限。用户可随时导出/删除或通过 `extendedUntil` 明确选择更长保留期；显式删除请求不等待定时调度。
 
 ## RF-UML-ACT-WITHDRAW-01 撤回已投 Application
 
@@ -682,8 +821,11 @@ flowchart TB
     %% @anchor INIT
     %% @anchor ONLINE_BACKUP
     %% @anchor RESTORE_NO_L3
-    Install[全新安装] --> Preflight{版本、权限、端口、配置和安全默认值检查}
-    Preflight -->|失败| Explain[拒绝启动并给出修复信息]
+    Install[全新安装] --> Preflight{版本、权限、端口、配置、安全默认值、<br/>加密主密钥与凭证 schema 必填字段是否有效}
+    Preflight -->|必需项失败| Explain[拒绝启动并给出修复信息；禁止示例值、空密钥或降级明文；<br/>全部 Connector mutation 保持关闭]
+    Preflight -->|仅可选 mutation 依赖不可用且核心密钥有效| SafeReadOnly[用户显式选择安全只读模式；<br/>全部 Connector mutation 保持关闭，修复后必须重跑 preflight]
+    SafeReadOnly --> Init
+    SafeReadOnly -.依赖修复后.-> Preflight
     Preflight -->|通过| Init[原子初始化 schema 与 migration ledger]
     Init --> G0{G0 真实数据门是否通过}
     G0 -->|否| Synthetic[仅合成数据模式]
@@ -699,10 +841,12 @@ flowchart TB
     G3 -->|否| PreRelease[继续加固并公开限制]
     G3 -->|是| Stable[稳定开源版本]
 
-    OnlineBackup[普通在线备份请求] --> Snapshot[创建一致性只读快照，不关闭 mutation gate]
-    Snapshot --> SnapshotCheck{快照、校验和与 ledger 是否完整}
+    OnlineBackup[普通在线备份请求] --> Snapshot[以同一事务快照/一致性点捕获 DB、queue、audit、<br/>operation ledger 与 manifest；并发写入只能全部在点前或点后]
+    Snapshot --> SnapshotCheck{各分片校验和、schema 与同一 consistency token 是否完整}
     SnapshotCheck -->|否| BackupFail[丢弃坏快照；运行状态不变]
-    SnapshotCheck -->|是| BackupDone[保存备份与 manifest；运行状态不变]
+    SnapshotCheck -->|是| RestoreProbe{隔离恢复演练是否无悬空引用、无矛盾执行状态，<br/>且 queue/audit/operation ledger 可共同对账}
+    RestoreProbe -->|否| BackupFail
+    RestoreProbe -->|是| BackupDone[保存备份与 manifest；运行状态不变]
 
     Upgrade[升级或 migration 请求] --> Drain[关闭 mutation gate，drain 并 fence Worker]
     Drain --> SafetyBackup[创建并验证变更前安全备份]
@@ -716,14 +860,13 @@ flowchart TB
     RestoreDrain --> Restore[原子 restore 与必要 migration]
     Restore --> ReadOnlyReconnect[用户重新建立只读与对账所需连接；mutation grant 和旧 L3 保持关闭]
     ReadOnlyReconnect --> ReconcileRestore[逐项对账所有非终态 operation]
-    ReconcileRestore --> Dec19{DEC-19 是否已经 Accepted}
-    Dec19 -->|否| RestoreReadOnly[保持只读和对账；outbound 与 mutation grant 关闭]
-    RestoreReadOnly --> Dec19[产品决定确认后重新评估，不自动开放]
-    Dec19 -->|是| NewAuth[展示结果并要求用户显式发布新的外发授权]
-    NewAuth --> G0
+    ReconcileRestore --> RestoreReadOnly[展示对账结果；outbound 与旧 mutation grant 保持关闭]
+    RestoreReadOnly --> NewAuth[用户逐 capability 显式发布新授权并先恢复到 L2]
+    NewAuth --> Health[健康检查与明确确认；L3 仍需重新满足对应门槛]
+    Health --> G0
 ```
 
-普通在线备份不暂停 Worker；升级/migration 与 restore 才需要 drain/fence。只有 restore 强制不恢复旧凭证、执行令牌和 L3 授权：用户先重建只读/对账连接并完成对账；`<<proposed DEC-19>>` 未 Accepted 时停在只读且外发关闭，Accepted 后仍须由用户发布全新的外发授权并重新通过 G0/G1/G2。普通短时离线与升级不能套用这一降级规则。交付计划 Gate A/B/C 是项目里程碑门；G0/G1/G2/G3 是能力开放门，二者不得混用。
+普通在线备份不暂停 Worker；升级/migration 与 restore 才需要 drain/fence。Restore 强制不恢复旧凭证、执行令牌、旧 Plan 或 L3 授权：用户先重建只读/对账连接并完成对账，再逐 capability 发布全新授权并首先恢复到 L2；健康检查、明确确认和对应门槛全部通过后才可恢复 L3。普通短时离线与升级不能套用这一降级规则。交付计划 Gate A/B/C 是项目里程碑门；G0/G1/G2/G3 是能力开放门，二者不得混用。
 
 ## RF-UML-ACT-A11Y-01 关键交互的无障碍与地区语义门
 
@@ -736,17 +879,17 @@ flowchart TB
     %% @anchor ZOOM
     %% @anchor LOCALE
     %% @anchor UNICODE
-    Flow[任一用户关键流程] --> Keyboard{仅键盘能完成并看见焦点吗}
+    Flow[任一用户关键流程] --> Keyboard{仅键盘是否按合理焦点顺序完成全部控件激活，<br/>弹窗/刷新后焦点不丢失，并可读取禁用原因}
     Keyboard -->|否| Block[阻断对应发布门]
-    Keyboard -->|是| Reader{读屏能获得名称、状态、错误和结果吗}
+    Keyboard -->|是| Reader{读屏是否获得标题/label、风险、状态、错误、结果、<br/>动态通知、按钮/图标/分数语义，且非紧急更新不打断}
     Reader -->|否| Block
-    Reader -->|是| Visual{状态是否不只依赖颜色}
+    Reader -->|是| Visual{状态是否同时使用文字与可辨识图标、<br/>不只依赖颜色且达到适用对比度标准}
     Visual -->|否| Block
-    Visual -->|是| Zoom{200% 放大和窄屏是否保留决策信息与急停}
+    Visual -->|是| Zoom{200% 放大和窄屏是否正确重排/滚动、无双向横滚，<br/>目标、风险、截止与取消/急停持续可见}
     Zoom -->|否| Block
-    Zoom -->|是| Locale{时间、币种、地区和语言是否使用规范内部值}
+    Zoom -->|是| Locale{是否保留原始值并以 ISO 币种/周期、UTC instant + IANA 时区规范化；<br/>信息不足不硬判，DST 映射仍代表同一时刻}
     Locale -->|否| Block
-    Locale -->|是| Unicode{Unicode、长文本和生成语言是否不破坏事实或控件}
+    Locale -->|是| Unicode{Unicode 是否在输入、存储、生成、预览与外发全链路保持；<br/>申请语言独立记录，姓名/专名不擅自翻译重排，规范化不改变幂等身份}
     Unicode -->|否| Block
     Unicode -->|是| Pass[该流程通过设计与实现验收]
 ```

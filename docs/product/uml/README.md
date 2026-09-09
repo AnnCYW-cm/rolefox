@@ -1,6 +1,6 @@
 # RoleFox v0.1 UML 设计基线
 
-- 状态：Review Draft（待产品确认）
+- 状态：Accepted Product and Design Baseline
 - 版本：v0.1
 - 更新日期：2026-09-09
 - 建模范围：单用户、本地默认的一条面试前 Autopilot 完整通道
@@ -15,13 +15,13 @@
 3. 正常、拒绝、超时、重复、越权、离线、崩溃和恢复时，组件如何协作；
 4. 每张图覆盖哪些 P0 Case，开发和测试如何证明设计已经实现。
 
-“完整”限定在已确认的 v0.1 范围内，不把多用户 SaaS、多 Campaign 并行、Offer 决策或多个真实写入平台提前画成已经承诺的功能。
+“完整”限定在已确认的 v0.1 范围内，不把多用户 SaaS、多个活跃 Campaign 并行调度、Offer 决策或多个真实写入平台提前画成已经承诺的功能。一个新活跃 Campaign 与多个历史只读 `LISTENING` Campaign 并存属于已接受范围。
 
 ## 2. 规范来源与冲突优先级
 
 发生冲突时按以下顺序处理：
 
-1. 已确认的产品决策与 [P0 Case 验收基线](../p0-case-baseline-v0.1.md)；
+1. 已确认的产品决策（[ADR-0001](../../adr/0001-pre-interview-autopilot.md)、[ADR-0002](../../adr/0002-v0.1-product-decision-baseline.md)）与 [P0 Case 验收基线](../p0-case-baseline-v0.1.md)；
 2. [v0.1 PRD](../prd-v0.1.md) 与 [用户体验设计](../user-experience-v0.1.md)；
 3. 本 UML 设计基线；
 4. [架构说明](../../architecture.md) 与 [自动化安全说明](../../automation-safety.md)；
@@ -79,7 +79,7 @@
 - `<<external>>`：RoleFox 不控制其事务和可用性的外部系统。
 - 图编号固定采用 `RF-UML-{TYPE}-{DOMAIN}-{NN}`；版本和状态写入图的元数据，不写入 ID。
 - 实线表示同步依赖或拥有关系；虚线表示事件、通知或只读引用。
-- 每个外部 mutation 都先产生 `ActionPlan`、授权和 durable `ExternalOperation`，再调用连接器。
+- 每个业务外部 mutation 与删除期 `credential_revocation` 都先产生 `ActionPlan`、授权和 durable `ExternalOperation`，再调用对应 adapter。SafetySignal 是唯一独立的窄化安全协议，也必须使用固定 Plan、授权、Operation、AuditIntent 和专用 Outbox。
 - 业务事实、执行事实、通知事实互不替代：例如日历写入成功不等于双方确认成功，通知失败也不撤销已经确认的面试。
 - 外部结果只有 `明确成功`、`明确失败`、`未知` 三类；未知结果只允许对账，不允许普通重试。
 - Mermaid 是仓库内可渲染载体；图名和语义采用 UML 的用例、类、状态、活动、时序、组件和部署视角。
@@ -95,41 +95,44 @@
 7. 备份恢复不恢复凭证、执行令牌或 L3 授权。
 8. 删除个人数据优先，只能按明确期限保留不可反推个人的最小安全摘要。
 
-## 7. UML 评审后需要锁定的产品决定
+## 7. 已接受的 v0.1 产品决定
 
-这些项目不是遗漏，而是 UML 把原有开放问题暴露成了必须明确的工程输入。表中“建议基线”只有在产品确认后才转为 Accepted。
+以下 19 项产品决定均已由产品负责人确认并进入 [ADR-0002](../../adr/0002-v0.1-product-decision-baseline.md)，另保留已合并的 `DEC-13`。表内内容是工程约束，不是建议；`DEC-13` 已合并到 `DEC-04`，编号永久保留、不复用。
 
-| 决策 ID | 待确认内容 | 建议基线 | 影响图 |
+| 决策 ID | 状态 | Accepted baseline | 影响图 |
 | --- | --- | --- | --- |
-| DEC-01 | 首条真实通道组合 | 一个只读岗位源 + 邮箱 + 一个日历 + L2 深链接/预填交接 | `RF-UML-CTX-SYS-01`、`RF-UML-SEQ-APPLY-01`、`RF-UML-DEP-LOCAL-01` |
-| DEC-02 | L3 校准门槛 | 相关能力同时满足 7 天 shadow、至少 50 个候选决策、5—10 次人工校准且错误为 0 | `RF-UML-ACT-CAL-01`、`RF-UML-SM-POL-01` |
-| DEC-03 | 系统级硬上限 | 产品默认值可调，但代码另设不可被普通配置突破的安全上限 | `RF-UML-CD-AUTH-01`、`RF-UML-ACT-AUTH-01` |
-| DEC-04 | 通知组合与兜底 | 产品内 Inbox 为强制事实来源，邮件为 v0.1 唯一外部主渠道；Webhook 可替换，第二外部渠道留到 P1 | `RF-UML-SM-NOT-01`、`RF-UML-SEQ-NOT-01` |
-| DEC-05 | 数据保留期 | 分类定义原文、附件、审计摘要和备份期限；没有默认永久保留 | `RF-UML-ACT-DATA-01`、`RF-UML-SEQ-DATA-01` |
-| DEC-06 | 安装支持矩阵 | macOS + Docker 为正式支持，Linux 原生为社区尽力支持 | `RF-UML-DEP-LOCAL-01`、`RF-UML-DEP-HOSTED-01` |
-| DEC-07 | 面试准备包最小内容 | JD 快照、公司摘要、材料版本、沟通时间线、联系人、面试时间地点 | `RF-UML-CD-COM-01`、`RF-UML-SM-INT-01` |
-| DEC-08 | 自动约面的 Saga 顺序 | 本地锁定时段 → 新鲜度复查 → 创建可补偿日历事件 → 发送确认 → 两者证实后 SCHEDULED | `RF-UML-SEQ-INT-01`、`RF-UML-SEQ-INT-02`、`RF-UML-REL-SAGA-01` |
-| DEC-09 | 已有申请的唯一性 | Workspace + 规范公司 + 规范岗位 + 来源/链接指纹；冲突时人工消歧 | `RF-UML-ACT-IMPORT-01`、`RF-UML-CD-JOB-01` |
-| DEC-10 | Application 关闭与重开 | `CLOSED` 必填原因；只有新外部事实或人工决定才能创建新实例/重开，禁止自动倒退 | `RF-UML-SM-APP-01` |
-| DEC-11 | Worker 离线告警阈值 | 超过两个预期心跳周期即显示离线并记录覆盖空窗 | `RF-UML-SM-RUN-01`、`RF-UML-SEQ-OFF-01` |
-| DEC-12 | 日历补偿能力不足时的降级 | 无法安全查询、幂等创建和补偿的日历连接器不得开放 L3 自动约面 | `RF-UML-SEQ-INT-02`、`RF-UML-REL-SAGA-01` |
-| DEC-14 | 单日历和多个 busy calendars | 一个 Provider 账户、一个写入日历；允许读取同账户内多个忙碌日历的并集 | `RF-UML-ACT-INT-01`、`RF-UML-SEQ-INT-01` |
-| DEC-15 | 单 active Campaign 与跨 Campaign 去重 | 禁止并行 active；历史和顺序 Campaign 仍参加 Workspace 级去重和全局硬上限 | `RF-UML-SM-CAM-01`、`RF-UML-ACT-IMPORT-01` |
-| DEC-16 | SQLite 与 PostgreSQL 的 v0.1 适用性 | v0.1 只把 SQLite 作为正式 P0；PostgreSQL 与跨库迁移 Case 标记为未来范围并用 ADR 记录 N/A | `RF-UML-DEP-LOCAL-01`、`RF-UML-DEP-HOSTED-01` |
-| DEC-17 | 通知严重度命名 | 使用 `SEV-0`—`SEV-3`，避免与需求优先级 P0/P1/P2 混淆 | `RF-UML-SM-NOT-01`、`RF-UML-SEQ-NOT-01` |
-| DEC-18 | Kill Switch 下的外部安全通知 | 建议停止全部业务 mutation；产品内 Inbox 可写，只有独立控制面白名单才允许外部安全通知 | `RF-UML-SM-POL-01`、`RF-UML-SEQ-KILL-01` |
-| DEC-19 | STOP_OUTBOUND / Kill Switch 后的恢复级别 | 建议旧 Plan 与授权不复活，用户逐 capability 重新确认；先回 L2，重新满足门槛后再开 L3 | `RF-UML-ACT-PAUSE-01`、`RF-UML-SEQ-KILL-01` |
-| DEC-20 | 自动创建日历事件是否邀请招聘方 | 建议 v0.1 先创建不触发外部邀请的候选人私有事件；招聘确认只走已授权回复 Connector | `RF-UML-SEQ-INT-01`、`RF-UML-CD-COM-01` |
+| DEC-01 | ACCEPTED | 国际化、邮箱中心开放通道：开放导入或合规只读源 + 邮件 + 日历 + 通知；真实外发默认 L2/人工交接；BOSS 为后续重点 Connector | `RF-UML-CTX-SYS-01`、`RF-UML-SEQ-APPLY-01`、`RF-UML-DEP-LOCAL-01` |
+| DEC-02 | ACCEPTED | L3 按 capability；真实外发先连续 7 天 Shadow；匹配/材料各 50 决策；投递/回复各 20 次真实 L2；约面 5 次真实 L2 + 20 个合成异常 Case；四类严重错误为 0 | `RF-UML-ACT-CAL-01`、`RF-UML-SM-POL-01` |
+| DEC-03 | ACCEPTED | 默认投递 10/日、回复 8/小时、约面 3/日；普通配置硬上限 25/12/8；每个 Application 最多一次自动跟进 | `RF-UML-CD-AUTH-01`、`RF-UML-ACT-AUTH-01` |
+| DEC-04 | ACCEPTED | 产品 Inbox 是强制事实源；邮件默认外部通知；Webhook 可选；第二个必需外部备用渠道为 P1 | `RF-UML-SM-NOT-01`、`RF-UML-SEQ-NOT-01` |
+| DEC-05 | ACCEPTED | 活跃期保留必要数据；结束 90 天删原始 JD/消息/附件；结构化历史、材料版本和最小审计 1 年；滚动备份 30 天；用户可随时导出/删除或明确延长 | `RF-UML-ACT-DATA-01`、`RF-UML-SEQ-DATA-01` |
+| DEC-06 | ACCEPTED | Docker Compose 正式支持 macOS/Windows/Linux；macOS 原生开发正式支持；Linux/Windows 原生 runtime best effort | `RF-UML-DEP-LOCAL-01`、`RF-UML-DEP-HOSTED-01` |
+| DEC-07 | ACCEPTED | 准备包含 JD 快照/来源、公司岗位摘要、匹配理由、实际投递材料、沟通时间线、联系人、确认时间/时区/地点/链接、日历状态；AI 建议为 P1 | `RF-UML-CD-COM-01`、`RF-UML-SM-INT-01` |
+| DEC-08 | ACCEPTED | 本地锁 → 新鲜日历复查 → 私有 tentative event → 落盘日历结果 → 回复确认 → 两侧明确成功才 `SCHEDULED`；两个 Operation 独立幂等/对账 | `RF-UML-SEQ-INT-01`、`RF-UML-SEQ-INT-02`、`RF-UML-REL-SAGA-01` |
+| DEC-09 | ACCEPTED | connector + externalId 或规范 URL 精确去重；跨源只建疑似组且歧义不自动合并；每 Workspace 每个已确认机会最多一个活跃 Application | `RF-UML-ACT-IMPORT-01`、`RF-UML-CD-JOB-01` |
+| DEC-10 | ACCEPTED | `CLOSED` 是必填原因的终态；新外部事实或用户 reapply 时创建关联的新 Application，旧实例不倒退 | `RF-UML-SM-APP-01` |
+| DEC-11 | ACCEPTED | 心跳 60 秒；连续缺失两次、120 秒离线；有待办且离线超 10 分钟外部告警；恢复展示覆盖空窗与回补结果 | `RF-UML-SM-RUN-01`、`RF-UML-SEQ-OFF-01` |
+| DEC-12 | ACCEPTED | L3 日历必须支持 query/reconcile、幂等 create、update/cancel、稳定 external ID；回复失败则取消 event；取消失败/未知为 `SEV-1` 并暂停约面 | `RF-UML-SEQ-INT-02`、`RF-UML-REL-SAGA-01` |
+| DEC-13 | RESERVED_MERGED_INTO_DEC-04 | 原议题已合并到 DEC-04；编号作为稳定审计标识保留且不复用 | `RF-UML-SM-NOT-01`、`RF-UML-SEQ-NOT-01` |
+| DEC-14 | ACCEPTED | 一个 Calendar Provider 账户、一个写入日历；读取同账户多个 busy calendars 并集；跨账户延期 | `RF-UML-ACT-INT-01`、`RF-UML-SEQ-INT-01` |
+| DEC-15 | ACCEPTED | 每 Workspace 最多一个 `CALIBRATING`/`ACTIVE`；历史 Campaign 可只读 `LISTENING`，不发现/投递/跟进；去重和硬限额 Workspace 全局 | `RF-UML-SM-CAM-01`、`RF-UML-ACT-IMPORT-01` |
+| DEC-16 | ACCEPTED | v0.1 只正式支持 SQLite；PostgreSQL 和跨库迁移为 Future/N/A，不实现第二存储 | `RF-UML-DEP-LOCAL-01`、`RF-UML-DEP-HOSTED-01` |
+| DEC-17 | ACCEPTED | 通知严重度使用 `SEV-0`—`SEV-3`，不与需求优先级混用 | `RF-UML-SM-NOT-01`、`RF-UML-SEQ-NOT-01` |
+| DEC-18 | ACCEPTED | Kill Switch 停全部业务外发；内部 Audit/Inbox 可写；隔离、预配置、幂等的安全通道最多发一次停止告警 | `RF-UML-SM-POL-01`、`RF-UML-SEQ-KILL-01` |
+| DEC-19 | ACCEPTED | 旧 Plan/授权不复活；对账后用户逐 capability 恢复，先 L2；健康检查和明确确认后才 L3 | `RF-UML-ACT-PAUSE-01`、`RF-UML-SEQ-KILL-01` |
+| DEC-20 | ACCEPTED | v0.1 只建候选人私有事件，无 recruiter attendee/日历邀请邮件；确认只走授权 Reply Connector | `RF-UML-SEQ-INT-01`、`RF-UML-CD-COM-01` |
 
-## 8. 评审通过标准
+## 8. 设计验收结论
 
-本套 UML 只有同时满足以下条件才能从 Review Draft 转为 Accepted：
+本套 UML 于 2026-09-09 完成产品、架构与安全一致性评审并转为 Accepted：
 
-1. 上述 19 项独立产品决定逐项确认或明确延期（`DEC-13` 已合并入 `DEC-04`，编号保留不复用）；
-2. 领域对象、状态名称和页面文案使用同一术语；
-3. 72 条产品、82 条安全和 100 条技术 P0 Case 均能定位到至少一张主图；
+1. 19 项产品决定已确认，`DEC-13` 的合并与保留规则已记录；
+2. 领域对象、状态名称和页面文案已统一；
+3. 72 条产品、82 条安全和 100 条技术 P0 Case 均有主图定位；
 4. 20 条黄金路径均有活动图或时序图落点；
-5. 每种真实 mutation 均显示 durable intent、授权、幂等、未知结果对账与审计；
-6. 当前 M0 与 v0.1 目标差距已经进入实施清单；
-7. Mermaid 可以在仓库渲染，所有内部链接有效；
-8. 产品确认后再创建 Git commit，未经明确要求不推送 GitHub。
+5. 真实业务 mutation、删除期撤权和隔离 SafetySignal 均有 durable intent、授权、幂等、未知结果对账与审计设计；
+6. M0 与 v0.1 目标差距已进入实施清单和 ADR；
+7. 87 张 Mermaid 图和所有内部链接由 `pnpm docs:check` 校验；
+8. 254 条 Case 的设计评审状态为 `ACCEPTED`，实现状态仍为 `NOT_VERIFIED`。
+
+`Accepted` 只代表可以据此开发，不代表当前代码已经实现、测试通过或允许真实 L3 外发。

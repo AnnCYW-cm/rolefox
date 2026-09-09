@@ -7,7 +7,7 @@
 - [产品需求文档](prd-v0.1.md)：用户、问题、范围、功能要求、指标与非目标
 - [用户体验与信息架构](user-experience-v0.1.md)：首次配置、日常自治、异常处理和面试通知
 - [P0 Case 验收基线](p0-case-baseline-v0.1.md)：254 条产品、安全与故障恢复 Given/When/Then Case
-- [UML 设计基线](uml/README.md)：用例、领域、状态、活动、时序、组件、部署、安全和 Case 追踪（待确认草案）
+- [UML 设计基线](uml/README.md)：已接受的用例、领域、状态、活动、时序、组件、部署、安全和 Case 追踪
 - [验证计划](validation-plan-v0.1.md)：关键假设、研究方法、实验信号与决策门
 - [交付计划](delivery-plan-v0.1.md)：10 周纵向切片、验收标准、风险与止损规则
 
@@ -20,4 +20,4 @@
 5. 先用合成环境跑通完整闭环，再接真实读取，最后才验证真实外发动作。
 6. 没有合规稳定的写入路径时，产品应降级为只读、材料导出和人工交接，不绕过平台限制。
 
-产品北极星决策见 [ADR-0001](../adr/0001-pre-interview-autopilot.md)。
+产品北极星决策见 [ADR-0001](../adr/0001-pre-interview-autopilot.md)；v0.1 的 19 项已接受决策及完整稳定编号 `DEC-01`—`DEC-20`（`DEC-13` 保留并合并）见 [ADR-0002](../adr/0002-v0.1-product-decision-baseline.md)。

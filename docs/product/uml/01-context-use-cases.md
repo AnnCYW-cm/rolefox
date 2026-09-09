@@ -1,6 +1,6 @@
 # RoleFox v0.1 系统上下文与用例
 
-- 状态：Review Draft
+- 状态：Accepted Design Baseline
 - 上级索引：[UML 设计基线](README.md)
 - 主要追踪：`USR-*`、`ONB-*`、`POL-*`、`EXIT-*`、`GOLD-01`—`GOLD-20`
 
@@ -58,18 +58,24 @@ flowchart LR
 - 外部平台、邮件、附件、JD、模型输出和第三方插件全部是不可信输入。
 - AI Provider 只能生成结构化候选结果，不能持有授权或直接调用外部 mutation。
 - Local Runner 不是另一个决策中心，只能执行 Core 已签发且仍有效的具体动作。
+- v0.1 官方首条端到端闭环是“开放导入或合规只读岗位源 + 邮件 + 日历 + 通知”，真实外发默认 L2 或人工交接；BOSS 直聘是后续重点 Connector，但不作为 v0.1 发布阻塞项。
 
 ## RF-UML-UC-CAND-01 候选人主用例
 
 ```mermaid
 flowchart LR
     %% @anchor DEMO
+    %% @anchor SAFE_SYNTHETIC_DEMO
     %% @anchor HISTORY_DECLARATION
     %% @anchor CANDIDATE_JOURNEY
     User([候选人])
 
     subgraph Setup[建立可信输入]
         U01([体验合成 Demo])
+        DemoData([只加载明确标记的 synthetic namespace])
+        DemoNoAuth([不请求真实账号、凭证或浏览器会话])
+        DemoPreview([全部 mutation 控件禁用或 preview-only<br/>零真实 Authorization 与 outbound])
+        DemoExit([退出后清理 Demo 隔离数据<br/>不得合并进真实 Workspace])
         U02([创建本地 Workspace])
         U03([导入并确认事实证据])
         U04([登记已有申请])
@@ -106,6 +112,7 @@ flowchart LR
     end
 
     User --> U01
+    U01 --> DemoData --> DemoNoAuth --> DemoPreview --> DemoExit
     User --> U02
     User --> U03
     User --> U04
@@ -154,6 +161,8 @@ flowchart TB
     Boundary{是否属于固定人工处理或平台禁止事项}
     Control{三级控制是否允许该动作}
     Level{当前 capability 模式}
+    Allowlist{该动作是否逐项命中非空 allowlist}
+    Manifest{已启用的精确 Connector 版本<br/>是否声明该 capability 且所需权限均已批准}
     Scoped{事实、范围、限额、期限、连接器和风险均通过}
 
     Preview[只生成预览或草稿]
@@ -163,6 +172,8 @@ flowchart TB
     Auto[按 L3 策略授权]
     Manual[创建 Exception 并交由本人处理]
     Pause[暂停对应 Connector capability]
+    Prohibited[产品级拒绝且官方 Connector capability 保持 CLOSED；<br/>零访问尝试、零 outbound，不轮换代理/账号/凭证规避]
+    ManifestDeny[拒绝该动作并保持 capability CLOSED；记录缺失声明或权限]
     Deny[拒绝并说明原因]
     Exception[创建单一问题 Exception]
 
@@ -170,18 +181,24 @@ flowchart TB
     Internal -->|是| ExecuteInternal
     Internal -->|否| Boundary
     Boundary -->|Offer、法律、背调、身份承诺| Manual
-    Boundary -->|CAPTCHA、平台禁止或访问控制| Pause
+    Boundary -->|绕过登录/付费墙/地域限制/反自动化、CAPTCHA、代理轮换或平台禁止| Prohibited
+    Prohibited --> Pause
     Boundary -->|普通可委托动作| Control
     Control -->|PAUSE_NEW 且为新机会| Deny
     Control -->|STOP_OUTBOUND 或 KILL_SWITCH| Deny
     Control -->|RUNNING 或已有申请仍允许推进| Level
     Level -->|Demo 或 Dry-run| Preview
     Level -->|L2| Approval
-    Level -->|限定 L3| Scoped
+    Level -->|限定 L3| Allowlist
+    Allowlist -->|空 allowlist 或动作未列出| Deny
+    Allowlist -->|逐项命中| Manifest
+    Manifest -->|capability 未声明、权限未批准或版本不一致| ManifestDeny
+    Manifest -->|全部通过| Scoped
     Scoped -->|全部通过| Auto
     Scoped -->|可由用户决定| Exception
     Scoped -->|平台禁止或安全不变量失败| Deny
-    Approval -->|批准且载荷未变| MutationProtocol
+    Approval -->|批准且载荷未变| Allowlist
+    Approval -->|拒绝、过期或载荷变化| Deny
     Auto --> MutationProtocol
 ```
 
@@ -194,6 +211,7 @@ flowchart TB
 ```mermaid
 flowchart LR
     %% @anchor PLATFORM_BOUNDARY
+    %% @anchor UNSUPPORTED_HONEST_DEGRADATION
     Core([RoleFox Core])
     Recruiter([招聘方])
     Platform([招聘平台])
@@ -203,9 +221,14 @@ flowchart LR
     AI([AI Provider])
     ConnectorAuthor([连接器作者])
     Operator([自托管部署者])
+    WriteGate{写 capability 已通过 conformance<br/>且平台条款明确允许?}
+    Degrade([明确标记 unsupported 或 read-only<br/>只提供导入、材料导出、预填或深链接])
+    ManualProof([展示仍需人工完成的步骤<br/>用户登记或只读证据前绝不记 SUCCEEDED])
 
     Core -->|经 Registry/Runtime 读取岗位| Platform
-    Core -->|经 Registry/Runtime 执行已授权投递| Platform
+    Core -->|请求写操作| WriteGate
+    WriteGate -->|是，仍须 Plan/Auth/Operation| Platform
+    WriteGate -->|否| Degrade --> ManualProof
     Platform -->|经 Runtime 返回挑战、限流、条款与结果| Core
     Recruiter -->|问题、拒绝、面试邀请| Mail
     Core -->|经 Registry/Runtime 回复或澄清| Mail

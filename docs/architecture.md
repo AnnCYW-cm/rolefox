@@ -2,6 +2,8 @@
 
 RoleFox 采用本地默认、可自托管的模块化单体架构，并将“生成草稿、制定动作、授权判断、执行”拆开。它需要持续运行到约成面试，但模型或第三方连接器的输出不能直接变成外部动作。
 
+v0.1 产品与目标设计约束以 [ADR-0002](adr/0002-v0.1-product-decision-baseline.md) 为准；本文件描述目标架构，不表示当前 M0 已实现。
+
 ```text
 Job / inbox connectors
         │ untrusted data
@@ -27,6 +29,8 @@ Connector ActionDraft → core ActionPlan → policy ─┬─ allow
 
 负责任务调度、岗位标准化、去重、评分、材料生成、消息同步、到期跟进、排期协调和漏斗统计。后台任务必须幂等，重试不能产生重复投递、重复追问或重复日历事件。
 
+Worker 每 60 秒向隔离 Safety Signal Control Plane 提交最小心跳快照；固定 Plan、窄化授权、durable Operation、专用 Outbox/Executor 把 heartbeat 发布给独立外部 Watchdog。连续错过两次、达到 120 秒即判定离线；最后心跳存在待处理任务且离线超过 10 分钟时，由 Watchdog 向预设渠道告警。恢复后先展示覆盖空窗并完成补拉、对账和回补，再恢复受影响 capability。
+
 ### Local runner
 
 在确有需要且平台允许时，使用用户本机已有登录会话执行策略允许或人工批准的动作。Runner 只接受有时效的一次性执行令牌，并验证计划 ID、内容哈希、策略版本和过期时间；它不接受招聘页面直接发出的指令。
@@ -48,7 +52,7 @@ Connector ActionDraft → core ActionPlan → policy ─┬─ allow
 - `Workspace` 是数据与策略隔离边界。
 - `CandidateProfile` 保存候选人身份和事实索引。
 - `ProfileEvidence` 保存可以支持材料声明的证据。
-- `SearchCampaign` 保存某一阶段的求职目标；暂停或更换方向不需要修改候选人事实。
+- `SearchCampaign` 保存某一阶段的求职目标；同一 Workspace 最多一个处于 `CALIBRATING` 或 `ACTIVE`。历史 Campaign 可进入只读 `LISTENING`，仅接收迟到回复与面试变更；暂停或更换方向不需要修改候选人事实。
 - 环境变量只承载部署参数和密钥，不承载个人求职偏好。
 
 ## 核心状态流
@@ -56,24 +60,27 @@ Connector ActionDraft → core ActionPlan → policy ─┬─ allow
 ```text
 DISCOVERED
 → NORMALIZED
-→ FILTERED
+→ ELIGIBILITY_CHECKED
 → SCORED
 → SHORTLISTED
 → MATERIALS_DRAFTED
+→ READY_TO_APPLY
+→ SUBMISSION_PLANNED / HANDOFF_READY
 → SUBMITTED
 → AWAITING_RESPONSE
-→ FOLLOW_UP_DUE
 → CHATTING
 → INTERVIEW_PROPOSED
-→ SCHEDULED
+→ INTERVIEW_SCHEDULED
 → CLOSED
 ```
 
-`AWAITING_RESPONSE` 和 `FOLLOW_UP_DUE` 让系统可以按冷却期和次数上限处理“已读不回”，而不是让用户每天重新查看。投递动作是否等待人工确认属于 ActionPlan 生命周期，不混入申请阶段；L3 可在策略授权后从 `MATERIALS_DRAFTED` 直接进入 `SUBMITTED`。只有招聘方确认明确时段且日历写入成功后，申请才能进入 `SCHEDULED`；此时立即通知用户，并把流程交给面试准备。后续改期由独立面试记录处理，不让申请漏斗倒退。
+`ELIGIBILITY_CHECKED` 表示确定性硬过滤已经完成；失败直接以具体 `closedReason` 进入 `CLOSED`，通过后才评分。Application 在 `AWAITING_RESPONSE` 等待新事实；跟进是否到期与次数由独立 CommunicationThread/FollowUpPlan 的 `FOLLOW_UP_DUE` 管理，不混入 Application 阶段。投递动作是否等待人工确认属于 ActionPlan 生命周期；外部成功必须经过 `READY_TO_APPLY → SUBMISSION_PLANNED → SUBMITTED`，人工交接则经过 `HANDOFF_READY → USER_ACTION_PENDING` 并以用户登记或只读证据收敛。只有招聘方确认明确时段且日历写入成功后，独立 Interview 才进入 `SCHEDULED`，Application 只记录 `INTERVIEW_SCHEDULED` 里程碑；此时立即通知用户，并把流程交给面试准备。后续改期由 Interview 处理，不让 Application 漏斗倒退。
+
+`CLOSED` 是必须带原因的 Application 终态。出现新外部事实或用户明确重新申请时创建关联的新 Application，旧实例不得倒退或复活。岗位先以稳定的 connector + externalId 或规范 URL 指纹精确去重；跨来源只建立由规范公司、岗位、地点、发布时间和内容指纹支持的疑似重复组，歧义不得自动合并。每个 Workspace 对同一已确认机会最多一个活跃 Application。
 
 状态只能按领域模型中声明的路径迁移。连接器只能返回不带 workspace、动作类型和连接器身份的 `ActionDraft`；核心系统根据调用入口和已注册 manifest 创建 `ActionPlan`，加入 schema、策略和连接器版本、内容哈希与过期时间。进入持久化和授权流程后，该计划必须作为不可变记录。策略引擎随后返回 `allow`、`require_approval`、`preview_only` 或 `deny`。
 
-动作拥有独立生命周期，不能复用申请阶段。进入 `AUTHORIZED` 时同时记录授权来源是策略还是人工、策略版本、载荷哈希和有效期：
+ActionPlanRecord 拥有独立生命周期，不能复用申请阶段。进入 `AUTHORIZED` 时同时记录授权来源是策略还是人工、策略版本、载荷哈希和有效期。下面只展示主执行路径；`DENIED`、`EXPIRED`、`INVALIDATED` 及全部失败关闭边以 `RF-UML-SM-PLN-01` 为准：
 
 ```text
 DRAFT ── policy allow ───────────────────→ AUTHORIZED
@@ -81,8 +88,10 @@ DRAFT ── policy allow ──────────────────
                                                ↓
                                            EXECUTING
                                                ↓
-                          SUCCEEDED / FAILED / EXPIRED / CANCELLED
+                              SUCCEEDED / FAILED / CANCELLED
 ```
+
+外部副作用由独立 ExternalOperation 保存三态事实：`QUEUED → LEASED → PREPARED → EXECUTING → SUCCEEDED / FAILED_CONFIRMED / OUTCOME_UNKNOWN`；其中 `OUTCOME_UNKNOWN` 只能进入 `RECONCILING` 或人工裁决，未收敛前父 ActionPlanRecord 保持 `EXECUTING`。
 
 ## 连接器能力
 
@@ -94,13 +103,15 @@ DRAFT ── policy allow ──────────────────
 - `inbox`：同步招聘消息
 - `reply`：准备或发送回复
 - `notify`：发送提醒
-- `calendar`：检查空闲时间并创建面试日历事件
+- `calendar`：查询与对账空闲/事件，幂等创建、更新和取消面试日历事件，并返回稳定 external ID
 
 每类能力有独立接口，声明 `discover` 不会隐式获得执行权限。岗位连接器只返回没有 workspace、内部 ID 和 campaign 归属的 `ExternalJobPosting`；这些可信字段由核心标准化流程写入。优先级依次为官方 API、用户主动提供的数据、公开招聘页、邮件，再到可选浏览器自动化。连接器不得绕过验证码或访问控制。
 
 执行接口按动作类型专门化：投递、普通回复、面试确认、通知和日历写入不能互相接收错误种类的 ActionPlan。执行上下文统一使用一次性 `authorizationToken`，它既可以来自策略授权，也可以来自人工批准。
 
-自动约面是核心系统协调招聘回复连接器和日历连接器的复合动作。`schedule_interview` 必须携带 Core 生成的 `InterviewScheduleReadiness`，记录精确时段、时区、两个连接器各自的版本、幂等键与载荷哈希、日历账户、预授权版本、最新空闲快照和未解决问题。预授权和空闲快照都必须绑定同一 workspace、日历账户和精确时段，连接器提供的数据只是输入，不能自行宣布“可以自动约面”。回复确认与日历写入使用独立操作绑定；任一步骤失败时申请保持 `INTERVIEW_PROPOSED` 并进入异常队列，只有两步均成功才进入 `SCHEDULED`。
+自动约面是核心系统协调招聘回复连接器和日历连接器的 calendar-first Saga。`schedule_interview` 必须携带 Core 生成的 `InterviewScheduleReadiness`，记录精确时段、时区、两个连接器各自的版本、幂等键与载荷哈希、日历账户、预授权版本、最新空闲快照和未解决问题。预授权和空闲快照都必须绑定同一 workspace、日历账户和精确时段，连接器提供的数据只是输入，不能自行宣布“可以自动约面”。
+
+正常顺序固定为：本地时段锁 → 新鲜日历复查 → 创建不含招聘方 attendee、不会触发邀请邮件的候选人私有 tentative event → 持久化日历结果 → 通过已授权 Reply Connector 发送确认 → 两侧明确成功后 Interview 进入 `SCHEDULED`，Application 记录 `INTERVIEW_SCHEDULED` 里程碑。日历与回复是独立 ExternalOperation，分别拥有幂等键、结果和对账；未知不得视为成功。若日历成功、回复明确失败，系统取消 tentative event；取消失败或未知时创建 `SEV-1` Exception 并暂停约面 capability。缺少查询/对账、幂等创建、更新/取消或稳定 external ID 任一能力的日历 Connector 不得开放 L3 排期。
 
 ## AI Provider
 
@@ -113,14 +124,19 @@ DRAFT ── policy allow ──────────────────
 - Cookie、浏览器 Profile 与敏感凭证只保存在本地 runner。
 - 审计事件记录计划、材料版本、审批、结果和时间，但避免保存不必要的原始个人数据。
 - 文本内容记录语言；金额使用 ISO 4217 币种和计薪周期；展示层再按 Workspace 的 locale、时区和币种格式化。
+- Campaign 活跃期间保留必要数据；结束 90 天后删除原始 JD、消息正文和附件；结构化申请历史、材料版本和最小审计摘要保留 1 年；滚动备份保留 30 天。用户显式导出、删除或选择更长保留期优先。
+- 产品内 Inbox 是通知事实来源，邮件是默认外部通知，Webhook 是可选适配器；第二个必需外部备用渠道属于 P1。
+- Kill Switch 停止全部业务外发，但内部审计与产品 Inbox 继续写入；只有隔离、预配置、幂等的控制面通道可发送一次停止告警。
 
 ## 部署模式
 
 - **当前 M0**：静态合成数据和安全桩，无真实凭证与外部执行。
+- **v0.1 Docker Compose**：macOS、Windows、Linux 为正式支持环境。
+- **v0.1 原生运行**：macOS 原生开发正式支持；Linux/Windows 原生运行时为 best effort。
 - **M1 本地单用户**：Web、Worker 和 SQLite 在用户控制的设备上运行。
-- **未来自托管服务**：可切换 PostgreSQL 和持久队列，但保持相同领域与策略接口。
+- **未来自托管服务**：可以研究 PostgreSQL 和持久队列，但 v0.1 不承诺跨库兼容，也不实现第二存储。
 - **可选常驻 Worker / 托管服务**：面试前 Autopilot 需要持续运行；用户可以部署在 NAS、家庭服务器或 VPS，也可以选择未来的托管 Worker。浏览器会话和本地凭证仍与常驻任务隔离，数据必须可迁移且能力边界透明。
 
 ## 后续基础设施
 
-M0 使用内存合成数据。M1 以本地 SQLite、版本化 schema 和可逆迁移起步，降低个人使用门槛；只有真实需求出现时才增加 PostgreSQL 与持久任务队列。存储、模型和通知均通过接口保持可替换。
+M0 使用内存合成数据。v0.1 只正式支持本地 SQLite、版本化 schema 和可逆的 SQLite schema migration；PostgreSQL 与 SQLite↔PostgreSQL 迁移是未来范围/N/A，不构成 v0.1 发布门。领域边界继续保持可移植，但不提前建设第二套存储。模型和通知通过接口保持可替换。

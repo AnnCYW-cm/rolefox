@@ -1,6 +1,6 @@
 # RoleFox v0.1 状态机
 
-- 状态：Review Draft
+- 状态：Accepted Design Baseline
 - 上级索引：[UML 设计基线](README.md)
 - 术语约定：所有“结果未知”“待对账”统一建模为 `OUTCOME_UNKNOWN`。
 
@@ -47,15 +47,29 @@ stateDiagram-v2
     UNVERIFIED --> VERIFIED : 用户确认事实
     UNVERIFIED --> CONFLICTED : 与其他事实矛盾
     CONFLICTED --> VERIFIED : 用户解决冲突并确认
-    VERIFIED --> VERIFIED : externalUsePolicy 在 ALLOWED 与 LOCAL_ONLY 间显式变更
+    VERIFIED --> VERIFIED : LOCAL_ONLY 改为 ALLOWED 并重新明确确认
     VERIFIED --> CONFLICTED : 新来源产生矛盾
-    VERIFIED --> REVOKED : 修改或撤销
-    CONFLICTED --> REVOKED : 删除冲突事实
+    VERIFIED --> INVALIDATING_DEPENDENCIES : 修改、ALLOWED 改 LOCAL_ONLY、禁用或删除
+    CONFLICTED --> INVALIDATING_DEPENDENCIES : 禁用或删除冲突事实
+    INVALIDATING_DEPENDENCIES --> VERIFIED : LOCAL_ONLY 生效且影响集已原子提交
+    INVALIDATING_DEPENDENCIES --> REVOKED : 旧 revision 撤销且影响集已原子提交
     REVOKED --> DELETED : 完成依赖失效与删除
+    state "Given: old revision is referenced by unexecuted material, answer or plan" as EVD_P0_06_GIVEN
+    state "When: edit, LOCAL_ONLY, disable or delete" as EVD_P0_06_WHEN
+    state "Then: persist and show complete impact list; stale/cancel every unexecuted dependency" as EVD_P0_06_IMPACT
+    state "Then: rescore/regenerate/reconfirm as needed" as EVD_P0_06_REBUILD
+    state "Then: completed external facts keep old revision as history only; never reuse" as EVD_P0_06_HISTORY
+    EVD_P0_06_GIVEN --> EVD_P0_06_WHEN
+    EVD_P0_06_WHEN --> INVALIDATING_DEPENDENCIES
+    INVALIDATING_DEPENDENCIES --> EVD_P0_06_IMPACT
+    EVD_P0_06_IMPACT --> EVD_P0_06_REBUILD
+    EVD_P0_06_IMPACT --> EVD_P0_06_HISTORY
     DELETED --> [*]
 ```
 
-`verificationStatus` 与 `externalUsePolicy` 是正交字段；只有 `VERIFIED + ALLOWED` 可以支持外发。进入 `CONFLICTED`、`LOCAL_ONLY`、`REVOKED` 或 `DELETED` 时，依赖的 MaterialSet 进入 `STALE`。只有尚未创建外部执行的 `DRAFT`、`AWAITING_APPROVAL`、`AUTHORIZED` ActionPlan 可直接失效；已有 `PREPARED` / `EXECUTING` ExternalOperation 时，能证明请求未发出才进入 `CANCELLED` / `FAILED_CONFIRMED`，否则必须进入 `OUTCOME_UNKNOWN → RECONCILING`，其 ActionPlan 保持 `EXECUTING` 到全部子操作收敛。已经发生的外部事实只能追加纠正记录，不能伪装回滚。
+`verificationStatus` 与 `externalUsePolicy` 是正交字段；只有 `VERIFIED + ALLOWED` 可以支持外发。进入 `INVALIDATING_DEPENDENCIES` 时，系统先以 `(evidenceId, oldRevision)` 反查并向用户列出全部未执行 MaterialSet、答案、附件引用和 ActionPlan，再在一个事务中发布新 Evidence revision/治理状态、把依赖材料与答案置为 `STALE`、把尚未外发的 `DRAFT` / `AWAITING_APPROVAL` / `AUTHORIZED` 计划失效并写 AuditIntent。任一步失败则旧 Evidence 与依赖状态均不改变，不能出现只修改 Evidence、旧计划仍可外发的窗口。
+
+对于 EVD-P0-06：Given 是旧 revision 已被未执行材料、答案或计划引用；When 是用户修改、将其改为 `LOCAL_ONLY`、禁用或删除；Then 必须先展示影响清单，再按需重新评分、重新生成或请求确认。已有 `PREPARED` / `EXECUTING` ExternalOperation 时，能证明请求未发出才进入 `CANCELLED` / `FAILED_CONFIRMED`，否则必须进入 `OUTCOME_UNKNOWN → RECONCILING`，其 ActionPlan 保持 `EXECUTING` 到全部子操作收敛。已经成功的外部动作和当时使用的 evidence revision 只保留历史、可追加纠正记录，但不能复用旧内容或伪装回滚。
 
 ## RF-UML-SM-CAM-01 SearchCampaign 生命周期
 
@@ -69,10 +83,10 @@ stateDiagram-v2
     CALIBRATING --> DRAFT : 修改目标或硬条件
     DRAFT --> ARCHIVED : 放弃计划
     CALIBRATING --> ARCHIVED : 放弃计划
-    ACTIVE --> ENDED_MONITORING : 结束新机会但继续只读监听已有申请
+    ACTIVE --> LISTENING : 结束新机会但继续只读监听已有申请
     ACTIVE --> ENDED : 停止本轮所有自动推进
-    ENDED_MONITORING --> ENDED : 停止只读监听
-    ENDED_MONITORING --> ARCHIVED : 用户确认不再监听并归档
+    LISTENING --> ENDED : 停止只读监听
+    LISTENING --> ARCHIVED : 用户确认不再监听并归档
     ENDED --> ARCHIVED : 归档历史
     DRAFT --> DELETING : guard 通过；删除未运行 Campaign 配置
     ENDED --> DELETING : guard 通过；删除 Campaign 配置
@@ -81,9 +95,9 @@ stateDiagram-v2
     DELETED --> [*]
 ```
 
-删除 guard 只允许 `DRAFT`、`ENDED`、`ARCHIVED` 进入 `DELETING`；`CALIBRATING`、`ACTIVE`、`ENDED_MONITORING` 必须先停止或归档。Campaign 删除只清理该 Campaign 的规则、偏好副本、未采用草稿和可安全再生的派生数据，并保留不可复活的 tombstone。已经发生的 Application、Interview、Message、ExternalOperation 和 Audit 不是 Campaign 可级联删除的子对象，继续保留；只有 Workspace 删除策略可以删除或脱敏这些历史事实。
+删除 guard 只允许 `DRAFT`、`ENDED`、`ARCHIVED` 进入 `DELETING`；`CALIBRATING`、`ACTIVE`、`LISTENING` 必须先停止或归档。Campaign 删除只清理该 Campaign 的规则、偏好副本、未采用草稿和可安全再生的派生数据，并保留不可复活的 tombstone。已经发生的 Application、Interview、Message、ExternalOperation 和 Audit 不是 Campaign 可级联删除的子对象，继续保留；只有 Workspace 删除策略可以删除或脱敏这些历史事实。
 
-`ARCHIVED` 是当前实例的业务终态，但允许数据管理命令将它转入 `DELETING`。`<<proposed DEC-15>>` 约束：同一 Workspace 最多一个 `CALIBRATING` 或 `ACTIVE` Campaign。三级暂停是独立控制覆盖层，不改变 Campaign 的业务生命周期。基于归档计划再次求职时必须复制稳定输入并创建新的 Campaign 实例，不能让原实例回到 `DRAFT`，也不能复活旧 ActionPlan、执行令牌或 L3 授权。
+`ARCHIVED` 是当前实例的业务终态，但允许数据管理命令将它转入 `DELETING`。同一 Workspace 最多一个 `CALIBRATING` 或 `ACTIVE` Campaign，但可同时保留多个历史 `LISTENING` Campaign；它们只接收迟到回复和面试变更，不发现、投递或跟进。去重与硬限额始终为 Workspace 全局约束。三级暂停是独立控制覆盖层。基于归档计划再次求职时必须复制稳定输入并创建新 Campaign，不能让原实例回到 `DRAFT`，也不能复活旧 Plan、token 或 L3 授权。
 
 ## RF-UML-SM-JOB-01 JobPosting 与机会判断生命周期
 
@@ -117,7 +131,7 @@ stateDiagram-v2
     QUARANTINED --> [*]
 ```
 
-岗位判断的终态不会自动删除 JobPosting 原文和来源快照。`QUALIFIED` 只是允许继续验证 Evidence 和材料，不代表允许投递。
+岗位判断终态不会立即级联删除 JobPosting 来源记录，但 Campaign 结束 90 天后保留期任务必须删除原始 JD 与消息正文/附件；结构化申请历史、材料版本和最小审计摘要最多默认保留 1 年，滚动备份 30 天。`QUALIFIED` 只是允许继续验证 Evidence 和材料，不代表允许投递。
 
 ## RF-UML-SM-APP-01 Application 生命周期
 
@@ -182,6 +196,7 @@ stateDiagram-v2
 
 - `Application` 不承载 FollowUpPlan 的到期与计数；跟进禁用或一次额度用尽后仍保持 `AWAITING_RESPONSE` 并继续只读监听。
 - `CLOSED` 必须填写原因，例如 duplicate、hard-filter-failed、below-threshold、job-closed、rejected、withdrawn、no-contact、user-skipped、risk-blocked。
+- 新外部事实或用户明确重新申请时创建带 `reapplyOfApplicationId` 的新 Application；旧实例永久保持 `CLOSED`，不得状态倒退。
 - 历史导入是初始化/对账路径，不是从发现阶段伪造一串没有发生过的迁移。
 - `SUBMISSION_PENDING_RECONCILIATION` 是 Application 的用户可见派生状态，权威 unknown 状态仍属于 ExternalOperation。
 - `SCHEDULED` 只属于 Interview；Application 记录 `INTERVIEW_SCHEDULED` 里程碑。后续改期、取消和完成不让 Application 漏斗倒退。
@@ -251,6 +266,7 @@ stateDiagram-v2
     %% @anchor OPERATION_LIFECYCLE
     [*] --> QUEUED : durable intent 已提交
     QUEUED --> LEASED : Worker 获得 lease 与 fencing token
+    QUEUED --> CANCELLED : 上游失败、撤权或冲突且请求尚未派发
     LEASED --> PREPARED : 授权、额度、审计和绑定复核通过
     LEASED --> CANCELLED : 请求前撤权或过期
     PREPARED --> EXECUTING : 开始外部请求
@@ -307,15 +323,22 @@ stateDiagram-v2
 ```mermaid
 stateDiagram-v2
     %% @anchor MESSAGE_LIFECYCLE
+    %% @anchor MESSAGE_STOP_CONTACT
     %% @anchor FOLLOWUP_DISABLED
     %% @anchor FOLLOWUP_ONCE
     %% @anchor PASSIVE_MONITORING
+    state "STOPPING_CONTACT: atomic Application=CLOSED + closureReason + cancel all unstarted reply/follow-up" as STOPPING_CONTACT
+    state "STOPPED: terminal for automation; late/duplicate messages cannot reopen or auto-contact" as STOPPED
+    state "EXC-P0-05 Given: recruiter rejected, job closed or requested no contact" as EXC_P0_05_GIVEN
+    state "When: latest message is uniquely linked and stop intent is confirmed" as EXC_P0_05_WHEN
+    EXC_P0_05_GIVEN --> EXC_P0_05_WHEN
+    EXC_P0_05_WHEN --> STOPPING_CONTACT
     [*] --> UNCORRELATED : 收到外部消息
     UNCORRELATED --> RISK_EXCEPTION_OPEN : 签名、身份、附件、注入或骗局风险
     UNCORRELATED --> NEEDS_LINK : 无法唯一关联 Application
     NEEDS_LINK --> CLASSIFYING : 用户完成关联
     UNCORRELATED --> CLASSIFYING : 唯一关联成功
-    CLASSIFYING --> STOPPED : 拒绝、no-contact 或岗位关闭
+    CLASSIFYING --> STOPPING_CONTACT : 已确认拒绝、no-contact 或岗位关闭意图
     CLASSIFYING --> INTERVIEW_SIGNAL : 面试邀请
     CLASSIFYING --> WAITING : 申请确认或普通状态更新
     CLASSIFYING --> ANSWER_CHECK : 补充信息请求或常规问题
@@ -329,14 +352,17 @@ stateDiagram-v2
     WAITING --> PASSIVE_WAITING : 跟进默认关闭、已过期或 sentCount 已为 1
     FOLLOW_UP_DUE --> PASSIVE_WAITING : 一次跟进明确成功，sentCount = 1
     FOLLOW_UP_DUE --> PASSIVE_WAITING : 跟进明确失败、过期或不再授权
-    FOLLOW_UP_DUE --> STOPPED : 拒绝、no-contact、岗位关闭或 Campaign 结束
+    FOLLOW_UP_DUE --> STOPPING_CONTACT : 新事实为拒绝、no-contact 或岗位关闭
     PASSIVE_WAITING --> CLASSIFYING : 后续收到任何新消息
     RISK_EXCEPTION_OPEN --> NEEDS_HUMAN : 用户核验后允许人工处理
-    RISK_EXCEPTION_OPEN --> STOPPED : 用户确认诈骗、恶意或停止联系
+    RISK_EXCEPTION_OPEN --> STOPPING_CONTACT : 用户确认诈骗、恶意或停止联系
+    STOPPING_CONTACT --> STOPPED : TX 关闭 Application、写 closureReason、取消未开始 reply/follow-up
     STOPPED --> [*]
 ```
 
 Webhook 与 polling 导入首先按 account、thread、external message ID 去重并按 revision 合并，状态机只消费最新、已确认的线程事实。`PASSIVE_WAITING` 仍持续只读同步；它只禁止继续自动跟进，不代表 Application 或 CommunicationThread 已关闭。AnswerPreauthorization 空集合表示全部禁止自动回答。
+
+对于 EXC-P0-05：Given 是招聘方已明确拒绝、岗位关闭或要求停止联系；When 是最新消息 revision 在唯一关联和意图置信门通过后被确认为该停止意图；Then 在同一事务中把 Application 置为 `CLOSED`、记录精确 `closureReason` 与来源 Message ID，并使所有尚未发出的 reply/follow-up Plan、Authorization、Operation 和调度项取消或失效。已可能发出的 operation 进入对账而不重发；迟到或重复停止消息只合并来源证据，`STOPPED` 不自动重开、不继续自动联系，只有用户另行创建明确的新业务事实或 reapply 流程才可产生新计划。
 
 ## RF-UML-SM-INT-01 Interview 生命周期
 
@@ -368,7 +394,7 @@ stateDiagram-v2
     COMPLETED --> [*]
 ```
 
-Interview 只保存业务事实；`SCHEDULING`、`PARTIAL` 和 `RECONCILING` 属于 `RF-UML-SM-SAGA-01`。首次排期在两项外部成功都得到证据前始终保持 `PROPOSED`。首次进入 `SCHEDULED` 触发核心交付通知；重复 revision 不重复回复、不重复建日历事件，也不重复发送同一通知。`DETAILS_INCOMPLETE` 仍表示时段已确认，只是交付包不完整。Application 只记录首次 `INTERVIEW_SCHEDULED` 里程碑；Interview 后续改期、取消和完成不会让 Application 漏斗倒退。v0.1 的改期和取消默认交由用户处理，活动见 `RF-UML-ACT-INTCHANGE-01`。
+Interview 只保存业务事实；`CALENDAR_EXECUTING`、`REPLY_EXECUTING`、`PARTIAL` 和 `RECONCILING` 等排期执行状态属于 `RF-UML-SM-SAGA-01`。首次排期在两项外部成功都得到证据前始终保持 `PROPOSED`。首次进入 `SCHEDULED` 触发核心交付通知；重复 revision 不重复回复、不重复建日历事件，也不重复发送同一通知。`DETAILS_INCOMPLETE` 仍表示时段已确认，只是交付包不完整。Application 只记录首次 `INTERVIEW_SCHEDULED` 里程碑；Interview 后续改期、取消和完成不会让 Application 漏斗倒退。v0.1 的改期和取消默认交由用户处理，活动见 `RF-UML-ACT-INTCHANGE-01`。
 
 ## RF-UML-SM-SAGA-01 InterviewSchedulingSaga 生命周期
 
@@ -377,25 +403,32 @@ stateDiagram-v2
     %% @anchor INTERVIEW_SAGA
     %% @anchor PARTIAL_RECONCILIATION
     [*] --> READY : readiness、reservation 与授权均有效
-    READY --> EXECUTING : 创建两项 durable ExternalOperation
-    EXECUTING --> BOTH_SUCCEEDED : 招聘确认与日历均明确成功
-    EXECUTING --> PARTIAL : 只有一项明确成功
-    EXECUTING --> OUTCOME_UNKNOWN : 任一项结果未知
-    PARTIAL --> RECONCILING : 创建高优先级 Exception
-    OUTCOME_UNKNOWN --> RECONCILING : 禁止普通重试并查询外部事实
+    READY --> CALENDAR_EXECUTING : 创建两项 durable Operation；先执行 calendar
+    CALENDAR_EXECUTING --> CALENDAR_SUCCEEDED : 私有 tentative event 明确成功并落盘
+    CALENDAR_EXECUTING --> SAFE_TO_REPLAN : calendar 明确未执行；reply 尚未执行
+    CALENDAR_EXECUTING --> OUTCOME_UNKNOWN : calendar 结果未知
+    CALENDAR_SUCCEEDED --> REPLY_EXECUTING : 才允许执行预创建的 reply Operation
+    CALENDAR_SUCCEEDED --> PARTIAL : reply 请求前被当前授权、绑定或 control 取消
+    REPLY_EXECUTING --> BOTH_SUCCEEDED : reply 明确成功
+    REPLY_EXECUTING --> PARTIAL : reply 明确失败；calendar 已成功
+    REPLY_EXECUTING --> OUTCOME_UNKNOWN : reply 结果未知；calendar 已成功
+    PARTIAL --> COMPENSATING : 创建新的 cancel-event Plan/Auth/Operation
+    PARTIAL --> MANUAL_HANDOFF : 补偿未获授权、过期、绑定变化或 KILL 阻止
+    OUTCOME_UNKNOWN --> RECONCILING : 禁止普通重试并查询对应外部事实
+    RECONCILING --> CALENDAR_SUCCEEDED : calendar 成功且 reply 从未执行
     RECONCILING --> BOTH_SUCCEEDED : 两项都得到唯一成功证据
-    RECONCILING --> SAFE_TO_REPLAN : 证明两项均未生效
-    RECONCILING --> COMPENSATING : 仅一项生效且存在安全补偿
-    RECONCILING --> MANUAL_HANDOFF : 无法唯一裁决或不能安全补偿
+    RECONCILING --> SAFE_TO_REPLAN : calendar 未执行且 reply 从未执行
+    RECONCILING --> COMPENSATING : calendar 成功且 reply 已证明未发送
+    RECONCILING --> MANUAL_HANDOFF : 结果仍歧义、补偿不可授权或 legacy reply-first 仍为部分成功
     COMPENSATING --> COMPENSATED : 补偿 operation 明确成功
-    COMPENSATING --> MANUAL_HANDOFF : 补偿失败或结果未知
+    COMPENSATING --> MANUAL_HANDOFF : 补偿失败/未知；SEV-1 并暂停约面
     BOTH_SUCCEEDED --> [*]
     SAFE_TO_REPLAN --> [*]
     COMPENSATED --> [*]
     MANUAL_HANDOFF --> [*]
 ```
 
-只有 `BOTH_SUCCEEDED` 可以使 Interview 从 `PROPOSED` 进入 `SCHEDULED`。`SAFE_TO_REPLAN` 和 `COMPENSATED` 仍保持 Interview 为 `PROPOSED`；人工交接后也必须由用户提供两侧外部证据，不能仅凭“已交给用户”标记成功。进入 `COMPENSATING` 前必须创建新的补偿 ActionPlan、Authorization 与 ExternalOperation；原来已成功的子 operation 永久保留 `SUCCEEDED`。补偿能力要求由 `<<proposed DEC-12>>` 确认。
+只有 `BOTH_SUCCEEDED` 可以使 Interview 从 `PROPOSED` 进入 `SCHEDULED`。正常路径固定先创建候选人私有 tentative event、落盘明确日历结果，再发送回复；日历明确失败时 reply 尚未执行，可安全进入 `SAFE_TO_REPLAN`。`SAFE_TO_REPLAN` 和 `COMPENSATED` 仍保持 Interview 为 `PROPOSED`。日历成功、回复失败时必须以新的 Plan/Authorization/Operation 取消 event；取消失败或未知创建 `SEV-1` Exception 并暂停约面 capability。恢复或导入发现 legacy reply-first 时只允许只读对账：若两项原始 operation 最终都有唯一、可验证且绑定一致的成功证据，可按真实事实收敛为 `BOTH_SUCCEEDED`；仍为部分成功、任一证据不足或绑定无法验证时进入人工接管，绝不自动补建缺失事件或重发回复。缺少查询/对账、幂等创建、更新/取消或稳定 external ID 任一能力的日历 Connector 不得进入 L3。
 
 ## RF-UML-SM-NOT-01 Notification 生命周期
 
@@ -404,12 +437,13 @@ stateDiagram-v2
     %% @anchor NOTIFICATION_LIFECYCLE
     [*] --> PENDING : 业务事件创建通知意图
     PENDING --> INBOX_PERSISTED : 先持久化产品内通知事实
-    INBOX_PERSISTED --> COMPLETE_INBOX_ONLY : 该事件无需外部即时提醒
+    INBOX_PERSISTED --> COMPLETE_INBOX_ONLY : SEV-3 或已原子纳入摘要 Notification
     INBOX_PERSISTED --> SENDING : 需要外部即时提醒并创建 durable operation
     SENDING --> ACCEPTED : 渠道接受
     SENDING --> FAILED_RETRYABLE : 明确可重试失败
+    SENDING --> UNDELIVERED : 已确认不可重试，或发送前已耗尽重试预算
     SENDING --> OUTCOME_UNKNOWN : 超时或响应丢失
-    FAILED_RETRYABLE --> SENDING : 未超次数且幂等安全
+    FAILED_RETRYABLE --> SENDING : 新 retry Plan/Auth/Operation 已原子提交
     FAILED_RETRYABLE --> UNDELIVERED : 重试预算耗尽
     OUTCOME_UNKNOWN --> RECONCILING : 查询渠道或去重发送
     RECONCILING --> ACCEPTED : 找到发送记录
@@ -419,10 +453,10 @@ stateDiagram-v2
     MANUAL_REVIEW --> UNDELIVERED : 用户确认未送达
     ACCEPTED --> DELIVERED : 渠道支持并返回送达证据
     ACCEPTED --> DELIVERY_UNKNOWN : 渠道不提供送达证明
-    UNDELIVERED --> FALLBACK_DECISION : 高优先级通知
+    UNDELIVERED --> FALLBACK_DECISION : SEV-0 或 SEV-1 通知
     UNDELIVERED --> COMPLETE_INBOX_ONLY : 普通通知保留失败事实
     FALLBACK_DECISION --> INBOX_ESCALATED : 产品内 Inbox 持续置顶
-    FALLBACK_DECISION --> SECONDARY_SENDING : 已配置且已验证第二渠道
+    FALLBACK_DECISION --> SECONDARY_SENDING : P1 必需；v0.1 仅在已配置可选 Webhook 时
     SECONDARY_SENDING --> DELIVERED : 第二渠道有送达证据
     SECONDARY_SENDING --> DELIVERY_UNKNOWN : 第二渠道接受但无送达证明
     SECONDARY_SENDING --> INBOX_ESCALATED : 第二渠道明确失败或结果未知需人工核对
@@ -432,7 +466,9 @@ stateDiagram-v2
     DELIVERED --> [*]
 ```
 
-产品内 Inbox 是 durable 事实来源，但设备或应用离线时不能宣称用户已经看到。高优先级外部通知失败后的“只保留产品内置顶”与“尝试已验证第二渠道”尚待 `<<proposed DEC-04>>` 确认。任何通知渠道失败都不能把 Interview 从 `SCHEDULED` 改回其他状态。
+产品内 Inbox 是 durable 事实来源，但设备或应用离线时不能宣称用户已经看到。邮件是默认外部通知，Webhook 是可选适配器；第二个必需外部备用渠道属于 P1。`SENDING` 只有在渠道给出可验证的不可重试结论，或该 operation 创建时预算已耗尽，才可直接进入 `UNDELIVERED`；可重试失败必须先进入 `FAILED_RETRYABLE`，超时或响应丢失必须进入 `OUTCOME_UNKNOWN`，不得把未知偷换成未送达后另发。任何通知渠道失败都不能把 Interview 从 `SCHEDULED` 改回其他状态。通知严重度统一使用 `SEV-0`—`SEV-3`，不与 Case 优先级 P0/P1/P2 混用。
+
+`SEV-2` 原始 Notification 在 cutoff 前保持 `INBOX_PERSISTED`。到达用户时区的每日 cutoff 后，系统在一个事务中创建新的摘要 Notification、记录成员引用，并将已纳入成员置为 `COMPLETE_INBOX_ONLY`；摘要本身复用上图的 `PENDING → INBOX_PERSISTED → SENDING → 三态结果`，不得引入未建模的旁路状态或复用旧发送 Operation。
 
 ## RF-UML-SM-POL-01 自动化等级与三级暂停
 
@@ -460,10 +496,10 @@ stateDiagram-v2
             RUNNING --> KILL_SWITCH : 全局急停
             PAUSE_NEW --> KILL_SWITCH : 全局急停
             STOP_OUTBOUND --> KILL_SWITCH : 全局急停
-            STOP_OUTBOUND --> PAUSE_NEW : 用户缩小控制且重校验通过
+            STOP_OUTBOUND --> PAUSE_NEW : 用户显式缩小控制；相关 capability 先置 L2
             PAUSE_NEW --> RUNNING : 用户明确解除且重校验通过
-            STOP_OUTBOUND --> RUNNING : 用户明确解除且重校验通过
-            KILL_SWITCH --> STOP_OUTBOUND : 完成事故检查后显式分级解除
+            STOP_OUTBOUND --> RUNNING : 对账完成；用户逐 capability 以 L2 恢复
+            KILL_SWITCH --> STOP_OUTBOUND : 事故检查、对账并使旧 Plan/Auth 失效
         }
         --
         state DeletionControl {
@@ -476,7 +512,9 @@ stateDiagram-v2
     [*] --> AutomationControl
 ```
 
-`CapabilityMode` 按发现、材料、投递、回复、跟进、约面等能力分别保存；`ControlOverlay` 是 Workspace 级独立覆盖层。有效权限始终取“能力模式 × 当前 Policy 版本 × 控制覆盖层 × RuntimeHealth”的交集。进入或退出暂停不会改写所保存的原能力模式，也不会复活旧 ActionPlan；恢复前必须按最新绑定重新校验。解除 `STOP_OUTBOUND` 或 `KILL_SWITCH` 后实际先回 L2、再逐能力重开 L3 的建议尚待 `<<proposed DEC-19>>` 确认，未确认前按失败关闭处理。
+`CapabilityMode` 按发现、材料、投递、回复、跟进、约面等能力分别保存；`ControlOverlay` 是 Workspace 级独立覆盖层。有效权限始终取“能力模式 × 当前 Policy 版本 × 控制覆盖层 × RuntimeHealth”的交集。解除 `STOP_OUTBOUND` 或 `KILL_SWITCH` 前先完成对账，旧 Plan 和授权永不复活；用户逐 capability 恢复且第一步只能是 L2，健康检查和明确确认通过后才可重新进入 L3。
+
+L3 门槛按 capability 独立计算：任何真实外发先连续 7 天 Shadow；匹配/材料各 50 个决策；投递/回复各 20 次真实 L2；自动约面 5 次真实 L2 并通过 20 个合成异常 Case；未授权、重复、虚构和错误排期事件均为 0。
 
 `DeletionControl` 不恢复、放宽或绕过任何业务 capability。它只在用户另行确认永久删除、Workspace 已进入 `DELETING` 时短暂变为 `REVOCATION_ONLY`，仅接受绑定本次删除请求和固定 Connector account 的 `credential_revocation` Plan；该 Plan 仍需 Policy、Authorization、durable Operation、AuditIntent、Outbox、幂等与未知结果对账。其他投递、回复、跟进、约面和外部通知继续受 `STOP_OUTBOUND` / `KILL_SWITCH` 拒绝。
 
@@ -487,7 +525,7 @@ stateDiagram-v2
 | L3_LIMITED | 允许 | 允许 | 按能力授权 | 按能力授权 | 按通知规则 |
 | PAUSE_NEW | 停止新抓取；未投递机会只读保留且不建新 Plan | 继续 | 禁止 | 已有申请按原能力模式和 Policy 继续 | 按通知规则 |
 | STOP_OUTBOUND | 可继续内部发现与评分但不建外发 Plan | 必须继续 | 禁止 | 禁止新外发；在途只对账 | 产品内安全/状态事实继续 |
-| KILL_SWITCH | 停止调度与自动 mutation；非关键读取可继续 | 必须继续 | 全拒绝 | 全拒绝；已发请求进入对账 | 产品内安全事件继续；外部安全通知是否豁免见 `<<proposed DEC-18>>` |
+| KILL_SWITCH | 停止调度与全部业务 mutation；非关键读取可继续 | 必须继续 | 全拒绝 | 全拒绝；已发请求进入对账 | 内部审计/Inbox 继续；隔离、预配置、幂等安全通道最多一次停止告警 |
 | REVOCATION_ONLY（仅 Workspace=DELETING） | 禁止 | 允许既有业务 unknown 的只读收敛与撤权对账；新外发仅限 credential_revocation | 禁止 | 禁止 | 仅产品内删除进度；外部通知禁止 |
 
 普通离线是 RuntimeHealth 事件，不是人工控制状态：组件恢复不会自动解除 `PAUSE_NEW`、`STOP_OUTBOUND` 或 `KILL_SWITCH`。三级控制只通过用户的显式命令改变。
@@ -497,6 +535,8 @@ stateDiagram-v2
 ```mermaid
 stateDiagram-v2
     %% @anchor POLICY_VERSIONING
+    %% @anchor POLICY_CHANGE_INVALIDATION
+    %% @anchor QUEUED_POLICY_RECHECK
     [*] --> DRAFT : 编辑策略
     DRAFT --> VALIDATING : 请求发布
     VALIDATING --> DRAFT : 范围模糊、缺少期限或限额
@@ -507,37 +547,94 @@ stateDiagram-v2
     SUPERSEDED --> [*]
     REVOKED --> [*]
     EXPIRED --> [*]
+    state "POL-P0-04 Given: plans based on CURRENT policy are not yet confirmed successful" as POL_P0_04_GIVEN
+    state "When: publish new policy, revoke grant or request rollback" as POL_P0_04_WHEN
+    state "Then: show impact; atomically invalidate unstarted old Plan/Auth" as POL_P0_04_INVALIDATE
+    state "Then: desired work gets a new version, Plan, hash, evaluation and authorization" as POL_P0_04_REPLAN
+    state "Then: possibly-sent operation keeps old factual state and goes UNKNOWN/reconcile; never replan in parallel" as POL_P0_04_INFLIGHT
+    POL_P0_04_GIVEN --> POL_P0_04_WHEN
+    POL_P0_04_WHEN --> POL_P0_04_INVALIDATE
+    POL_P0_04_WHEN --> POL_P0_04_INFLIGHT
+    POL_P0_04_INVALIDATE --> POL_P0_04_REPLAN
+    state "AUTH-004 Given: queued operation references old policyVersion" as AUTH_004_GIVEN
+    state "When: Executor rechecks before external call" as AUTH_004_WHEN
+    state "Then: old auth invalid; cancel if unsent and re-enter new policy evaluation" as AUTH_004_REEVAL
+    state "Then: new policy allows => create new Plan/hash/Auth; never reuse old" as AUTH_004_ALLOW
+    state "Then: new policy denies => action-scoped Exception and zero external call" as AUTH_004_DENY
+    state "Then: cannot prove unsent => UNKNOWN/reconcile; never resend" as AUTH_004_UNKNOWN
+    AUTH_004_GIVEN --> AUTH_004_WHEN
+    AUTH_004_WHEN --> AUTH_004_REEVAL
+    AUTH_004_WHEN --> AUTH_004_UNKNOWN
+    AUTH_004_REEVAL --> AUTH_004_ALLOW
+    AUTH_004_REEVAL --> AUTH_004_DENY
 ```
 
 任一版本离开 `CURRENT` 时，只直接失效引用该版本且尚未外发的 `DRAFT`、`AWAITING_APPROVAL`、`AUTHORIZED` ActionPlan 与对应授权。已经拥有 `PREPARED` / `EXECUTING` ExternalOperation 的 Plan 保持 `EXECUTING`：可证明请求未发则将 operation 记为 `CANCELLED` / `FAILED_CONFIRMED`，可能已发则记为 `OUTCOME_UNKNOWN` 并对账，直到全部子操作进入可证明终态。回退历史配置也必须发布新的版本号，不能让旧授权复活。
+
+| Case / anchor | Given | When | Then |
+| --- | --- | --- | --- |
+| POL-P0-04 / `POLICY_CHANGE_INVALIDATION` | 存在基于当前 policyVersion、尚未明确成功的计划 | 用户发布新策略、撤销授权或选择历史配置回退 | 先展示受影响计划、capability 和预计结果；以一个新版本原子替换 CURRENT，使旧版本的未外发计划/授权取消或过期。仍需继续的动作从当前事实构建**新 Plan、新 hash、新评估与新授权**；超出新规则则创建异常，绝不复活或原地改写旧计划。 |
+| AUTH-004 / `QUEUED_POLICY_RECHECK` | 队列中的 operation/Authorization 仍引用旧 policyVersion | Executor 在任何外部调用前复核当前版本 | 旧授权立即无效。若可证明尚未调用外部系统，取消旧 operation 并使动作回到新策略评估；新策略允许时也只能建立新计划/授权，越界时只为该动作创建 Exception。若可能已经外发则进入 `OUTCOME_UNKNOWN → RECONCILING`，不把它重置后重发。 |
 
 ## RF-UML-SM-RUN-01 Connector、Worker 与 Runner 健康状态
 
 ```mermaid
 stateDiagram-v2
     %% @anchor RUNTIME_HEALTH
+    %% @anchor RUNTIME_CAPABILITY_MATRIX
     %% @anchor DEGRADED
+    %% @anchor AUTH_REQUIRED
     %% @anchor POLICY_BLOCKED
+    %% @anchor ACCOUNT_POLICY_BLOCKED
     [*] --> UNKNOWN
     UNKNOWN --> STARTING : 进程启动或连接配置
     STARTING --> ONLINE : probe 与心跳成功
+    STARTING --> DEGRADED : capability matrix 部分可用
     STARTING --> AUTH_REQUIRED : 凭证缺失、过期或撤销
-    STARTING --> POLICY_BLOCKED : 条款、权限或版本不允许
+    STARTING --> POLICY_BLOCKED : 条款、权限、版本或账号风控不允许
     ONLINE --> DEGRADED : 限流、局部能力或依赖故障
-    ONLINE --> OFFLINE : 超过心跳阈值
+    ONLINE --> AUTH_REQUIRED : 外部检测 credential EXPIRED 或 REVOKED
+    ONLINE --> POLICY_BLOCKED : 条款、official scope、权限或版本运行中失配
+    ONLINE --> POLICY_BLOCKED : 风控警告、功能受限、异常登录或封禁提示
+    ONLINE --> OFFLINE : 60 秒心跳连续缺失两次，达到 120 秒
     DEGRADED --> ONLINE : 健康恢复
     DEGRADED --> OFFLINE : 心跳停止
-    DEGRADED --> AUTH_REQUIRED : 刷新失败
+    DEGRADED --> AUTH_REQUIRED : 刷新失败，或外部检测 EXPIRED/REVOKED
+    DEGRADED --> POLICY_BLOCKED : 条款、official scope、权限或版本运行中失配
+    DEGRADED --> POLICY_BLOCKED : 风控警告、功能受限、异常登录或封禁提示
     ONLINE --> DRAINING : 升级或计划停止
     DRAINING --> OFFLINE : lease 释放且 mutation gate 关闭
     OFFLINE --> RECOVERING : 心跳恢复
     AUTH_REQUIRED --> RECOVERING : 用户重新授权
-    POLICY_BLOCKED --> RECOVERING : 条款或版本重新审查
+    POLICY_BLOCKED --> RECOVERING : 条款/版本复核或账号风险人工解除
     RECOVERING --> DEGRADED : 补拉和对账尚未完成
     RECOVERING --> ONLINE : 游标补拉、积压重校验和对账完成
+    state "ONB-P0-04 Given: connector authorization may be invalid, expired or insufficient" as ONB_P0_04_GIVEN
+    state "When: probe every account capability, method and effective permission" as ONB_P0_04_WHEN
+    state "Then: persist/display READABLE, WRITABLE, UNAVAILABLE or AUTH_REQUIRED per row" as ONB_P0_04_MATRIX
+    state "Then: update only failed row; preserve configs, Campaign and all unrelated capability states" as ONB_P0_04_LOCAL
+    ONB_P0_04_GIVEN --> ONB_P0_04_WHEN
+    ONB_P0_04_WHEN --> ONB_P0_04_MATRIX
+    ONB_P0_04_MATRIX --> ONB_P0_04_LOCAL
+    state "COMP-008 Given: account has risk warning, restriction, abnormal login or ban" as COMP_008_GIVEN
+    state "When: connector reads and verifies status for exact account" as COMP_008_WHEN
+    state "Then: all writes for that account POLICY_BLOCKED + SEV-0 notification" as COMP_008_BLOCK
+    state "Then: other accounts/platforms unchanged; no automatic unblock" as COMP_008_LOCAL
+    COMP_008_GIVEN --> COMP_008_WHEN
+    COMP_008_WHEN --> COMP_008_BLOCK
+    COMP_008_BLOCK --> COMP_008_LOCAL
 ```
 
-健康状态按 Worker、Runner、Connector 和 capability 分别记录。Worker 离线形成监控空窗；Runner 离线只阻止它承载的执行，Worker 仍可做允许的读取、同步与对账。普通离线恢复仅补拉、去重、对账并重校验积压，不改变人工控制覆盖层，也不把 Campaign 状态当作进程在线证据。恢复重校验只直接失效未外发 Plan；已有 `PREPARED` / `EXECUTING` operation 必须按“证明未发则取消、可能已发则 `OUTCOME_UNKNOWN → RECONCILING`”收敛，父 Plan 在此期间保持 `EXECUTING`。
+健康状态按 Worker、Runner、Connector account 和 capability 分别记录。`EXPIRED` 与 `REVOKED` 是凭证提供方、broker 或 probe 返回的**外部检测事实**，不是并列 RuntimeHealth 状态；无论在启动、`ONLINE` 还是 `DEGRADED` 中发现，都统一映射为受影响 account/credential lineage 的 `AUTH_REQUIRED`。条款复核过期、official scopes 收缩、permission/capability/runtime/version 不再合规则映射为 `POLICY_BLOCKED`。两类迁移都立即关闭受影响 capability 的新计划和待执行外发；可证明未发的 operation 取消，可能已发的进入 `OUTCOME_UNKNOWN → RECONCILING`，其他 Workspace、Connector account 与 capability 不受牵连。
+
+进入 `AUTH_REQUIRED` 或 `POLICY_BLOCKED` 的同一持久事务必须写诊断事件、去敏审计和产品内 Notification。凭证撤销、疑似账号风险、权限越界或官方 scope 非预期收缩使用 `SEV-0`；计划内到期或需例行复核且没有风险迹象时使用 `SEV-1`，两者均按通知状态机立即尝试外部提醒。通知不得包含 secret、token 或原始凭证，只包含受影响 Connector/account 的安全显示名、原因码、发生时间和恢复动作；发送失败不解除 fail-closed 状态，重复 probe 以 `(workspaceId, connectorId, accountId, reasonEpoch)` 去重。
+
+Worker 每 60 秒心跳，连续缺失两次、达到 120 秒即离线；有待处理任务且离线超过 10 分钟时发送外部告警。Runner 离线只阻止它承载的执行，Worker 仍可做允许的读取、同步与对账。恢复后展示覆盖空窗与回补结果，并补拉、去重、对账、重校验积压；不改变人工控制覆盖层，也不把 Campaign 状态当作进程在线证据。已有 `PREPARED` / `EXECUTING` operation 必须按“证明未发则取消、可能已发则 `OUTCOME_UNKNOWN → RECONCILING`”收敛。
+
+| Case / anchor | Given | When | Then |
+| --- | --- | --- | --- |
+| ONB-P0-04 / `RUNTIME_CAPABILITY_MATRIX` | 用户已提交 Connector 授权，但认证可能失败、过期或权限不足 | 系统逐 account 探测 manifest 中每个 capability/method、permission 与实际远端权限 | 原子保存并完整展示 capability matrix：`READABLE`、`WRITABLE`、`UNAVAILABLE` 或 `AUTH_REQUIRED`，含去敏原因和检查时间。只更新被探测的 account/capability 行；单一失败不得删除 Connector/Campaign/其他账号配置、不得改变 Campaign 状态或全局暂停，其余能力继续按各自行状态运行。 |
+| COMP-008 / `ACCOUNT_POLICY_BLOCKED` | 平台账号返回风控警告、功能受限、异常登录或封禁提示 | Connector 读取并以当前账号身份验证该状态 | 原子把该 `connectorId + accountId` 的**全部写 capability** 置为 `POLICY_BLOCKED`，取消未开始外发、对可能已发操作只读对账，并创建去敏 `SEV-0` Inbox/外部通知。其他账号和平台保持原状态；后续普通健康 probe 不自动解封，须用户处理平台风险并重新审查后进入 RECOVERING。 |
 
 ## RF-UML-SM-DAT-01 数据删除、备份恢复与 mutation gate
 
@@ -558,10 +655,9 @@ stateDiagram-v2
     MUTATION_GATED --> RESTORING : 校验备份后恢复
     RESTORING --> RECONCILING_RESTORE : restore 与必要 schema migration 完成
     RECONCILING_RESTORE --> REAUTH_REQUIRED : 非终态 operation 已对账
-    REAUTH_REQUIRED --> DEC19_GUARD : 只读与对账连接已重建
-    DEC19_GUARD --> READ_ONLY_OUTBOUND_CLOSED : DEC-19 尚未 Accepted
-    READ_ONLY_OUTBOUND_CLOSED --> DEC19_GUARD : DEC-19 已 Accepted 且用户请求重新开放
-    DEC19_GUARD --> MUTATION_OPEN : DEC-19 已 Accepted，且用户显式发布新外发授权并通过门禁
+    REAUTH_REQUIRED --> READ_ONLY_OUTBOUND_CLOSED : 只读与对账连接已重建；旧授权不可用
+    READ_ONLY_OUTBOUND_CLOSED --> L2_RESTORE_READY : 用户逐 capability 显式恢复并发布新授权
+    L2_RESTORE_READY --> MUTATION_OPEN : L2 生效；健康检查和明确确认后可另过 L3 门
     MUTATION_GATED --> DELETING : 用户确认永久删除
     DELETING --> DELETING : REVOCATION_ONLY 撤权或只读对账；业务 mutation 仍关闭
     DELETING --> DELETED : 业务数据清理、撤权与最小摘要处理完成
@@ -570,4 +666,4 @@ stateDiagram-v2
     DELETED_WITH_EXTERNAL_RESIDUALS --> [*]
 ```
 
-任何 corrupt、future-schema、wrong-key 或 ledger-missing 备份都在替换现有数据前失败。普通在线备份只使用一致性快照，不 drain Worker，也不关闭 mutation gate。只有 migration、restore 和 delete 先 drain/fence。`DELETING` 的自循环只允许独立 `REVOCATION_ONLY` 删除控制面做固定目标撤权和只读对账，绝不重开业务 mutation gate。恢复只还原业务事实、审计与幂等账本，不还原可复用凭证、一次性 token 或旧 L3 授权；在 `<<proposed DEC-19>>` 未 Accepted 前必须停留在 `READ_ONLY_OUTBOUND_CLOSED`。migration 不是 restore，不应无故撤销仍有效的凭证和能力模式；普通短时离线也不经过本 restore guard。
+任何 corrupt、future-schema、wrong-key 或 ledger-missing 备份都在替换现有数据前失败。普通在线备份只使用一致性快照，不 drain Worker，也不关闭 mutation gate。只有 migration、restore 和 delete 先 drain/fence。`DELETING` 的自循环只允许独立 `REVOCATION_ONLY` 删除控制面做固定目标撤权和只读对账。恢复只还原业务事实、审计与幂等账本，不还原可复用凭证、一次性 token、旧 Plan 或 L3 授权；对账后由用户逐 capability 创建新授权并首先恢复到 L2，健康检查和明确确认后才可另过 L3 门。migration 与普通短时离线不经过本 restore guard。

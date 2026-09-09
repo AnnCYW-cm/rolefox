@@ -4,6 +4,8 @@
 
 RoleFox 的目标是成为候选人掌控的、本地默认、可自托管的自主求职智能体：用户一次性提供真实资料、求职目标和授权边界后，它持续完成岗位发现、筛选、材料定制、投递、跟进、初步沟通和面试排期，直到把合格面试交给用户。
 
+v0.1 的具体产品与目标设计边界已经由 [ADR-0002](adr/0002-v0.1-product-decision-baseline.md) 接受。
+
 产品类别是 **candidate-side job search operating system（候选人侧求职操作系统）**，不是招聘方 ATS，也不是批量投递脚本。
 
 ## 产品承诺
@@ -58,7 +60,7 @@ RoleFox 的目标是成为候选人掌控的、本地默认、可自托管的自
 - **Workspace**：数据、策略、地区设置和集成的隔离边界。
 - **CandidateProfile**：候选人的基本身份与可验证事实索引，不混入某次求职目标。
 - **ProfileEvidence**：工作、教育、项目和技能声明的事实依据。
-- **SearchCampaign**：一段可暂停、可复用的求职计划，包含目标职位、地点、工作方式、薪资条件和渠道。
+- **SearchCampaign**：一段可暂停、可复制为新实例的求职计划；每个 Workspace 最多一个 `CALIBRATING` 或 `ACTIVE`，历史实例可只读 `LISTENING`。
 - **JobPosting / JobScore**：标准化岗位与针对某一计划的可解释评分。
 - **ActionPlan**：任何外部动作在执行前必须形成的计划契约，包含内容哈希、风险、证据和过期时间；持久化阶段必须保证它不可变。
 - **AutomationPolicy**：委托授权、自动化等级、白名单、急停与频率限制。
@@ -83,6 +85,10 @@ ActionPlan → 策略判断 → L3 授权内自动执行 / 异常时询问用户
         ↓
 SCHEDULED → 立即通知用户并移交面试
 ```
+
+去重先使用稳定的 connector + externalId 或规范 URL 指纹；跨来源只建立疑似重复组并由用户消歧，绝不在歧义时自动合并。每个 Workspace 对同一已确认机会最多一个活跃 Application。`CLOSED` 是带原因的终态；新外部事实或用户明确 reapply 时创建关联的新 Application，旧实例不倒退。
+
+自动约面采用 calendar-first：本地锁定时段、复查同一 Provider 账户下所有 busy calendar、在唯一写入日历创建候选人私有 tentative event、落盘明确结果后再通过 Reply Connector 确认。事件不邀请招聘方；日历与回复均明确成功后 Interview 才进入 `SCHEDULED`，Application 只记录 `INTERVIEW_SCHEDULED` 里程碑。
 
 ## 产品原则
 
@@ -123,6 +129,8 @@ SCHEDULED → 立即通知用户并移交面试
 - Web + Worker + Local Runner 足够支撑前期，不提前拆微服务。
 - 默认 L2 是建立信任的起点，L3 才是“面试前 Autopilot”的目标体验；无限制 L4 不开放。
 - 开源版本必须保持单用户完整可用；未来托管服务只能提供便利性、运维和协作增值。
+- 产品内 Inbox 是通知事实来源，邮件是默认外部通知，Webhook 为可选适配器。
+- 旧 Plan 和授权在急停或恢复后不复活；完成对账后按 capability 先恢复到 L2，再经健康检查和明确确认进入 L3。
 
 ## v0.1 设计与实施
 
