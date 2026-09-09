@@ -11,6 +11,9 @@ export default defineConfig({
       "@rolefox/connector-sdk": fromRoot(
         "./packages/connector-sdk/src/index.ts",
       ),
+      "@rolefox/ai-provider": fromRoot(
+        "./packages/ai-provider/src/index.ts",
+      ),
     },
   },
   test: {

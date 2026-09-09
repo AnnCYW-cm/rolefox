@@ -38,6 +38,10 @@ button {
   font: inherit;
 }
 
+button:disabled {
+  cursor: default;
+}
+
 .app-shell {
   display: grid;
   min-height: 100vh;
@@ -116,7 +120,7 @@ button {
   text-align: left;
 }
 
-.nav-item:hover {
+.nav-item:not(:disabled):hover {
   background: #efeee8;
 }
 
@@ -596,7 +600,7 @@ h1 {
   cursor: pointer;
 }
 
-.round-arrow:hover {
+.round-arrow:not(:disabled):hover {
   border-color: var(--forest);
   background: var(--forest);
   color: white;

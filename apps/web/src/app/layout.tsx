@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "RoleFox — AI 求职助手",
-  description: "会替你找岗、筛选、准备材料并追踪面试的开源 AI 求职助手。",
+  title: "RoleFox — 开源求职自动化平台",
+  description:
+    "候选人掌控的、本地默认、可自托管、可扩展的开源求职自动化平台。",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

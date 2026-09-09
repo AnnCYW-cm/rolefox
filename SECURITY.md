@@ -4,7 +4,7 @@ RoleFox 会处理简历、招聘消息、浏览器会话和外部操作，因此
 
 ## 报告漏洞
 
-公开仓库后，请优先使用 GitHub 的 **Private Vulnerability Reporting** 私下报告。请勿在公开 Issue 中粘贴密钥、Cookie、真实简历、聊天记录或可识别个人身份的信息。
+请优先使用 GitHub 的 **Private Vulnerability Reporting** 私下报告。请勿在公开 Issue 中粘贴密钥、Cookie、真实简历、聊天记录或可识别个人身份的信息。
 
 报告中请包含：
 

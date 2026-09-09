@@ -9,28 +9,28 @@ const navItems = [
 const jobs = [
   {
     score: 92,
-    title: "AI 产品经理",
-    company: "云图智能",
-    meta: "杭州 · 25–40K · 3–5 年",
-    reason: "企业 AI 落地、智能体产品经验高度匹配",
+    title: "Product Manager, Automation",
+    company: "Atlas Labs（示例）",
+    meta: "新加坡 · 混合办公 · SGD 9K–13K/月",
+    reason: "工作流产品经验匹配，核心条件均已满足",
     tag: "建议投递",
     tone: "strong",
   },
   {
     score: 86,
-    title: "企业 AI 解决方案顾问",
-    company: "明远科技",
-    meta: "上海 / 远程 · 30–45K · 5–10 年",
-    reason: "培训与咨询经验匹配，需确认出差频率",
+    title: "Product Operations Lead",
+    company: "Northstar（示例）",
+    meta: "全球远程 · USD 90K–120K/年",
+    reason: "跨团队交付经验匹配，需确认工作时区",
     tag: "待确认",
     tone: "review",
   },
   {
     score: 79,
-    title: "Agent 产品专家",
-    company: "星河网络",
-    meta: "杭州 · 28–42K · 5–10 年",
-    reason: "智能体方向匹配，团队管理经验要求待核实",
+    title: "Product Strategy Manager",
+    company: "Acme Systems（示例）",
+    meta: "德国柏林 · 混合办公 · EUR 75K–95K/年",
+    reason: "产品策略经验匹配，语言要求仍需核实",
     tag: "补充信息",
     tone: "muted",
   },
@@ -62,7 +62,7 @@ export default function Home() {
           </span>
           <span>
             <strong>RoleFox</strong>
-            <small>求职智能体</small>
+            <small>开源求职自动化</small>
           </span>
         </div>
 
@@ -71,7 +71,9 @@ export default function Home() {
           {navItems.map((item) => (
             <button
               className={`nav-item ${item.active ? "active" : ""}`}
+              disabled
               key={item.label}
+              title="M0 静态原型"
               type="button"
             >
               <span className="nav-icon" aria-hidden="true">
@@ -87,12 +89,17 @@ export default function Home() {
           <div className="automation-card">
             <div className="automation-topline">
               <span className="status-dot" />
-              安全模式运行中
+              安全规则预览
             </div>
-            <strong>L2 · 每次投递需确认</strong>
-            <span>所有动作都可预览和撤销</span>
+            <strong>L2 · 外部动作需确认</strong>
+            <span>M0 仅展示规则，不运行后台任务</span>
           </div>
-          <button className="settings-button" type="button">
+          <button
+            className="settings-button"
+            disabled
+            title="M0 静态原型"
+            type="button"
+          >
             <span aria-hidden="true">⚙</span> 设置与规则
           </button>
         </div>
@@ -101,17 +108,25 @@ export default function Home() {
       <section className="workspace">
         <header className="topbar">
           <div>
-            <p className="eyebrow">2026年9月8日 · 星期二</p>
-            <h1>早上好，今天有 7 个岗位值得看</h1>
-            <p className="subtitle">RoleFox 已完成本轮搜索、去重与匹配评分。</p>
+            <p className="eyebrow">示例工作区 · 多地区 / 多币种</p>
+            <h1>本轮有 7 个岗位值得关注</h1>
+            <p className="subtitle">
+              RoleFox 已用合成数据演示搜索、去重与匹配评分。
+            </p>
           </div>
           <div className="header-actions">
-            <span className="demo-pill">演示数据</span>
-            <button className="icon-button" aria-label="通知" type="button">
+            <span className="demo-pill">通用演示</span>
+            <button
+              className="icon-button"
+              aria-label="通知功能规划中"
+              disabled
+              title="M0 静态原型"
+              type="button"
+            >
               ♢
               <span />
             </button>
-            <div className="avatar">CY</div>
+            <div className="avatar">RF</div>
           </div>
         </header>
 
@@ -120,27 +135,29 @@ export default function Home() {
             ✓
           </div>
           <div>
-            <strong>Dry-run 已开启</strong>
-            <span>RoleFox 只会准备材料，不会未经你确认对外投递或回复。</span>
+            <strong>静态产品原型 · Dry-run</strong>
+            <span>以下是合成工作流预览，当前没有后台扫描、投递或回复。</span>
           </div>
-          <button type="button">查看自动化规则 →</button>
+          <button disabled title="M0 静态原型" type="button">
+            规则配置 · 规划中
+          </button>
         </div>
 
         <section className="stat-grid" aria-label="今日求职数据">
           <article className="stat-card featured">
             <div className="stat-topline">
-              <span>今日新岗位</span>
+              <span>示例新岗位</span>
               <span className="stat-icon">⌕</span>
             </div>
             <div className="stat-value">24</div>
             <div className="stat-detail">
-              <span>来自 4 个渠道</span>
+              <span>来自 4 个模拟渠道</span>
               <MiniSparkline />
             </div>
           </article>
           <article className="stat-card">
             <div className="stat-topline">
-              <span>高匹配岗位</span>
+              <span>示例高匹配</span>
               <span className="stat-icon orange">✦</span>
             </div>
             <div className="stat-value">7</div>
@@ -148,15 +165,15 @@ export default function Home() {
           </article>
           <article className="stat-card">
             <div className="stat-topline">
-              <span>等待确认</span>
+              <span>示例待确认</span>
               <span className="stat-icon amber">✓</span>
             </div>
             <div className="stat-value">3</div>
-            <div className="stat-detail">材料已经准备完成</div>
+            <div className="stat-detail">模拟材料状态</div>
           </article>
           <article className="stat-card">
             <div className="stat-topline">
-              <span>本周面试</span>
+              <span>示例面试</span>
               <span className="stat-icon green">◷</span>
             </div>
             <div className="stat-value">1</div>
@@ -174,7 +191,9 @@ export default function Home() {
                 <p className="eyebrow">智能推荐</p>
                 <h2>最值得关注的岗位</h2>
               </div>
-              <button type="button">查看全部 7 个 →</button>
+              <button disabled title="M0 静态原型" type="button">
+                完整列表 · 规划中
+              </button>
             </div>
 
             <div className="job-list">
@@ -198,6 +217,8 @@ export default function Home() {
                   <button
                     className="round-arrow"
                     aria-label={`查看 ${job.title}`}
+                    disabled
+                    title="M0 静态原型"
                     type="button"
                   >
                     →
@@ -211,11 +232,11 @@ export default function Home() {
             <article className="panel funnel-panel">
               <div className="panel-heading compact">
                 <div>
-                  <p className="eyebrow">实时漏斗</p>
+                  <p className="eyebrow">模拟漏斗</p>
                   <h2>今日进展</h2>
                 </div>
                 <span className="live-label">
-                  <i /> 实时
+                  <i /> 原型
                 </span>
               </div>
               <div className="funnel-list">
@@ -244,19 +265,21 @@ export default function Home() {
               <div className="approval-icon">✓</div>
               <div>
                 <p className="eyebrow">需要你的决定</p>
-                <h2>3 份材料等待确认</h2>
-                <p>检查简历改动和招呼语后，即可加入投递队列。</p>
+                <h2>3 份示例材料等待确认</h2>
+                <p>这里将用于检查简历改动和招呼语，再决定是否加入队列。</p>
               </div>
-              <button type="button">进入审批中心</button>
+              <button disabled title="M0 静态原型" type="button">
+                审批中心 · 规划中
+              </button>
             </article>
           </div>
         </section>
 
         <footer>
           <span>
-            <i /> 上次扫描：2 分钟前
+            <i /> 模拟扫描时间：2 分钟前
           </span>
-          <span>RoleFox pre-alpha · 所有岗位均为虚构演示数据</span>
+          <span>RoleFox M0 静态原型 · 所有人物、岗位和进度均为合成数据</span>
         </footer>
       </section>
     </main>

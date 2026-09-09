@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "An open-source AI job hunting agent.",
+  "description": "Local-by-default, self-hostable job-search automation controlled by the candidate.",
   "license": "Apache-2.0",
   "packageManager": "pnpm@10.29.1",
   "engines": {
@@ -12,7 +12,7 @@
   "scripts": {
     "dev": "pnpm --filter @rolefox/web dev",
     "dev:all": "pnpm -r --parallel --if-present dev",
-    "build:packages": "tsc -b packages/domain packages/policy packages/connector-sdk apps/worker apps/runner",
+    "build:packages": "tsc -b packages/domain packages/policy packages/connector-sdk packages/ai-provider apps/worker apps/runner",
     "build": "pnpm build:packages && pnpm --filter @rolefox/web build",
     "lint": "pnpm -r --if-present lint",
     "typecheck": "pnpm build:packages && pnpm --filter @rolefox/web typecheck",

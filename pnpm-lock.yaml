@@ -73,6 +73,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/policy
 
+  packages/ai-provider: {}
+
   packages/connector-sdk:
     dependencies:
       '@rolefox/domain':
