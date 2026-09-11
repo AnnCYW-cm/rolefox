@@ -10,6 +10,7 @@
 - [UML 设计基线](uml/README.md)：已接受的用例、领域、状态、活动、时序、组件、部署、安全和 Case 追踪
 - [验证计划](validation-plan-v0.1.md)：关键假设、研究方法、实验信号与决策门
 - [交付计划](delivery-plan-v0.1.md)：10 周纵向切片、验收标准、风险与止损规则
+- [实现证据与发布闭合协议](implementation-verification-v0.1.md)：Case/Gate 证据登记、`Future/N/A` 治理、真实 Provider manifest 与 `release:check` 契约
 
 ## 已确认原则
 
@@ -20,4 +21,4 @@
 5. 先用合成环境跑通完整闭环，再接真实读取，最后才验证真实外发动作。
 6. 没有合规稳定的写入路径时，产品应降级为只读、材料导出和人工交接，不绕过平台限制。
 
-产品北极星决策见 [ADR-0001](../adr/0001-pre-interview-autopilot.md)；v0.1 的 19 项已接受决策及完整稳定编号 `DEC-01`—`DEC-20`（`DEC-13` 保留并合并）见 [ADR-0002](../adr/0002-v0.1-product-decision-baseline.md)。
+产品北极星决策见 [ADR-0001](../adr/0001-pre-interview-autopilot.md)；v0.1 的 19 项已接受决策及完整稳定编号 `DEC-01`—`DEC-20`（`DEC-13` 保留并合并）见 [ADR-0002](../adr/0002-v0.1-product-decision-baseline.md)，安全控制的业务 Shadow 边界见 [ADR-0003](../adr/0003-shadow-safety-control-exceptions.md)，JD raw 清除后的准备包语义见 [ADR-0004](../adr/0004-jd-raw-retention-and-preparation-pack.md)。五项新增产品判定及其机器发布条件见[实现证据与发布闭合协议](implementation-verification-v0.1.md)。

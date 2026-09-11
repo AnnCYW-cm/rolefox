@@ -4,7 +4,7 @@
 
 RoleFox 的目标是成为候选人掌控的、本地默认、可自托管的自主求职智能体：用户一次性提供真实资料、求职目标和授权边界后，它持续完成岗位发现、筛选、材料定制、投递、跟进、初步沟通和面试排期，直到把合格面试交给用户。
 
-v0.1 的具体产品与目标设计边界已经由 [ADR-0002](adr/0002-v0.1-product-decision-baseline.md) 接受。
+v0.1 的具体产品与目标设计边界已经由 [ADR-0002](adr/0002-v0.1-product-decision-baseline.md)、[ADR-0003](adr/0003-shadow-safety-control-exceptions.md) 与 [ADR-0004](adr/0004-jd-raw-retention-and-preparation-pack.md) 接受。
 
 产品类别是 **candidate-side job search operating system（候选人侧求职操作系统）**，不是招聘方 ATS，也不是批量投递脚本。
 
@@ -60,10 +60,10 @@ v0.1 的具体产品与目标设计边界已经由 [ADR-0002](adr/0002-v0.1-prod
 - **Workspace**：数据、策略、地区设置和集成的隔离边界。
 - **CandidateProfile**：候选人的基本身份与可验证事实索引，不混入某次求职目标。
 - **ProfileEvidence**：工作、教育、项目和技能声明的事实依据。
-- **SearchCampaign**：一段可暂停、可复制为新实例的求职计划；每个 Workspace 最多一个 `CALIBRATING` 或 `ACTIVE`，历史实例可只读 `LISTENING`。
+- **SearchCampaign**：一段可结束、只读监听、归档或复制为新实例的求职计划；每个 Workspace 最多一个 `CALIBRATING` 或 `ACTIVE`，历史实例可只读 `LISTENING`。暂停由独立控制覆盖层表达，不增加 `PAUSED` 生命周期状态。
 - **JobPosting / JobScore**：标准化岗位与针对某一计划的可解释评分。
 - **ActionPlan**：任何外部动作在执行前必须形成的计划契约，包含内容哈希、风险、证据和过期时间；持久化阶段必须保证它不可变。
-- **AutomationPolicy**：委托授权、自动化等级、白名单、急停与频率限制。
+- **AutomationPolicyRevision**：用户委托的自动化等级、白名单、适用范围与频率限制；不可被用户放宽的 SystemSafetyPolicy、Workspace OperationalControl、CapabilityOperationalControl 和 Kill Switch 与其正交组合。
 - **SchedulePreauthorization**：用户授权的日历账户、时间窗口及版本，允许 L3 在无冲突、无歧义时自动约面。
 - **AnswerPreauthorization（M5）**：有事实依据、允许自动回答的内容或区间；未实现前敏感问题一律升级人工。
 - **ActionPlanStatus**：动作自身从草稿、待审批或已授权、执行到成功、失败或过期的生命周期，不与申请阶段混用。
@@ -79,7 +79,7 @@ v0.1 的具体产品与目标设计边界已经由 [ADR-0002](adr/0002-v0.1-prod
         ↓
 生成事实可追溯的定制材料
         ↓
-ActionPlan → 策略判断 → L3 授权内自动执行 / 异常时询问用户
+ActionPlan → 策略判断 → 外发能力先完成 PRE_L2_SHADOW → L2 逐次批准 → 达门槛后限定 L3 / 异常时询问用户
         ↓
 等待回复 → 按规则跟进 → 初步沟通 → 自动约面
         ↓
@@ -98,7 +98,7 @@ SCHEDULED → 立即通知用户并移交面试
 4. **核心掌握风险**：连接器可以提出动作草稿，但 `ActionPlan`、风险策略和授权判断由核心系统拥有。
 5. **安全失败**：不确定、冲突、敏感或过期的动作默认暂停，而不是猜测执行。
 6. **接口可替换**：AI、存储、岗位来源、执行器和通知渠道都不能成为单一厂商锁定点。
-7. **渐进建立信任**：新用户先用 L2 dry-run 校准规则；稳定后开启 L3，使面试前流程在委托边界内自动运行。
+7. **渐进建立信任**：新用户先用 Dry-run 校准规则；任何真实业务外发 capability 在首次 L2 前完成连续 7 天、零业务外发的 `PRE_L2_SHADOW`，取得与当前绑定一致的 receipt 后进入逐次确认 L2；样本与安全门进一步通过后才开启 L3，使面试前流程在委托边界内自动运行。Accepted ADR-0003 的固定 heartbeat、一次停止告警和删除期固定撤权仅走隔离安全控制面，不取得业务模式或 Grant。
 
 ## 非目标
 
@@ -130,7 +130,7 @@ SCHEDULED → 立即通知用户并移交面试
 - 默认 L2 是建立信任的起点，L3 才是“面试前 Autopilot”的目标体验；无限制 L4 不开放。
 - 开源版本必须保持单用户完整可用；未来托管服务只能提供便利性、运维和协作增值。
 - 产品内 Inbox 是通知事实来源，邮件是默认外部通知，Webhook 为可选适配器。
-- 旧 Plan 和授权在急停或恢复后不复活；完成对账后按 capability 先恢复到 L2，再经健康检查和明确确认进入 L3。
+- 旧 Plan 和授权在急停或恢复后不复活；若 connector/version/account/credential lineage、Shadow criteria 或 coverage epoch 发生变化，按 capability 先回到连续 7 天零外发的 `PRE_L2_SHADOW`，取得新 receipt 后才能创建新的 L2 授权；仅在绑定未变化且当前 receipt 仍有效的普通控制解除路径中，才可在完成对账后回到 L2。L3 始终还需健康检查、样本门和明确确认。
 
 ## v0.1 设计与实施
 

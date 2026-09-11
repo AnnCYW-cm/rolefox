@@ -17,7 +17,7 @@ RoleFox 的完整性不能只用一条“发现岗位 → 投递 → 约面”�
 2. v0.1 在 Interview 首次进入 `SCHEDULED`、且 Application 记录 `INTERVIEW_SCHEDULED` 里程碑后完成核心交付；后续改期和取消继续监控并立即提醒，默认由用户处理。
 3. 自动跟进默认关闭；用户显式开启后，v0.1 最多自动跟进一次。
 4. 自动回答默认无授权，按事实、问题类别和回答区间逐项开启。
-5. 暂停分为“暂停新机会”“停止所有外发”“全局急停”。
+5. 暂停分为“暂停新机会”“停止全部外发”“全局急停”。
 6. 用户设备或 Worker 停止运行时，产品必须明确显示离线，不能宣称仍在持续工作。
 7. 从备份恢复后，凭证、执行令牌和 L3 授权不自动恢复。
 8. 删除个人数据优先；安全审计只保留有明确期限、不可反推个人的最小摘要。
@@ -107,7 +107,7 @@ flowchart LR
 | ID | 起始条件 | 完整路径 | 必须得到的结果 |
 | --- | --- | --- | --- |
 | GOLD-01 | 新用户不愿提交真实信息 | 进入合成 Demo → 浏览岗位 → 模拟投递和约面 | 不请求真实凭证，不产生真实外部动作 |
-| GOLD-02 | 新用户有明确求职目标 | 初始化 → 导入简历 → 确认事实 → Campaign → Dry-run → L2 | 配置可中断恢复；完成后仍不会自动开启真实外发 |
+| GOLD-02 | 新用户有明确求职目标 | 初始化 → 导入简历 → 确认事实 → Campaign → Dry-run → `PRE_L2_SHADOW` → L2 | 配置可中断恢复；Shadow 连续 7 天通过前保持零真实外发，完成配置也不会自动开启 L2/L3 |
 | GOLD-03 | 用户已经求职数月 | 导入已有申请 → 关联岗位和历史消息 → 开始扫描 | 相同岗位被关联或要求消歧，绝不重复投递 |
 | GOLD-04 | 用户主要使用不受支持的平台 | 手动链接/CSV → 筛选 → 材料 → 深链接交接 | 清楚显示人工步骤，不把交接标成自动成功 |
 | GOLD-05 | 简历存在矛盾或禁外用事实 | 解析 → 冲突检查 → 材料生成 | 相关内容被冻结，不由模型选择“更有利”的事实 |
@@ -155,16 +155,19 @@ flowchart LR
 | Gate | 可开放的能力 | 必须通过的 Case |
 | --- | --- | --- |
 | G0 | 处理真实简历、消息、附件或凭证 | 数据隔离、最小化、凭证、注入、危险附件、删除与导出 P0 |
-| G1 | 真实 L2 投递、回复、日历或通知 | G0 + 授权、哈希、幂等、审计、对账、急停、平台条款和崩溃恢复 P0 |
-| G2 | 真实 L3 Autopilot | G0/G1 + 分能力授权、限额、异常、跟进、约面补偿、通知事实持久化/外部失败可见和 shadow 验证 |
+| G1 | 真实 L2 投递、回复、日历或通知 | G0 + 对应 capability 连续 7 天零外发 Shadow + 授权、哈希、幂等、审计、对账、急停、平台条款和崩溃恢复 P0 |
+| G2 | 真实 L3 Autopilot | G0/G1 + Shadow 通过后积累的真实 L2 样本 + 分能力授权、限额、异常、跟进、约面补偿、通知事实持久化/外部失败可见和零错误门槛 |
 | G3 | 稳定开源版本 | 安装升级、备份恢复、兼容矩阵、供应链、无障碍和运维演练 |
+
+`v0.1-R` 是独立于 G2/L3 的发布合取门：对外称为 v0.1 可试用/发布前，除 G3 外，还必须使用真实邮箱和真实日历 Provider 完成邮件入站、受控 L2 回复、busy 查询/对账、候选人私有 tentative event、招聘确认与失败补偿的端到端验收。未达到 G2 时相应能力保持 L2，不阻断 v0.1；Fake Inbox、测试日历、合成 Saga 或投递交接不能替代 `v0.1-R` 的真实证据。
 
 每个 Gate 的通过条件：
 
-- 适用于当前发布范围的 P0 全部实现通过；未实现功能只能通过公开范围和 ADR 标记 `N/A`。
+- 适用于当前发布范围的 P0 全部实现通过；“未实现”本身永远不能成为 `N/A`。只有[实现证据与发布闭合协议](implementation-verification-v0.1.md)规定的两条 assertion 级路径有效：引用 Accepted 基线精确 DEC/assertion 的 `BASELINE_EXCLUDED`，或引用明确列出该 Case/assertion 的 Accepted superseding ADR 的 `POST_BASELINE_CHANGE`；两者都必须有产品负责人批准 proof，普通范围文档或模糊 ADR 不能放行。
 - `0` 未授权外发、`0` 重复外部副作用、`0` 虚假事实、`0` 错误收件人/账户/时段。
 - `0` 假成功、`0` 假 `SCHEDULED`、`0` 数据/审计/幂等账本丢失、`0` Secret/PII canary 泄漏。
 - 每个 `OUTCOME_UNKNOWN` 都能进入可执行的 reconcile 或人工裁决路径。
+- `v0.1-R` 必须同时存在真实邮箱和真实日历端到端证据；不能把两个 Provider 分开演示、用 Fake 替代，或因保持 L2 而跳过。
 - 任一 P0 失败都阻断相应 Gate；修复后重跑关联 Suite 和全部 mutation crash-cut smoke。
 
 ## 10. 追踪关系示例
@@ -201,15 +204,15 @@ flowchart LR
 
 ## 12. P1 / P2 后续范围
 
-P1 重点包括：多个活跃 Campaign 并行、复杂 OCR、更多跟进、自动改期、多设备冲突、完整移动端、更多无障碍组合、AI/Connector 降级、告警降噪、RPO/RTO 和连接器维护体验。
+P1 重点包括：复杂 OCR、更多跟进、自动改期、多设备冲突、更多无障碍组合、AI/Connector 降级、告警降噪、RPO/RTO 和连接器维护体验。
 
-P2 重点包括：多用户/教练协作、托管 SaaS、多个真实写入平台、插件市场、RTL、长期个性化模型、大规模性能、审计哈希链和社区安全治理。
+P2 重点包括：多个活跃 Campaign 并行、完整移动端、多用户/教练协作、托管 SaaS、多个真实写入平台、插件市场、RTL、长期个性化模型、大规模性能、审计哈希链和社区安全治理。
 
 P1/P2 可以排期，但不能通过引入新能力破坏 P0 不变量。
 
 ## 13. 已接受的产品与目标设计决策
 
-v0.1 的 19 项开放决策已经由产品负责人分四组全部确认，权威记录见 [ADR-0002](../adr/0002-v0.1-product-decision-baseline.md)。`DEC-13` 已合并到 `DEC-04`，编号保留且不复用。
+v0.1 的 19 项原始开放决策已经由产品负责人分四组全部确认，历史基线见 [ADR-0002](../adr/0002-v0.1-product-decision-baseline.md)；当前安全控制边界与 JD raw/准备包语义分别由 Accepted [ADR-0003](../adr/0003-shadow-safety-control-exceptions.md) 和 [ADR-0004](../adr/0004-jd-raw-retention-and-preparation-pack.md) 补充。`DEC-13` 已合并到 `DEC-04`，编号保留且不复用。
 
 本基线据此固定首条真实通道、分 capability 的 L3 门槛、默认值和硬上限、通知组合、数据保留期、安装支持矩阵、准备包、calendar-first Saga、去重与关闭语义、离线阈值、日历能力、Campaign 约束、SQLite 范围、严重度、急停和恢复规则。`RES-003` 的 PostgreSQL pool 分支、`OSS-008` 的 SQLite↔PostgreSQL 迁移分支，以及其他 PostgreSQL/跨库测试在 v0.1 明确为未来范围/N/A；SQLite 与支持 OS 相关部分仍适用。
 
@@ -229,7 +232,7 @@ v0.1 的 19 项开放决策已经由产品负责人分四组全部确认，权�
 术语约定：
 
 - `Workspace`：候选人数据、策略和集成的隔离边界。
-- `Campaign`：一次可暂停、归档和复用的求职计划。
+- `Campaign`：一次可结束、只读监听、归档和复制为新实例的求职计划；暂停由独立 OperationalControl/CapabilityControl 覆盖层表达，不是 Campaign 生命周期状态。
 - `ActionPlan`：外部动作执行前由核心系统建立的不可变计划。
 - `Exception`：必须由用户处理或明确跳过的规则例外。
 - `L2`：每次外部动作需要确认的校准模式。
@@ -277,14 +280,14 @@ v0.1 的 19 项开放决策已经由产品负责人分四组全部确认，权�
 - **前置条件（Given）**：应用已安装且当前没有 Workspace。
 - **When**：用户开始配置并选择界面语言、时区、默认币种和通知偏好。
 - **Then**：系统创建本地 Workspace，展示数据保存位置和当前运行方式，并在重启后保留已完成步骤。
-- **不变量 / 关联状态**：密钥和浏览器凭证不写入普通 Workspace 导出；环境配置不能替代用户求职偏好。
+- **不变量 / 关联状态**：密钥和浏览器凭证不写入普通 Workspace 导出；环境配置不能替代用户求职偏好。任何业务 DB 写入前，业务 DB 外的 Local Supervisor 必须以 no-create/只读方式验证 binary/config/key 可用性、目标路径所有权与既有 header。只有能够从独立控制事实证明目标从未完成 onboarding 时，失败才写 OOB `INITIALIZATION_BLOCKED`；检测到既有 future/corrupt/wrong-key DB，或 prior lifecycle 为 ACTIVE/UNKNOWN 时写 `RUNTIME_STORAGE_BLOCKED` + fault epoch/fence。两者均不得创建/写 DB/WAL/ledger/default checkpoint 或把未知 schema 写成“已阻断”。修复后重跑完整 preflight：前者只回 `ONBOARDING`；后者先在首个安全业务事务导入 `RUNTIME_FAULT/OPEN` barrier 并完成运行期对账，任何分支都不得直接进入 `ACTIVE`。
 
 #### ONB-P0-02 — 中断后继续配置
 
 - **前置条件（Given）**：用户已经完成部分 onboarding，但未完成 Dry-run。
 - **When**：用户关闭页面、应用重启或重新进入配置流程。
 - **Then**：系统从最后一个已保存步骤继续，清楚标记“已完成、待完成、验证失败”的项目，不要求重复导入或重复授权。
-- **不变量 / 关联状态**：未完成 onboarding 时任何外部执行能力保持关闭；重复提交同一步骤不得产生重复事实或连接器记录。
+- **不变量 / 关联状态**：未完成 onboarding 时任何外部执行能力保持关闭；重复提交同一步骤不得产生重复事实或连接器记录。恢复必须依赖已持久化且校验通过的 recovery record 与 checkpoint；只有独立控制事实可证明从未完成 onboarding 时，缺失/无效记录才进入 `INITIALIZATION_BLOCKED` 并在修复后回 `ONBOARDING`。future-schema、wrong-key、corrupt、ledger 不可读或 prior lifecycle 无法证明时进入 OOB `RUNTIME_STORAGE_BLOCKED`，业务 DB immutable 且零写入；修复后先导入 OPEN runtime barrier 并完成运行期对账。绝不能根据 UI 缓存、用户口述“做到哪一步”或残余配置直接进入 `ONBOARDING/ACTIVE`。
 
 #### ONB-P0-03 — 连接器授权前的知情说明
 
@@ -297,22 +300,22 @@ v0.1 的 19 项开放决策已经由产品负责人分四组全部确认，权�
 
 - **前置条件（Given）**：用户已提交连接器授权，但认证可能失败、过期或权限不足。
 - **When**：系统进行健康和能力验证。
-- **Then**：系统逐项报告可读、可写、不可用和需要重新授权的能力；单一连接器失败不会删除其他配置或默认暂停整个 Campaign。
+- **Then**：系统逐项报告可读、可写、不可用和需要重新授权的能力；单一连接器失败不会删除其他配置、改变 Campaign 生命周期，或暂停不相关 capability。
 - **不变量 / 关联状态**：普通局部故障进入 `DEGRADED`；凭证提供方报告的 `EXPIRED/REVOKED` 是外部检测事实，统一使该账号/credential lineage 的 RuntimeHealth 进入 `AUTH_REQUIRED`；条款或官方 scope 不允许则进入 `POLICY_BLOCKED`。依赖它的外部动作不得进入 `AUTHORIZED`。
 
-#### ONB-P0-05 — Dry-run 校准与显式开启 L3
+#### ONB-P0-05 — Dry-run、首次真实外发 Shadow、L2 校准与显式开启 L3
 
 - **前置条件（Given）**：关键事实、Campaign、通知和至少一条可体验通道已经配置。
-- **When**：用户运行合成 Dry-run、修正结果，并请求开启某项 L3 能力。
-- **Then**：系统展示该能力的事实完整度、规则范围、连接器、限额、授权期限、异常条件和急停入口；只有全部就绪且用户显式确认后才开启该能力。
-- **不变量 / 关联状态**：系统不得依据样本数或使用时间自动从 L2 升为 L3；各能力分别授权和回退。
+- **When**：用户运行合成 Dry-run、修正结果，准备首次执行真实 L2 外发，随后再请求开启某项 L3 能力。
+- **Then**：系统先展示并执行该业务外发 capability 的连续 7 天零外发 Shadow；只有 coverage 完整、严重错误为 0 且绑定仍相同，才允许逐次批准真实 L2。系统再展示事实完整度、规则范围、连接器、L2 样本、限额、授权期限、异常条件和急停入口；L3 的全部门槛满足且用户显式确认后，才开启该能力。
+- **不变量 / 关联状态**：L2 人工确认不能跳过 pre-L2 Shadow；Shadow 期间不得创建可执行业务外部 Operation。依据 Accepted ADR-0003，隔离 SafetySignal 的固定 heartbeat/一次停止告警和删除期固定 `credential_revocation` 不等待业务 Shadow，也不得取得或复用业务 `CapabilityGrant`；它们仍须通过各自固定 binding/schema、专用 Plan/Evaluation/Authorization/Operation/AuditIntent/Outbox、幂等、执行前复核与三态对账。系统不得依据样本数或使用时间自动从 L2 升为 L3；各业务能力分别授权和回退。
 
 #### ONB-P0-06 — 放弃 onboarding 并清理临时数据
 
 - **前置条件（Given）**：用户导入过真实文件或建立过未完成授权，但决定不继续使用。
 - **When**：用户选择放弃并删除未完成 Workspace。
-- **Then**：系统停止解析和后台任务，撤销已建立连接，删除临时文件、解析文本和私有数据，并报告无法自动撤销的外部授权入口。
-- **不变量 / 关联状态**：删除完成后不得残留可继续执行的 ActionPlan、token 或定时任务；硬删除不可在 UI 中伪装成可恢复归档。
+- **Then**：业务 DB 可读时，系统先生成不可复用的 `deletionRequestId` 并把 Workspace 置为 `DELETING`，再停止解析和后台任务、通过 `REVOCATION_ONLY` 撤销已建立连接、删除临时文件、解析文本和私有数据，并报告无法自动撤销的外部授权入口。业务 DB 因 future-schema/corrupt/wrong-key/ledger 缺失而不可安全读写时，改由 Local Supervisor 在独立 deletion journal 中生成 request/deadline/fence，停止全部句柄，按已验证 control envelope 精确清除文件、Vault namespace、临时物和受管备份；不得解析、迁移或写业务 DB。
+- **不变量 / 关联状态**：依据 Accepted ADR-0003，每个真实 `credential_revocation` 不等待业务 Shadow，也不得取得业务 `CapabilityGrant`；Plan、PolicyEvaluation、Authorization 与 Operation 必须冻结相同 `revocationControlPlaneId`、`deletionRequestId`、`revocationTargetBindingId/hash`、固定 `targetHash`、官方入口、deadline 与 payload hash，并在外部调用前与当前删除 journal/binding 一并复核，缺失或漂移即零外部调用并报告残留。out-of-band 路径没有可验证业务 ledger/固定目标 inventory 时不得猜测自动撤权：已知目标记录 `NOT_ATTEMPTED` 和官方手工入口，inventory 不可读则记录 `INVENTORY_UNREADABLE`；本地清除完成以独立 journal 的 `LOCAL_DELETED_WITH_EXTERNAL_RESIDUALS` 为终态，不依赖向业务 DB 回写。撤权长期未知时，在原固定截止后以 `externalOutcome=UNKNOWN` 固化 residual，使 Operation/Plan 达到本地合法终态，Workspace 进入 `DELETED_WITH_EXTERNAL_RESIDUALS`；不得伪装成撤权成功。删除完成后不得残留可继续执行的 ActionPlan、token 或定时任务；硬删除不可在 UI 中伪装成可恢复归档。
 
 ---
 
@@ -399,12 +402,12 @@ v0.1 的 19 项开放决策已经由产品负责人分四组全部确认，权�
 - **Then**：动作排队、过期或进入异常；只读同步继续；系统不会临时扩大上限或延长授权。
 - **不变量 / 关联状态**：默认值为每日投递 10、每小时回复 8、每日自动约面 3；普通配置硬上限分别为 25、12、8；每个 Application 最多一次自动跟进。所有限额按 Workspace 与动作类型原子计数；自动确认面试同时计入回复和约面限额。
 
-#### POL-P0-06 — 分级暂停与全局急停
+#### POL-P0-06 — 分级暂停、系统安全 hold 与全局急停
 
-- **前置条件（Given）**：Campaign 正在 L3 运行或存在已授权待执行动作。
-- **When**：用户选择“暂停新机会”“停止全部外发”或触发 Kill Switch。
-- **Then**：“暂停新机会”停止发现和新投递但继续只读监听已有申请；“停止全部外发”保留只读同步；Kill Switch 拒绝全部业务外发，并将执行中动作标记为需要对账。内部审计和产品 Inbox 继续写入；只有隔离、预配置且幂等的安全通道可发送一次停止告警。
-- **不变量 / 关联状态**：任何连接器或模型都不能降低暂停级别；旧 Plan 和授权不复活。完成对账后由用户按 capability 先恢复到 L2，健康检查和明确确认通过后才可恢复 L3。
+- **前置条件（Given）**：Campaign 正在 L3 运行、存在已授权待执行动作，或某项 capability 发生需要系统隔离的 scoped safety fault。
+- **When**：用户选择“暂停此类动作”“暂停新机会”“停止全部外发”，触发 Kill Switch，或系统确认 scoped safety fault。
+- **Then**：“暂停此类动作”只把目标 capability 的 `userMode` 置为 `PAUSED`；“暂停新机会”停止发现和新投递，但已有 Application 可按原 capability 与 Policy 继续读取和推进；“停止全部外发”保留只读同步；Kill Switch 拒绝全部业务外发，并将执行中动作标记为需要对账。scoped safety fault 必须以新的单调 `safetyFaultEpoch` 把目标 capability 的 `safetyHoldStatus` 置为 `HELD`，取消可证明未发出的动作，对可能已发出的动作只对账。内部审计和产品 Inbox 继续写入；只有隔离、预配置且幂等的安全通道可发送一次停止告警。
+- **不变量 / 关联状态**：任何连接器或模型都不能降低暂停级别；旧的失效 Plan 和授权不复活。`HELD` 禁止可执行 Plan、Authorization、Operation、Outbox 和外呼，但允许为了重获当前 receipt 生成无可执行载荷的 `SHADOW_ONLY` 评估/coverage 记录，且外部副作用必须为 0。用户恢复此类动作只能把 `userMode` 改回 `ENABLED`，不能清除 `safetyHoldStatus=HELD`。系统只有在**同一** `safetyFaultEpoch` 的故障原因已消除、RuntimeHealth 通过、非终态 operation 完成对账、当前 binding/Shadow receipt 复核通过并写入 clearance evidence 后，才可 CAS 清除 hold；epoch 不匹配或任一证据缺失都继续失败关闭。进入 `STOP_OUTBOUND` 或 `KILL_SWITCH` 的同一事务为全部已登记外发 capability 写入新的 `recoveryEpoch` 并置 `recoveryRequired=true`。解除 `PAUSE_NEW` 时，绑定/授权未变化的 capability 恢复进入暂停前保存的 L2/L3 模式，暂停期间未开始的新投递计划不复活；解除 `STOP_OUTBOUND` / `KILL_SWITCH` 则须完成对账，`KILL_SWITCH` 先降到仍拒绝业务外发的 `STOP_OUTBOUND`，再由用户按 capability 先恢复到 L2并仅清除该能力匹配的 recovery epoch；即使 Workspace 回到 `RUNNING`，其他未清屏障的能力仍失败关闭。binding 变化时先回 `PRE_L2_SHADOW`，健康检查和明确确认通过后才可恢复 L3。
 
 ---
 
@@ -414,7 +417,7 @@ v0.1 的 19 项开放决策已经由产品负责人分四组全部确认，权�
 
 - **前置条件（Given）**：系统从 CSV、JSON、手动链接或真实只读源获得岗位。
 - **When**：建立标准化 JobPosting。
-- **Then**：系统保留来源、原始 URL、抓取时间、原始薪酬/地点表达和标准化结果，以便用户追溯。
+- **Then**：系统在 raw 保留期内保存来源、原始 URL、抓取时间、原始薪酬/地点表达和标准化结果，并在 ingest/normalization 时生成受字段/长度上限约束、不可重建原文的结构化摘要与去敏 source/hash；到期后按 DATA-008 与 ADR-0004 清除原文及可重建副本。
 - **不变量 / 关联状态**：连接器返回的数据属于不可信输入；`workspaceId`、Campaign 归属和内部身份只能由核心系统写入。
 
 #### JOB-P0-02 — 跨来源、跨历史记录去重
@@ -619,15 +622,15 @@ v0.1 的 19 项开放决策已经由产品负责人分四组全部确认，权�
 
 - **前置条件（Given）**：自动约面由招聘回复和日历写入两个外部操作组成。
 - **When**：calendar-first 流程中的日历创建已成功，而回复明确失败或结果不确定；或导入/恢复时发现旧版本的越序部分结果。
-- **Then**：回复未知先对账；回复明确失败时用新的补偿 Plan/Operation 取消 tentative event。取消失败或未知时生成 `SEV-1` Exception、暂停自动约面 capability，并保留全部 externalRef；不得重复发送确认或创建事件。
-- **不变量 / 关联状态**：Application 保持 `INTERVIEW_PROPOSED`；只有原始日历与回复两个操作都被证实成功，Interview 才进入 `SCHEDULED`、Application 才记录 `INTERVIEW_SCHEDULED`。不能安全查询/对账、幂等创建、更新/取消或返回稳定 external ID 的 Calendar Connector 不得开放 L3。
+- **Then**：回复未知先对账；回复明确失败时用新的补偿 Plan/Operation 取消 tentative event。取消失败、结果未知或补偿未获当前授权时生成 `SEV-1` Exception，以新的 `safetyFaultEpoch` 将自动约面 capability 的 `safetyHoldStatus` 置为 `HELD`，并保留全部 externalRef；不得重复发送确认或创建事件。
+- **不变量 / 关联状态**：Application 保持 `INTERVIEW_PROPOSED`；只有原始日历与回复两个操作都被证实成功，Interview 才进入 `SCHEDULED`、Application 才记录 `INTERVIEW_SCHEDULED`。用户普通“恢复约面”只能改变 `userMode`，不能清除此 safety hold；只有同一 fault epoch 的故障修复、RuntimeHealth、非终态 operation 对账、当前 binding/receipt 与 clearance evidence 全部通过，系统才可清除。不能安全查询/对账、幂等创建、更新/取消或返回稳定 external ID 的 Calendar Connector 不得开放 L3。
 
 #### INT-P0-05 — 已约成面试的成功通知
 
 - **前置条件（Given）**：双方已确认精确时间，日历事件写入成功，Interview 准备进入 `SCHEDULED`，Application 准备记录 `INTERVIEW_SCHEDULED`。
 - **When**：状态提交成功。
-- **Then**：立即通知用户并生成核心准备包，包含 JD 快照与来源、公司/岗位摘要、匹配理由、实际投递材料版本、沟通时间线、联系人、已确认日期时间/时区/地点/会议链接和日历写入状态。
-- **不变量 / 关联状态**：“已约成”只用于外部确认且日历成功的面试；通知主操作为查看准备包，不是再次接受面试。
+- **Then**：立即通知用户并生成核心准备包。raw 可用时包含当时 JD 快照并标 `AVAILABLE`；raw 已清除时标 `RAW_PURGED`，只展示不可重建摘要、去敏 source/hash与重新导入确认入口。两种状态均包含匹配理由、实际投递材料版本、沟通时间线、联系人、已确认日期时间/时区/地点/会议链接和日历写入状态。
+- **不变量 / 关联状态**：“已约成”只用于外部确认且日历成功的面试；通知主操作为查看准备包，不是再次接受面试。重导入建立新 lineage且不重置原 Campaign 保留时钟：同 hash 只表示新导入匹配副本，异 hash 标 `REIMPORTED_DIFFERENT_VERSION`，均不得替换投递时上下文或把旧 `RAW_PURGED` 改成原快照已恢复；过期 raw 若无显式 `extendedUntil`，本次受控使用后必须再次清除。
 
 #### INT-P0-06 — 通知失败不改写面试事实
 
@@ -686,8 +689,8 @@ v0.1 的 19 项开放决策已经由产品负责人分四组全部确认，权�
 
 - **前置条件（Given）**：用户把 Workspace 备份恢复到同一设备重装环境或另一设备。
 - **When**：数据迁移和 schema 校验完成。
-- **Then**：事实、Campaign、历史和审计可恢复；凭证、浏览器会话和一次性 token 不恢复；完成远端对账后由用户按 capability 恢复，首先进入 L2，健康检查和明确确认通过后才可重新进入 L3。
-- **不变量 / 关联状态**：恢复不能复活旧 `AUTHORIZED` ActionPlan、过期策略或已撤销连接。
+- **Then**：事实、Campaign、历史和审计可恢复；凭证、浏览器会话和一次性 token 不恢复。完成远端对账后，用户逐 capability 建立新的 connector/account/credential binding；新 lineage 使旧 Shadow receipt 失效，外发 capability 先进入新的连续 7 天 `PRE_L2_SHADOW` 并保持零真实外发。新 receipt 有效后才可发布新授权并恢复 L2，真实样本、健康检查和明确确认通过后才可重新进入 L3。
+- **不变量 / 关联状态**：恢复不能复活旧 `AUTHORIZED` ActionPlan、旧 Shadow receipt、过期策略或已撤销连接；“首先恢复 L2”只表示 L2 是恢复后的首个 live 模式，不得跳过它之前的新 binding Shadow 门。
 
 ---
 
@@ -744,11 +747,11 @@ v0.1 的 19 项开放决策已经由产品负责人分四组全部确认，权�
 - **前置条件（Given）**：Campaign 正在运行，且可能存在未投递机会、等待回复或已排面试。
 - **When**：用户选择“结束本轮求职”。
 - **Then**：系统立即停止发现和新外发，列出仍在推进的申请、待回复和面试，让用户明确选择继续只读监听、逐项关闭或保留记录。
-- **不变量 / 关联状态**：结束 Campaign 不能自动替用户撤回申请、取消面试或向招聘方发送消息；默认不再产生新外部动作。
+- **不变量 / 关联状态**：结束 Campaign 不能自动替用户撤回申请、取消面试或向招聘方发送消息；`LISTENING` 只落迟到入站事实、只读对账和对用户的通知，不创建回复、跟进或约面 mutation。若用户要继续自动推进某个历史 Application，必须在当前唯一 `CALIBRATING/ACTIVE` Campaign 下显式创建范围/期限有限的 takeover record，再创建绑定该 Campaign ID/revision 与 takeover hash 的全新 Plan/PolicyEvaluation/Authorization/Operation；执行前仍须 CAS 复核。历史 Plan/Auth 不复活，无当前活跃 Campaign 或 takeover 无效时进入 Exception/人工交接且零业务外呼。
 
 #### EXIT-P0-02 — 归档 Campaign 与创建新周期
 
-- **前置条件（Given）**：Campaign 已暂停或结束，用户希望保留历史并稍后复用。
+- **前置条件（Given）**：Campaign 已结束/放弃，或用户在独立 `PAUSE_NEW/STOP_OUTBOUND` 控制覆盖层下选择归档；Campaign 本身不存在 `PAUSED` 状态。
 - **When**：用户归档后希望再次求职。
 - **Then**：历史、材料和指标保持可读；系统复制仍有效的稳定输入并创建新的 Campaign，重新确认目标、岗位新鲜度、Policy、连接器、答案和日历授权，不执行旧积压计划。
 - **不变量 / 关联状态**：`ARCHIVED` 不回到 `ACTIVE`；旧 ActionPlan 或过期授权不能复活，新周期使用新的 Campaign 身份。
@@ -762,17 +765,17 @@ v0.1 的 19 项开放决策已经由产品负责人分四组全部确认，权�
 
 #### EXIT-P0-04 — 删除 Campaign 时说明外部不可逆
 
-- **前置条件（Given）**：Campaign 含有已成功投递、消息或面试记录。
-- **When**：用户请求永久删除 Campaign。
-- **Then**：系统先取消未执行动作并明确说明本地删除不能召回招聘平台上的申请、附件、消息或已创建的日历事件；用户确认后清除本地 Campaign 数据。
-- **不变量 / 关联状态**：硬删除与可恢复归档必须是不同操作；不能通过删除本地状态把外部成功事实改写为未发生。
+- **前置条件（Given）**：Campaign 含有已成功投递、消息或面试记录，且状态可能为 `DRAFT`、`CALIBRATING`、`ACTIVE`、`LISTENING`、`ENDED` 或 `ARCHIVED`。
+- **When**：用户请求永久删除 Campaign；系统先检查当前状态。
+- **Then**：系统先只展示删除范围，并明确说明本地删除不能召回招聘平台上的申请、附件、消息或已创建的日历事件；用户确认后才关闭目标 scope 的 mutation gate、取消该 Campaign 中可证明未执行的新动作，并清除 Campaign 规则、偏好副本、未采用草稿和可安全再生数据，保留最小 tombstone。历史 Application、Interview、Message、ExternalOperation 与 Audit 不级联删除，继续按 Workspace 保留/删除策略处理。
+- **不变量 / 关联状态**：只有 `DRAFT`、`ENDED` 或 `ARCHIVED` 可进入硬删除；`CALIBRATING`、`ACTIVE`、`LISTENING` 必须拒绝删除并要求先结束或归档。硬删除与可恢复归档必须是不同操作；Campaign 删除不是 Workspace 删除，不能通过删除本地状态把外部成功事实改写为未发生，也不能破坏历史、审计、幂等或未决对账证据。
 
 #### EXIT-P0-05 — 删除 Workspace 的完整清理顺序
 
 - **前置条件（Given）**：Workspace 可能有正在运行的 Worker、连接器、定时任务、凭证和审计记录。
 - **When**：用户确认永久删除 Workspace。
-- **Then**：系统依次停止任务、触发 Kill Switch、取消未执行计划、撤销或指导撤销外部连接、提供可选导出、清除 PII/凭证/缓存，并给出完成或残留项报告。
-- **不变量 / 关联状态**：删除后不得存在可继续运行的后台任务或有效本地 token；外部不可删除内容必须逐项说明。
+- **Then**：系统按不可重排的顺序执行：①确认前记录用户是否需要最终导出，并展示不可逆影响；②用户确认后的首个事务原子创建 `deletionRequestId`、固定 drain/reconciliation deadline 和 `finalExportRequested`，把 Workspace 置为 `DELETING`，触发 Kill Switch、关闭 mutation gate、推进 fencing epoch并冻结撤权目标/在途 operation，`DeletionControl` 仍为 `INACTIVE`；③按同一 deletionRequestId 停止/排空 Worker 与定时任务，取消可证明未发出的动作，对已发出或未知动作限时对账并提交 drain barrier；④若已选择导出，在 gate 关闭状态下从一致性只读视图生成最终导出；导出失败时保持 `DELETING` 并等待重试，只有用户看到失败后明确放弃导出才能继续；⑤CAS 复核同一 deletionRequestId/deadline/frozen targets 后只开放 `REVOCATION_ONLY`；⑥撤销或指导撤销外部连接并记录残留；⑦按策略清除本地 PII、凭证、缓存及受管备份；⑧报告 `DELETED` 或 `DELETED_WITH_EXTERNAL_RESIDUALS`。
+- **不变量 / 关联状态**：最终导出不得发生在用户确认之前，也不得重新开放 mutation gate；删除状态与撤权目标建立后不能因外部撤权失败而回到运行态。删除后不得存在可继续运行的后台任务或有效本地 token；外部不可删除内容必须逐项说明。
 
 #### EXIT-P0-06 — 可迁移导出不包含可直接复用的秘密
 
@@ -797,7 +800,6 @@ v0.1 的 19 项开放决策已经由产品负责人分四组全部确认，权�
 #### P1：常见扩展
 
 - 目标尚不清晰的探索型用户，需要先做方向澄清再创建 Campaign。
-- 两个以上 Campaign 并行运行及公司级跨 Campaign 冲突处理。
 - 首次使用时导入已经处于面试阶段的机会。
 - 非技术用户的图形化安装、升级和连接诊断。
 - 扫描件 OCR、更多简历格式和更丰富的材料导出。
@@ -805,18 +807,18 @@ v0.1 的 19 项开放决策已经由产品负责人分四组全部确认，权�
 - 第二次及更多规则化跟进、不同渠道的跟进节奏。
 - `SCHEDULED` 后在有效预授权内自动处理改期，而不只是通知用户。
 - 多浏览器或多设备同时编辑 Policy 时的乐观锁和冲突合并。
-- 手机端完整处理复杂材料和规则，而不只是紧急异常。
 - 减少动态效果、语音控制和更完整的辅助技术回归矩阵。
 - UI 语言与申请材料语言的独立切换及多语言模板。
-- 卸载向导、外部 OAuth 撤销检查和更细的数据保留设置。
-- 支持连接器原生撤回申请、取消面试和补偿操作。
+- 更友好的卸载向导、P0 删除触发撤权之外的主动/周期性 OAuth 授权健康检查，以及更细的数据保留设置。
+- 在 P0 已有用户撤回路径、calendar-first 失败补偿和删除期撤权之外，扩展更多 Connector/Provider 的原生撤回、取消与补偿动作覆盖。
 
 #### P2：后续规模化
 
 - 多用户、职业教练和就业服务机构协作。
+- 两个以上运行中 Campaign 并行及公司级跨 Campaign 冲突处理。
 - 托管 SaaS、跨设备实时同步和端到端加密协作。
 - 多个真实写入平台同时运行及连接器市场。
-- 原生桌面端、移动端和系统级后台服务。
+- 原生桌面端、手机端完整处理复杂材料/规则和系统级后台服务。
 - RTL 语言、复杂姓名规则和更多地区劳动/薪资语义。
 - 长期行为学习、个性化排序模型和跨 Campaign 推荐迁移。
 - Offer、谈薪、背调和法律事项的跟踪；这些事项即使进入产品也不自动替用户承诺。
@@ -837,8 +839,9 @@ v0.1 的 19 项开放决策已经由产品负责人分四组全部确认，权�
 8. **真实运行状态**：Worker、Runner、连接器在线/离线与覆盖空窗。
 9. **数据生命周期**：结束求职、归档复用、永久删除、导出和恢复。
 10. **无障碍与地区语义**：键盘、屏幕阅读器、非颜色表达、时区、币种和 Unicode。
+11. **配置与证据门**：当前 `.env.example` 只是 M1 预留且 M0 不加载，其中每日约面 fallback 仍为 8、缺少显式自动跟进开关；W1 必须把运行时加载/验证与样例统一为“默认 3/日、普通配置硬上限 8/日、自动跟进默认关闭且每 Application 最多一次”，并建立独立 Case/Evidence/Gate registry 与失败关闭的 `release:check`。在此之前样例值不得被解释为 Accepted 默认值或发布证据。
 
-全部 Case 到状态图、活动图、Sequence 图及其他 UML 视图的映射已记录在 [追踪矩阵](uml/07-traceability.md) 和 [机器可检查 CSV](uml/case-to-uml-v0.1.csv)。下一实施阶段必须建立 Case ID 到自动化测试/演练证据的正式映射；在此之前实现状态保持 `NOT_VERIFIED`。
+全部 Case 到状态图、活动图、Sequence 图及其他 UML 视图的映射已记录在 [追踪矩阵](uml/07-traceability.md) 和 [机器可检查 CSV](uml/case-to-uml-v0.1.csv)。实施期的 Case ID → 自动化测试/演练证据、Gate manifest、`Future/N/A` 批准元数据与发布闭合规则见[实现证据与发布闭合协议](implementation-verification-v0.1.md)；W1 必须建立独立 registry 和 `release:check`，不能改写设计 CSV 冒充通过。在此之前实现状态保持 `NOT_VERIFIED`，发布失败关闭。
 
 ## 附录 B：安全、隐私与合规层 82 条 P0
 
@@ -866,7 +869,7 @@ v0.1 的 19 项开放决策已经由产品负责人分四组全部确认，权�
 | AUTH-008 | Workspace 处于 L2，即使 `autoApply`、`autoReply` 或自动约面开关被错误开启 | 投递、回复或约面计划进入评估 | 始终返回需要人工批准；内部草稿仍可生成 | G1 |
 | AUTH-009 | Workspace 处于 L3，动作位于有效的公司、岗位、答案、连接器、时段、数量和期限范围内 | 动作进入评估 | 可以由 policy 授权；若任一维度越界，只阻塞该动作并创建异常 | G2 |
 | AUTH-010 | 用户创建了看似宽泛的委托策略 | 动作涉及 Offer 接受或拒绝、法律声明、背景调查授权、竞业或无法核实的身份事实 | 固定要求本人处理；普通白名单和全局开关不能覆盖该限制 | G1 |
-| AUTH-011 | Kill switch 在动作创建前、排队中或外部请求进行中被开启 | Worker、Runner 或连接器观察到开关变化 | 禁止全部业务外发，安全取消未开始步骤；内部审计/Inbox 继续；隔离且幂等的安全通道最多发送一次停止告警；不确定的在途动作进入对账 | G1 |
+| AUTH-011 | Kill switch 在动作创建前、排队中或外部请求进行中被开启 | Worker、Runner 或连接器观察到开关变化 | 禁止全部业务外发，安全取消未开始步骤；内部审计/Inbox 继续；依据 ADR-0003，隔离且幂等的安全通道可不等待业务 Shadow、最多发送一次停止告警，但 Plan/Evaluation/Auth/Operation 必须冻结并在调用前复核同一 watchdog binding ID/hash、固定 endpoint/recipient/template/targetHash、kill epoch、现行专用控制与期限，任一缺失或漂移则零告警外呼；不确定的在途动作进入对账 | G1 |
 | AUTH-012 | 相同 idempotency key、ActionPlan 或 token 被重复、并发或跨 Worker 提交，且多个 Campaign 共享全局限额 | 系统处理并发请求 | 最多产生一次外部效果；用量计数原子更新，不能通过并发或多 Campaign 突破上限 | G1 |
 
 ### B. 提示注入与恶意内容
@@ -891,9 +894,9 @@ v0.1 的 19 项开放决策已经由产品负责人分四组全部确认，权�
 | DATA-003 | AI 任务只需要少数技能、经历或答案事实 | 系统构造 Provider 请求 | 只发送完成任务必要的证据片段，不默认发送完整简历、完整消息历史或无关身份字段 | G0 |
 | DATA-004 | 用户将事实标记为未验证、不可对外使用或仅本地保存 | 材料、回复、投递表单或调试信息被生成 | 该事实不进入任何外发内容；需要时创建缺失事实异常 | G0 |
 | DATA-005 | 用户上传简历、附件或图片并完成解析，或任务被取消和失败 | 清理任务运行 | 临时文件、中间 OCR、缓存和未采用草稿按策略删除，不遗留明文副本 | G0 |
-| DATA-006 | 用户请求删除 Workspace | 删除流程执行 | 删除业务数据、附件、缓存、向量和可识别日志；撤销授权和凭证；明确报告仍保留的最小安全摘要及期限 | G0 |
+| DATA-006 | 用户请求删除 Workspace | 删除流程执行 | 删除业务数据、附件、缓存、向量和可识别日志；撤销授权和凭证；明确报告仍保留的最小安全摘要及期限。依据 ADR-0003，每个 `credential_revocation` 不等待业务 Shadow且不得使用业务 Grant；Plan/Evaluation/Auth/Operation 必须冻结同一 revocation control、deletionRequest、固定 target binding ID/hash、targetHash、官方入口与期限，并在外部调用前复核，缺失或漂移则零外呼并记录 residual。业务 DB 不可安全读写时改走独立 Supervisor journal/control envelope 的精确 opaque purge，零业务 DB 写、零猜测撤权，并以 `LOCAL_DELETED_WITH_EXTERNAL_RESIDUALS` 收敛 | G0 |
 | DATA-007 | 用户请求完整导出 | 导出流程执行 | 包含资料、证据、Campaign、策略、材料、申请、异常和审计；不包含可复用 Cookie、token 或密钥 | G0 |
-| DATA-008 | Campaign 结束、用户删除数据或安全审计完整性发生冲突 | 系统应用保留策略 | 活跃期保留必要数据；结束 90 天删原始 JD/消息正文/附件；结构化申请历史、材料版本和最小审计摘要保留 1 年；滚动备份 30 天；用户可随时删除或明确 opt-in 更久 | G0 |
+| DATA-008 | Campaign 结束、用户删除数据或安全审计完整性发生冲突 | 系统应用保留策略 | 原始 JD 有引用时取全部引用 Campaign 最晚 `endedAt+90d`，任一引用仍活跃则保护；无 Campaign 历史用 `importedAt+90d`。到期无论摘要是否可用都删除 raw/快照/可重建副本并令准备包为 `RAW_PURGED`；不可重建摘要、去敏 source/hash随结构化申请历史、材料版本和最小审计摘要保留 1 年，消息正文/附件 90 天、滚动备份 30 天。摘要无效显示 `UNAVAILABLE/INVALID`，不得以此延期 raw。重导入需确认并建立新 lineage；同 hash/异 hash 分别标匹配副本/`REIMPORTED_DIFFERENT_VERSION`，不改历史、不重置时钟；过期 raw 跨会话保留须显式 `extendedUntil`，否则本次使用后再清除。用户可随时删除或明确 opt-in 更久 | G0 |
 | DATA-009 | 日志、错误报告或执行截图含姓名、邮箱、电话、地址、薪资、身份证明或消息正文 | 内容被保存或发送到诊断系统 | 默认关闭敏感截图并自动脱敏；日志只保存必要摘要和稳定引用 ID | G0 |
 | DATA-010 | 启用可能保留数据、跨境传输或用于训练的 AI、通知或托管服务 | 用户首次连接或服务条款发生变化 | 在发送数据前披露提供商、目的、地域和保留方式并取得选择；不同意则保持本地或禁用该能力 | G0 |
 
@@ -951,7 +954,7 @@ v0.1 的 19 项开放决策已经由产品负责人分四组全部确认，权�
 | EXEC-010 | 同一招聘消息同时包含普通问题和 Offer、法律、身份等不可委托问题 | 自动回复规划运行 | 整条回复进入异常；不能只回答安全部分后让上下文看似已完整解决 | G2 |
 | EXEC-011 | 面试日期、时间、时区、持续时长、线上或线下信息存在歧义 | 自动约面规划运行 | 不确认；使用授权模板澄清或创建异常 | G2 |
 | EXEC-012 | 日历快照未知、过期、有冲突、账户或时段与预授权不一致 | 自动约面评估运行 | 返回需要处理或拒绝，不写入 `SCHEDULED` | G2 |
-| EXEC-013 | 日历 tentative event 成功而招聘确认失败，或恢复时发现旧版越序的“回复成功、日历失败”事实 | 复合约面动作部分成功 | calendar-first 路径取消 event；取消失败/未知进入 `SEV-1` 并暂停约面；旧版越序只对账/人工处理；保持 `INTERVIEW_PROPOSED` | G2 |
+| EXEC-013 | 日历 tentative event 成功而招聘确认失败，或恢复时发现旧版越序的“回复成功、日历失败”事实 | 复合约面动作部分成功 | calendar-first 路径取消 event；取消失败/未知进入 `SEV-1`，以新 `safetyFaultEpoch` 将约面 `safetyHoldStatus=HELD`；用户恢复不能清除，只有同 epoch 修复 + RuntimeHealth + 非终态对账 + 当前 binding/receipt + clearance evidence 可由系统清除；旧版越序只对账/人工处理；保持 `INTERVIEW_PROPOSED` | G2 |
 | EXEC-014 | 两个任务同时尝试占用同一日历时段 | 自动约面执行 | 使用原子占位或串行协调，最多一个 Interview 进入 `SCHEDULED`，另一个进入冲突处理 | G2 |
 | EXEC-015 | 招聘方或用户在 SCHEDULED 后改期、取消、修改日历或缺少会议链接 | 后续同步运行 | 使用独立 Interview 生命周期更新；必要时立即通知，不让 Application 状态倒退 | G2 |
 
@@ -990,14 +993,13 @@ P1 在公开 L3 Beta 前完成，重点包括：
 
 - Unicode、编码、附件和超长内容的系统化 fuzz 测试。
 - AI Provider 的数据保留、跨境、模型漂移和成本异常监控。
-- 加密备份、密钥轮换、凭证文件权限和本地恢复演练。
-- 平台条款定期复审、连接器维护状态和只读降级。
-- 夏令时、跨午夜、多日历、通勤缓冲和会议链接补全。
+- P0 变更触发复审之外的主动周期性条款治理、连接器维护状态和只读降级。
+- P0 基础 DST/跨午夜/固定 buffer 与同一账户多个 busy calendar 之外的跨账户/跨 Provider 聚合、复杂 recurring 例外、动态通勤估算和会议链接补全。
 - 消息发送前最后刷新、外部平台截断或改写内容的差异检测。
 - 异常合并、第二个必需外部备用通知渠道、安静时间和告警疲劳控制。
 - 招聘骗局多信号聚合、误报申诉与安全举报流程。
 - Workspace、Campaign 和账户三级限额及异常使用监控。
-- 连接器包来源、签名、SBOM、依赖漏洞和可复现构建。
+- P0 已要求的连接器签名/checksum、SBOM、critical 漏洞和可追溯构建门之外，持续维护监控与更高 provenance 等级。
 
 ### P2 附录摘要
 
@@ -1006,7 +1008,7 @@ P2 在稳定版和连接器生态扩大前完成，重点包括：
 - 审计哈希链、签名、归档和长期篡改检测。
 - 社区骗局情报的隐私保护、可信度和误报治理。
 - 大规模并发、队列投毒、磁盘耗尽和资源滥用演练。
-- 属性测试、状态机 fuzz、混沌测试和跨版本迁移测试。
+- P0 已要求的属性/状态机/混沌/迁移矩阵之外，更大规模、更长周期与更多未来 schema 的扩展验证。
 - 匿名遥测、透明度报告和安全护栏效果指标。
 - 不受维护连接器的自动下架、迁移和替代方案。
 - 第三方 fork、品牌与官方安全承诺的边界说明。
@@ -1103,7 +1105,7 @@ P2 在稳定版和连接器生态扩大前完成，重点包括：
 | QUE-012 | 多个 worker 同时逼近日投递、回复或约面限额 | 并发预留并执行最后一个可用额度 | 额度在外部调用前原子预留；成功 mutation 数永不超过 limit | property+IT：并发 N>limit；多随机 seed 验证计数 |
 | QUE-013 | 同一 Application 上有互斥动作，例如取消与投递、旧回复与新回复 | 动作同时进入执行 | 状态版本/CAS 只允许合法胜者；失败者不产生副作用 | model-based test：随机动作序列与并发 interleaving |
 | QUE-014 | queued Plan 在执行前被取消、过期、撤权，或 policy/version 改变 | worker 获取任务 | 执行时重校验失败；任务终止且零 outbound | E2E：在 enqueue/claim 间修改每个绑定字段 |
-| QUE-015 | kill switch 已开启，队列仍含 mutation jobs | worker 调度 | 所有业务 mutation 停止；读取、对账、内部审计、产品 Inbox、备份和 UI 仍可用；隔离幂等安全通道最多一次停止告警 | E2E：切换 kill switch；断言 endpoint 调用分类和告警去重 |
+| QUE-015 | kill switch 已开启，队列仍含 mutation jobs | worker 调度 | 所有业务 mutation 停止；读取、对账、内部审计、产品 Inbox、备份和 UI 仍可用；依据 ADR-0003，隔离幂等安全通道不等待业务 Shadow、最多一次停止告警。heartbeat/stop-alert 的 Plan/Evaluation/Auth/Operation 必须冻结相同 watchdog binding ID/hash、固定 schema/endpoint/recipient/template/targetHash、signal epoch、现行专用控制与期限，并在每次外部调用前复核；任一不一致则取消且零 endpoint 调用 | E2E：切换 kill switch及执行前 watchdog binding/control 漂移；断言 endpoint 调用分类、零越权调用和告警去重 |
 | QUE-016 | mutation 网络调用已发出 | 调用中开启 kill switch 或取消 Plan | 不宣称已取消；结果进入未知/对账；用户收到异常通知 | FIT：request barrier 后切换开关；校验状态、审计和告警 |
 | QUE-017 | 已使用或已过期的 authorization/idempotency token 被重放，或被用于不同账号/payload/operation | runner 接收执行请求 | 验证绑定和单次语义后拒绝；零外部调用 | SEC+IT：对 token 的每个 claim 做 mutation/fuzz/replay |
 | QUE-018 | queue store、operation ledger 或幂等索引损坏/缺失 | worker 启动 | mutation 全部冻结并进入恢复模式；不得将缺失账本当作未执行 | DR+IT：删除/篡改表页与索引；断言 fail-closed health |
@@ -1137,7 +1139,7 @@ P2 在稳定版和连接器生态扩大前完成，重点包括：
 
 | ID | Given | When | Then | 可自动化方式 |
 |---|---|---|---|---|
-| COM-001 | slot、calendar account、Connector/version、policy snapshot 或 authorization 与 Plan 不一致 | 自动约面开始执行 | 在邮件和日历任一子 operation 前拒绝；零外部副作用 | UT+E2E：逐字段 mutation；断言两 fake provider 均零调用 |
+| COM-001 | slot，或 Calendar/Reply 任一 connector/version、account、credential binding/lineage、manifest/grant、policy snapshot、authorization 与 Plan 不一致 | 自动约面开始执行或执行前复核 | 在任何 Calendar 查询/写入及 Reply 子 operation 前同时复核两组绑定并拒绝；零外部副作用 | UT+E2E：逐字段 mutation；断言两 fake provider 均零调用 |
 | COM-002 | 预授权窗口或 Plan 已过期 | 到达执行时间 | 不自动回复/约面；进入人工确认并记录原因 | 虚拟时钟 E2E：推进边界前后毫秒值 |
 | COM-003 | availability snapshot 超过允许新鲜度 | worker 尝试创建事件 | 必须重新拉取 free/busy；刷新失败则不约面 | CT+E2E：过期 snapshot + calendar outage |
 | COM-004 | free/busy 检查后、event create 前出现新冲突 | 创建候选人私有 tentative event | 最终写入前再次校验或使用 provider 条件写；有冲突即停止；事件不得含招聘方 attendee 或发送邀请邮件 | FIT：在 check/create barrier 插入 busy event；断言 attendee/通知为空 |
@@ -1149,8 +1151,8 @@ P2 在稳定版和连接器生态扩大前完成，重点包括：
 | COM-010 | event 已在远端创建，但响应丢失 | worker 恢复 | 按 idempotency/externalRef/严格指纹对账；只保留一个 live event | fake calendar commit-then-drop；恢复循环 1,000 次 |
 | COM-011 | Calendar Provider 缺少查询/对账、幂等创建、更新/取消或稳定 external ID 任一能力 | scheduler 评估 L3 或恢复未知 operation | 禁止为该 Connector 开启 L3；不自动重试或删除，进入人工裁决并展示候选 externalRefs | CT：逐 capability 删除；预置零/一/多匹配三种结果 |
 | COM-012 | 候选人私有 tentative event 成功、招聘方回复明确失败 | calendar-first 复合约面动作结束 | Interview 不进入 `SCHEDULED`，Application 不记录 `INTERVIEW_SCHEDULED`；用新 Plan/Operation 取消 event 并保留 eventRef；不重复建事件 | E2E：calendar success/mail fail/cancel success fault matrix |
-| COM-013 | 恢复或导入时发现旧版本越序产生“招聘方回复成功、日历事件失败” | 恢复对账运行 | Interview 不进入 `SCHEDULED`，Application 不记录 `INTERVIEW_SCHEDULED`；创建 `SEV-1` 异常并暂停约面；不重发邮件，只能人工协调 | E2E：legacy mail success/calendar fail reconciliation |
-| COM-014 | 取消 tentative event 的补偿动作失败或结果未知 | compensation runner 执行 | Saga 进入 `MANUAL_HANDOFF`，compensation operation 保留 `FAILED_CONFIRMED` / `OUTCOME_UNKNOWN`；创建 `SEV-1` 异常并暂停 scheduling capability；保留全部 externalRef 和 attempt | FIT：primary 与 compensation 双故障矩阵 |
+| COM-013 | 恢复或导入时发现旧版本越序产生“招聘方回复成功、日历事件失败” | 恢复对账运行 | Interview 不进入 `SCHEDULED`，Application 不记录 `INTERVIEW_SCHEDULED`；创建 `SEV-1` 异常，并以新 `safetyFaultEpoch` 将约面 `safetyHoldStatus=HELD`；用户恢复无权清除，只有同 epoch 修复 + RuntimeHealth + 非终态对账 + 当前 binding/receipt + clearance evidence 可由系统清除；不重发邮件，只能人工协调 | E2E：legacy mail success/calendar fail reconciliation |
+| COM-014 | 取消 tentative event 的补偿动作失败或结果未知 | compensation runner 执行 | Saga 进入 `MANUAL_HANDOFF`，compensation operation 保留 `FAILED_CONFIRMED` / `OUTCOME_UNKNOWN`；创建 `SEV-1` 异常，并以新 `safetyFaultEpoch` 将 scheduling capability 的 `safetyHoldStatus` 置为 `HELD`；用户恢复无权清除，只有同 epoch 修复 + RuntimeHealth + 非终态对账 + 当前 binding/receipt + clearance evidence 可由系统清除；保留全部 externalRef 和 attempt | FIT：primary 与 compensation 双故障矩阵 |
 | COM-015 | 用户在自动化读取后手动修改/删除事件 | 自动化提交更新 | etag/version 冲突导致停止；不得覆盖人工修改 | CT：read 后更新远端版本再执行 conditional write |
 | COM-016 | 两位招聘方并发选择同一 slot | 两个 schedule Plan 同时执行 | 本地原子 slot reservation + 最终 free/busy；最多一场确认 | CHAOS+E2E：barrier 并发 10,000 次 |
 | COM-017 | calendar cancellation/reschedule webhook 延迟或乱序 | 同步本地 Application | 按 provider revision 合并；旧事件不回退最新状态，不自动接受超授权新时间 | IT：全排列 webhook 顺序 |
@@ -1212,17 +1214,17 @@ P2 在稳定版和连接器生态扩大前完成，重点包括：
 
 ### 10. P1/P2 附录摘要
 
-#### P1：正式支持前应关闭
+#### P1：P0 正式支持矩阵之外的后续增强
 
-- Docker Compose 的 macOS/Windows/Linux、macOS 原生开发、Node/pnpm、SQLite 与 rootless Docker clean-install 矩阵；Linux/Windows 原生运行时 best effort。
-- Connector read timeout、429、403、token refresh、schema drift 的降级与恢复体验。
-- AI Provider 停机、配额耗尽、token overflow、本地模型 OOM 的 pending/manual fallback。
-- poison job、DLQ、backoff、circuit breaker、queue backlog 与优先级调度。
-- 邮件 bounce、同步 cursor gap、calendar tentative/recurring/all-day 的保守语义。
+- v0.1 已接受 Docker Compose 三系统与 macOS 原生 clean-install 门之外的额外 OS/架构、发行版、runtime 组合与 rootless 环境扩展矩阵。
+- P0 已要求 timeout、429/403、token refresh 与 schema drift 失败关闭/恢复语义之外，更细的 Connector 自助诊断和批量修复体验。
+- P0 已要求 AI outage/quota/overflow/OOM 安全 pending/manual fallback 之外，预测性容量、成本优化和多 Provider 调度。
+- P0 已要求 poison/DLQ/backoff/circuit-breaker 安全行为之外，大规模 backlog、优先级公平性与吞吐调优。
+- P0 已要求邮件 bounce/cursor gap、calendar tentative 与保守冲突处理之外，复杂 recurring/all-day 和更多 Provider 特例体验。
 - 备份 freshness、上传失败、last-known-good、RPO/RTO 和定期恢复演练。
-- 通知渠道失败后的产品内 inbox/banner fallback。
-- health/readiness/liveness、SLO、runbook、升级/回滚文档和 Connector conformance suite。
-- license compatibility、弃用策略、社区插件兼容窗口与安全披露流程。
+- P0 强制产品 Inbox 事实源之外，第二个必需外部备用渠道、banner 编排与告警疲劳优化。
+- P0 已要求 health/readiness/liveness、升级恢复与 Connector conformance 门之外，长期 SLO 看板、演练自动化和运维体验增强。
+- P0 发布 license/supply-chain 检查之外，社区生态的弃用策略、兼容窗口与长期安全披露治理。
 
 #### P2：可带明确 owner 和版本进入 backlog
 
@@ -1281,10 +1283,11 @@ P2 在稳定版和连接器生态扩大前完成，重点包括：
 
 ### 12. P0 发布门槛
 
-1. 本文 100 条 P0 中，所有适用于当前发布功能的条目必须通过；不允许以“低概率”豁免。未实现功能只能凭公开范围声明和 ADR 标记 N/A。
+1. 本文 100 条 P0 中，所有适用于当前发布功能的条目必须通过；不允许以“低概率”豁免。“未实现”本身不能标记 N/A；只有引用 Accepted 基线精确 DEC/assertion 的 `BASELINE_EXCLUDED`，或引用明确列出该 Case/assertion 的 Accepted superseding ADR 的 `POST_BASELINE_CHANGE`，并同时具有产品负责人批准 proof，才是合法的 assertion 级范围处理。
 2. 故障注入总结果必须同时满足：`0 未授权动作`、`0 重复外部副作用`、`0 错误收件人/账号/slot`、`0 假成功或假 SCHEDULED`、`0 数据/审计/幂等账本丢失`、`0 secret/PII canary 泄漏`。
 3. 所有 OUTCOME_UNKNOWN 都能进入可执行的 reconcile 或人工裁决路径；不得永久卡在无解释状态，也不得由普通 retry 消除。
-4. 完成一次“在线备份 → 新主机恢复 → migration → 非终态对账 → 开启 worker”的完整 DR 演练，并达到项目声明的 RPO/RTO。
-5. 真实平台首发前，先在 fake Connector 完成全矩阵；真实 Connector 先通过 read-only/shadow，再以低额度 canary 开启 mutation。
-6. release artifact 必须通过签名/checksum、SBOM、critical vulnerability、license 和 secret/PII 扫描；默认部署安全基线必须通过。
-7. 任一 P0 失败都必须阻断发布；修复后重跑对应类别及全部 mutation crash-cut smoke suite。
+4. 完成一次“在线备份 → 新主机恢复 → migration → 非终态对账 → 开启 worker”的完整 DR 演练，并逐项满足 BKP-001—BKP-009 的数据一致性、凭证排除、失败关闭和零重复副作用断言。RPO/RTO 数值属于 P1，除非未来以 Accepted criteria 明确冻结，否则不作为 v0.1 P0 发布判定中的未定义阈值。
+5. 真实平台首发前，先在 fake Connector 完成全矩阵；真实 Connector 先通过 read-only 与对应 capability 连续 7 天零外发 Shadow，再以低额度 L2 canary 开启 mutation。L2 人工确认不能豁免该 Shadow 门。
+6. 无论局部 L3 是否达到，v0.1 都必须在同一真实闭环验收中连接真实邮箱与真实日历 Provider，证明邮件入站、受控 L2 回复、busy 查询/对账、候选人私有 tentative event、招聘确认与失败补偿；Fake Inbox、测试日历、合成 Saga 或投递交接均不能替代。
+7. release artifact 必须通过签名/checksum、SBOM、critical vulnerability、license 和 secret/PII 扫描；默认部署安全基线必须通过。
+8. 任一 P0 失败都必须阻断发布；修复后重跑对应类别及全部 mutation crash-cut smoke suite。

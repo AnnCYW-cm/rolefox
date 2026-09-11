@@ -21,7 +21,7 @@
 
 发生冲突时按以下顺序处理：
 
-1. 已确认的产品决策（[ADR-0001](../../adr/0001-pre-interview-autopilot.md)、[ADR-0002](../../adr/0002-v0.1-product-decision-baseline.md)）与 [P0 Case 验收基线](../p0-case-baseline-v0.1.md)；
+1. 已确认的产品决策（[ADR-0001](../../adr/0001-pre-interview-autopilot.md)、[ADR-0002](../../adr/0002-v0.1-product-decision-baseline.md)、[ADR-0003](../../adr/0003-shadow-safety-control-exceptions.md)、[ADR-0004](../../adr/0004-jd-raw-retention-and-preparation-pack.md)）与 [P0 Case 验收基线](../p0-case-baseline-v0.1.md)；后两份 ADR 对前序基线的窄化澄清/修订优先；
 2. [v0.1 PRD](../prd-v0.1.md) 与 [用户体验设计](../user-experience-v0.1.md)；
 3. 本 UML 设计基线；
 4. [架构说明](../../architecture.md) 与 [自动化安全说明](../../automation-safety.md)；
@@ -67,7 +67,7 @@
 | ActionPlan | 核心系统生成的不可变外部动作意图；连接器只能提交 ActionDraft |
 | ActionAuthorization | 对 ActionPlan 的一次授权，绑定计划、策略版本、载荷哈希和期限 |
 | ExternalOperation | 一次可对账的外部副作用执行记录；承载幂等、未知结果和补偿状态 |
-| AutomationPolicy | Workspace 安全上限、Campaign 策略与 capability grant 三层交集；暂停控制是独立正交维度 |
+| Automation governance / effective authority | `SystemSafetyPolicy ∩ AutomationPolicyRevision（用户委托）∩ Workspace OperationalControl ∩ CapabilityOperationalControl ∩ RuntimeHealth`；删除撤权与 SafetySignal 另走各自不可委托控制面，不能塞回单一 AutomationPolicy |
 | Exception | 只有用户或新事实才能解除的单一决策问题 |
 | Interview | 独立于 Application 漏斗的排期实体；进入 SCHEDULED 后继续承载改期/取消 |
 | Notification | 通知投递状态，不改变它所通知的业务事实 |
@@ -90,24 +90,24 @@
 2. Interview 首次进入 `SCHEDULED`、且 Application 记录 `INTERVIEW_SCHEDULED` 里程碑，即完成 v0.1 核心交付；之后的改期和取消继续监控并立即提醒，默认由用户处理。
 3. 自动跟进默认关闭；显式开启后最多自动跟进一次。
 4. 自动回答默认没有授权，只能按事实、问题类别和答案区间分别开启。
-5. 暂停分为“暂停新机会”“停止所有外发”“全局急停”。
+5. 暂停分为“暂停新机会”“停止全部外发”“全局急停”。
 6. Worker 或设备停止时必须明确显示离线，不得宣称仍在持续运行。
 7. 备份恢复不恢复凭证、执行令牌或 L3 授权。
 8. 删除个人数据优先，只能按明确期限保留不可反推个人的最小安全摘要。
 
 ## 7. 已接受的 v0.1 产品决定
 
-以下 19 项产品决定均已由产品负责人确认并进入 [ADR-0002](../../adr/0002-v0.1-product-decision-baseline.md)，另保留已合并的 `DEC-13`。表内内容是工程约束，不是建议；`DEC-13` 已合并到 `DEC-04`，编号永久保留、不复用。
+以下 19 项原始产品决定均已由产品负责人确认并进入 [ADR-0002](../../adr/0002-v0.1-product-decision-baseline.md)，另保留已合并的 `DEC-13`；当前解释还必须同时遵守 Accepted [ADR-0003](../../adr/0003-shadow-safety-control-exceptions.md) 与 [ADR-0004](../../adr/0004-jd-raw-retention-and-preparation-pack.md)。表内内容是工程约束，不是建议；`DEC-13` 已合并到 `DEC-04`，编号永久保留、不复用。
 
 | 决策 ID | 状态 | Accepted baseline | 影响图 |
 | --- | --- | --- | --- |
 | DEC-01 | ACCEPTED | 国际化、邮箱中心开放通道：开放导入或合规只读源 + 邮件 + 日历 + 通知；真实外发默认 L2/人工交接；BOSS 为后续重点 Connector | `RF-UML-CTX-SYS-01`、`RF-UML-SEQ-APPLY-01`、`RF-UML-DEP-LOCAL-01` |
-| DEC-02 | ACCEPTED | L3 按 capability；真实外发先连续 7 天 Shadow；匹配/材料各 50 决策；投递/回复各 20 次真实 L2；约面 5 次真实 L2 + 20 个合成异常 Case；四类严重错误为 0 | `RF-UML-ACT-CAL-01`、`RF-UML-SM-POL-01` |
+| DEC-02 | ACCEPTED + ADR-0003 | 每项真实业务外发（含首次 L2）先连续 7 天零业务外发 Shadow；通过后才积累真实 L2 样本；L3 再按 capability 要求匹配/材料各 50 决策、投递/回复各 20 次真实 L2、约面 5 次真实 L2 + 20 个合成异常 Case，且四类严重错误为 0。固定 heartbeat、一次停止告警和删除期固定撤权走隔离安全控制，不复用业务 Shadow/G1 | `RF-UML-ACT-CAL-01`、`RF-UML-SM-POL-01`、`RF-UML-CD-AUTH-01` |
 | DEC-03 | ACCEPTED | 默认投递 10/日、回复 8/小时、约面 3/日；普通配置硬上限 25/12/8；每个 Application 最多一次自动跟进 | `RF-UML-CD-AUTH-01`、`RF-UML-ACT-AUTH-01` |
 | DEC-04 | ACCEPTED | 产品 Inbox 是强制事实源；邮件默认外部通知；Webhook 可选；第二个必需外部备用渠道为 P1 | `RF-UML-SM-NOT-01`、`RF-UML-SEQ-NOT-01` |
-| DEC-05 | ACCEPTED | 活跃期保留必要数据；结束 90 天删原始 JD/消息/附件；结构化历史、材料版本和最小审计 1 年；滚动备份 30 天；用户可随时导出/删除或明确延长 | `RF-UML-ACT-DATA-01`、`RF-UML-SEQ-DATA-01` |
+| DEC-05 | ACCEPTED + ADR-0004 | 按全部引用 Campaign 生命周期清除原始 JD，结束 90 天删消息/附件；raw 到期即删且摘要故障不得延期；不可重建 JD 摘要、去敏 source/hash随结构化历史、材料版本和最小审计保留 1 年；滚动备份 30 天；重导入不暗中续期 | `RF-UML-ACT-DATA-01`、`RF-UML-SEQ-DATA-01` |
 | DEC-06 | ACCEPTED | Docker Compose 正式支持 macOS/Windows/Linux；macOS 原生开发正式支持；Linux/Windows 原生 runtime best effort | `RF-UML-DEP-LOCAL-01`、`RF-UML-DEP-HOSTED-01` |
-| DEC-07 | ACCEPTED | 准备包含 JD 快照/来源、公司岗位摘要、匹配理由、实际投递材料、沟通时间线、联系人、确认时间/时区/地点/链接、日历状态；AI 建议为 P1 | `RF-UML-CD-COM-01`、`RF-UML-SM-INT-01` |
+| DEC-07 | ACCEPTED + ADR-0004 | 准备包 raw 可用时含快照；清除后明确 `RAW_PURGED` 并只展示不可重建摘要、去敏 source/hash及重导入入口；两种状态均含匹配理由、实际材料、沟通时间线、联系人、确认时间/时区/地点/链接和日历状态；AI 建议为 P1 | `RF-UML-CD-COM-01`、`RF-UML-SM-INT-01` |
 | DEC-08 | ACCEPTED | 本地锁 → 新鲜日历复查 → 私有 tentative event → 落盘日历结果 → 回复确认 → 两侧明确成功才 `SCHEDULED`；两个 Operation 独立幂等/对账 | `RF-UML-SEQ-INT-01`、`RF-UML-SEQ-INT-02`、`RF-UML-REL-SAGA-01` |
 | DEC-09 | ACCEPTED | connector + externalId 或规范 URL 精确去重；跨源只建疑似组且歧义不自动合并；每 Workspace 每个已确认机会最多一个活跃 Application | `RF-UML-ACT-IMPORT-01`、`RF-UML-CD-JOB-01` |
 | DEC-10 | ACCEPTED | `CLOSED` 是必填原因的终态；新外部事实或用户 reapply 时创建关联的新 Application，旧实例不倒退 | `RF-UML-SM-APP-01` |
@@ -134,5 +134,6 @@
 6. M0 与 v0.1 目标差距已进入实施清单和 ADR；
 7. 87 张 Mermaid 图和所有内部链接由 `pnpm docs:check` 校验；
 8. 254 条 Case 的设计评审状态为 `ACCEPTED`，实现状态仍为 `NOT_VERIFIED`。
+9. v0.1 发布必须额外通过真实邮箱 + 真实日历 Provider 的同一端到端闭环；该门可在 L2 完成且不以 L3 为前提，Fake Inbox、测试日历或投递交接不能替代。
 
 `Accepted` 只代表可以据此开发，不代表当前代码已经实现、测试通过或允许真实 L3 外发。
