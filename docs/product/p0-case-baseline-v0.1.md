@@ -839,9 +839,9 @@ v0.1 的 19 项原始开放决策已经由产品负责人分四组全部确认�
 8. **真实运行状态**：Worker、Runner、连接器在线/离线与覆盖空窗。
 9. **数据生命周期**：结束求职、归档复用、永久删除、导出和恢复。
 10. **无障碍与地区语义**：键盘、屏幕阅读器、非颜色表达、时区、币种和 Unicode。
-11. **配置与证据门**：当前 `.env.example` 只是 M1 预留且 M0 不加载，其中每日约面 fallback 仍为 8、缺少显式自动跟进开关；W1 必须把运行时加载/验证与样例统一为“默认 3/日、普通配置硬上限 8/日、自动跟进默认关闭且每 Application 最多一次”，并建立独立 Case/Evidence/Gate registry 与失败关闭的 `release:check`。在此之前样例值不得被解释为 Accepted 默认值或发布证据。
+11. **配置与证据门**：当前 `.env.example` 只是 M1 预留且 M0 不加载，其中每日约面 fallback 仍为 8、缺少显式自动跟进开关；W1 必须把运行时加载/验证与样例统一为“默认 3/日、普通配置硬上限 8/日、自动跟进默认关闭且每 Application 最多一次”，并在已有 Pre-W1 Evidence/Gate 控制面上建立独立 Case/Journey/Invariant registry、BUILD/Runtime Binding manifest 与失败关闭的完整 `release:check`。在此之前样例值不得被解释为 Accepted 默认值或发布证据。
 
-全部 Case 到状态图、活动图、Sequence 图及其他 UML 视图的映射已记录在 [追踪矩阵](uml/07-traceability.md) 和 [机器可检查 CSV](uml/case-to-uml-v0.1.csv)。实施期的 Case ID → 自动化测试/演练证据、Gate manifest、`Future/N/A` 批准元数据与发布闭合规则见[实现证据与发布闭合协议](implementation-verification-v0.1.md)；W1 必须建立独立 registry 和 `release:check`，不能改写设计 CSV 冒充通过。在此之前实现状态保持 `NOT_VERIFIED`，发布失败关闭。
+全部 Case 到状态图、活动图、Sequence 图及其他 UML 视图的映射已记录在 [追踪矩阵](uml/07-traceability.md) 和 [机器可检查 CSV](uml/case-to-uml-v0.1.csv)。实施期的 Case ID → 自动化测试/演练证据、Gate manifest、`Future/N/A` 批准元数据与发布闭合规则见[实现证据与发布闭合协议](implementation-verification-v0.1.md)；W1 必须在 Pre-W1 最小控制面上补齐 Case/Journey/Invariant/BUILD/Runtime Binding registries 和完整 `release:check`，不能改写设计 CSV 冒充通过。在此之前实现状态保持 `NOT_VERIFIED`，发布失败关闭。
 
 ## 附录 B：安全、隐私与合规层 82 条 P0
 

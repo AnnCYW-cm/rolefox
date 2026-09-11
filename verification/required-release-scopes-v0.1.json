@@ -1,0 +1,286 @@
+{
+  "schema_version": "rolefox.required-release-scopes.v1",
+  "catalog_version": "v0.1-draft-1",
+  "canonicalization": "rolefox-canonical-digest-v1",
+  "status": "PROPOSED_PENDING_INDEPENDENT_REVIEW",
+  "compiled_from": [
+    "docs/adr/0002-v0.1-product-decision-baseline.md",
+    "docs/adr/0003-shadow-safety-control-exceptions.md",
+    "docs/adr/0004-jd-raw-retention-and-preparation-pack.md",
+    "docs/product/implementation-verification-v0.1.md"
+  ],
+  "review": {
+    "signed_payload_digest": "2ccd5df452d09857b9bcfa84e463b7e0c611d145f01b66815f9ed07395185a2b",
+    "reviewed_by": null,
+    "reviewed_at": null,
+    "approval_proof_digest": null,
+    "approver_role_version": null
+  },
+  "scopes": [
+    {
+      "scope_id": "job_source_read",
+      "capability": "job_source",
+      "scope_effect": "READ",
+      "channel_role": "job_source",
+      "execution_class": "READ_ONLY",
+      "release_requirement": "REQUIRED",
+      "minimum_mode": "READ_ONLY",
+      "maximum_mode": "READ_ONLY",
+      "reads_real_data": true,
+      "performs_real_mutation": false,
+      "fallback_allowed": false,
+      "required_gate_ids": [
+        "CAPABILITY_G0",
+        "PROJECT_C_PLATFORM_PREFLIGHT",
+        "PROJECT_C_PLATFORM_REAL_READ"
+      ]
+    },
+    {
+      "scope_id": "mailbox_read",
+      "capability": "mailbox",
+      "scope_effect": "READ",
+      "channel_role": "mailbox_inbound",
+      "execution_class": "READ_ONLY",
+      "release_requirement": "REQUIRED",
+      "minimum_mode": "READ_ONLY",
+      "maximum_mode": "READ_ONLY",
+      "reads_real_data": true,
+      "performs_real_mutation": false,
+      "fallback_allowed": false,
+      "required_gate_ids": [
+        "CAPABILITY_G0",
+        "PROJECT_C_PLATFORM_PREFLIGHT",
+        "PROJECT_C_PLATFORM_REAL_READ"
+      ]
+    },
+    {
+      "scope_id": "mailbox_reply_l2",
+      "capability": "mailbox_reply",
+      "scope_effect": "BUSINESS_OUTBOUND_MUTATION",
+      "channel_role": "recruiter_reply",
+      "execution_class": "BUSINESS_MODE",
+      "release_requirement": "REQUIRED",
+      "minimum_mode": "L2",
+      "maximum_mode": "L3",
+      "reads_real_data": true,
+      "performs_real_mutation": true,
+      "fallback_allowed": false,
+      "required_gate_ids": [
+        "CAPABILITY_G0",
+        "PROJECT_A_GENERALITY",
+        "PROJECT_B_SYNTHETIC_SAFETY",
+        "VALIDATION_OUTBOUND_CALIBRATION",
+        "PROJECT_C_PLATFORM_PREFLIGHT",
+        "CAPABILITY_G1",
+        "PROJECT_C_PLATFORM_LIVE"
+      ]
+    },
+    {
+      "scope_id": "default_email_notification",
+      "capability": "notification",
+      "scope_effect": "BUSINESS_OUTBOUND_MUTATION",
+      "channel_role": "default_email_notification",
+      "execution_class": "BUSINESS_MODE",
+      "release_requirement": "REQUIRED",
+      "minimum_mode": "L2",
+      "maximum_mode": "L3",
+      "reads_real_data": false,
+      "performs_real_mutation": true,
+      "fallback_allowed": false,
+      "required_gate_ids": [
+        "CAPABILITY_G0",
+        "PROJECT_A_GENERALITY",
+        "PROJECT_B_SYNTHETIC_SAFETY",
+        "VALIDATION_OUTBOUND_CALIBRATION",
+        "PROJECT_C_PLATFORM_PREFLIGHT",
+        "CAPABILITY_G1",
+        "PROJECT_C_PLATFORM_LIVE"
+      ]
+    },
+    {
+      "scope_id": "calendar_busy_read",
+      "capability": "calendar",
+      "scope_effect": "READ",
+      "channel_role": "calendar_busy",
+      "execution_class": "READ_ONLY",
+      "release_requirement": "REQUIRED",
+      "minimum_mode": "READ_ONLY",
+      "maximum_mode": "READ_ONLY",
+      "reads_real_data": true,
+      "performs_real_mutation": false,
+      "fallback_allowed": false,
+      "required_gate_ids": [
+        "CAPABILITY_G0",
+        "PROJECT_C_PLATFORM_PREFLIGHT",
+        "PROJECT_C_PLATFORM_REAL_READ"
+      ]
+    },
+    {
+      "scope_id": "calendar_tentative_create",
+      "capability": "calendar",
+      "scope_effect": "BUSINESS_OUTBOUND_MUTATION",
+      "channel_role": "calendar_tentative_create",
+      "execution_class": "BUSINESS_MODE",
+      "release_requirement": "REQUIRED",
+      "minimum_mode": "L2",
+      "maximum_mode": "L3",
+      "reads_real_data": true,
+      "performs_real_mutation": true,
+      "fallback_allowed": false,
+      "required_gate_ids": [
+        "CAPABILITY_G0",
+        "PROJECT_A_GENERALITY",
+        "PROJECT_B_SYNTHETIC_SAFETY",
+        "VALIDATION_OUTBOUND_CALIBRATION",
+        "PROJECT_C_PLATFORM_PREFLIGHT",
+        "CAPABILITY_G1",
+        "PROJECT_C_PLATFORM_LIVE"
+      ]
+    },
+    {
+      "scope_id": "calendar_tentative_cancel",
+      "capability": "calendar",
+      "scope_effect": "BUSINESS_OUTBOUND_MUTATION",
+      "channel_role": "calendar_tentative_cancel",
+      "execution_class": "BUSINESS_MODE",
+      "release_requirement": "REQUIRED",
+      "minimum_mode": "L2",
+      "maximum_mode": "L3",
+      "reads_real_data": true,
+      "performs_real_mutation": true,
+      "fallback_allowed": false,
+      "required_gate_ids": [
+        "CAPABILITY_G0",
+        "PROJECT_A_GENERALITY",
+        "PROJECT_B_SYNTHETIC_SAFETY",
+        "VALIDATION_OUTBOUND_CALIBRATION",
+        "PROJECT_C_PLATFORM_PREFLIGHT",
+        "CAPABILITY_G1",
+        "PROJECT_C_PLATFORM_LIVE"
+      ]
+    },
+    {
+      "scope_id": "calendar_tentative_update",
+      "capability": "calendar",
+      "scope_effect": "BUSINESS_OUTBOUND_MUTATION",
+      "channel_role": "calendar_tentative_update",
+      "execution_class": "BUSINESS_MODE",
+      "release_requirement": "CONDITIONAL_IF_ENABLED_OR_L3",
+      "minimum_mode": "L2",
+      "maximum_mode": "L3",
+      "reads_real_data": true,
+      "performs_real_mutation": true,
+      "fallback_allowed": false,
+      "required_gate_ids": [
+        "CAPABILITY_G0",
+        "PROJECT_A_GENERALITY",
+        "PROJECT_B_SYNTHETIC_SAFETY",
+        "VALIDATION_OUTBOUND_CALIBRATION",
+        "PROJECT_C_PLATFORM_PREFLIGHT",
+        "CAPABILITY_G1",
+        "PROJECT_C_PLATFORM_LIVE"
+      ]
+    },
+    {
+      "scope_id": "application_submit_l2",
+      "capability": "application_submit",
+      "scope_effect": "BUSINESS_OUTBOUND_MUTATION",
+      "channel_role": "job_application_submit",
+      "execution_class": "BUSINESS_MODE",
+      "release_requirement": "REQUIRED_LIVE_OR_ACCEPTED_FALLBACK",
+      "minimum_mode": "L2",
+      "maximum_mode": "L3",
+      "reads_real_data": true,
+      "performs_real_mutation": true,
+      "fallback_allowed": true,
+      "fallback_policy": "ACCEPTED_FALLBACK_READ_EXPORT_PREFILL_DEEPLINK_ZERO_OUTBOUND",
+      "required_gate_ids": [
+        "CAPABILITY_G0",
+        "PROJECT_A_GENERALITY",
+        "PROJECT_B_SYNTHETIC_SAFETY",
+        "VALIDATION_OUTBOUND_CALIBRATION",
+        "PROJECT_C_PLATFORM_PREFLIGHT",
+        "CAPABILITY_G1",
+        "PROJECT_C_PLATFORM_LIVE"
+      ]
+    },
+    {
+      "scope_id": "safety_liveness_heartbeat",
+      "capability": "safety_signal",
+      "scope_effect": "SAFETY_CONTROL_MUTATION",
+      "channel_role": "watchdog_heartbeat",
+      "execution_class": "SAFETY_CONTROL_ONLY",
+      "release_requirement": "REQUIRED",
+      "minimum_mode": null,
+      "maximum_mode": null,
+      "reads_real_data": false,
+      "performs_real_mutation": true,
+      "fallback_allowed": false,
+      "required_gate_ids": [
+        "CAPABILITY_G0",
+        "PROJECT_C_PLATFORM_PREFLIGHT",
+        "PROJECT_B_SYNTHETIC_SAFETY",
+        "SAFETY_CONTROL_GUARD",
+        "PROJECT_C_PLATFORM_LIVE"
+      ]
+    },
+    {
+      "scope_id": "safety_stop_alert",
+      "capability": "safety_signal",
+      "scope_effect": "SAFETY_CONTROL_MUTATION",
+      "channel_role": "watchdog_stop_alert",
+      "execution_class": "SAFETY_CONTROL_ONLY",
+      "release_requirement": "REQUIRED",
+      "minimum_mode": null,
+      "maximum_mode": null,
+      "reads_real_data": false,
+      "performs_real_mutation": true,
+      "fallback_allowed": false,
+      "required_gate_ids": [
+        "CAPABILITY_G0",
+        "PROJECT_C_PLATFORM_PREFLIGHT",
+        "PROJECT_B_SYNTHETIC_SAFETY",
+        "SAFETY_CONTROL_GUARD",
+        "PROJECT_C_PLATFORM_LIVE"
+      ]
+    },
+    {
+      "scope_id": "credential_revocation",
+      "capability": "credential_revocation",
+      "scope_effect": "SAFETY_CONTROL_MUTATION",
+      "channel_role": "deletion_credential_revocation",
+      "execution_class": "SAFETY_CONTROL_ONLY",
+      "release_requirement": "CONDITIONAL_IF_SUPPORTED_AND_DELETION_REQUESTED",
+      "minimum_mode": null,
+      "maximum_mode": null,
+      "reads_real_data": false,
+      "performs_real_mutation": true,
+      "fallback_allowed": false,
+      "required_gate_ids": [
+        "CAPABILITY_G0",
+        "PROJECT_C_PLATFORM_PREFLIGHT",
+        "PROJECT_B_SYNTHETIC_SAFETY",
+        "SAFETY_CONTROL_GUARD",
+        "PROJECT_C_PLATFORM_LIVE"
+      ]
+    },
+    {
+      "scope_id": "release_v01_real_provider_joined",
+      "capability": "release_joined_provider_evidence",
+      "scope_effect": "JOINED_RELEASE",
+      "channel_role": "mailbox_calendar_joined_release",
+      "execution_class": "JOINED_RELEASE",
+      "release_requirement": "REQUIRED",
+      "minimum_mode": null,
+      "maximum_mode": null,
+      "reads_real_data": true,
+      "performs_real_mutation": true,
+      "fallback_allowed": false,
+      "required_gate_ids": [
+        "RELEASE_G3_OSS_STABILITY",
+        "RELEASE_V01_REAL_PROVIDER"
+      ]
+    }
+  ],
+  "catalog_digest": "b7b4837a18ab6ba276bfd898d1fa3258d9a1c3db1d9885bc01fe1b47f3cb5140"
+}
