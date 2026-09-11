@@ -263,7 +263,7 @@ L3 必须按 capability 独立开启、暂停和恢复。进入 `STOP_OUTBOUND` 
 
 ## 13. 已接受决策与仍需验证的实现选择
 
-v0.1 的 19 项产品与目标设计决定已经接受，原始基线见 [ADR-0002](../adr/0002-v0.1-product-decision-baseline.md)；业务 Shadow 与隔离安全控制边界由 [ADR-0003](../adr/0003-shadow-safety-control-exceptions.md) 澄清，JD raw 清除后的准备包行为由 [ADR-0004](../adr/0004-jd-raw-retention-and-preparation-pack.md) 修订。三份 Accepted ADR 共同构成当前权威产品决策。
+v0.1 的 19 项产品与目标设计决定已经接受，原始基线见 [ADR-0002](../adr/0002-v0.1-product-decision-baseline.md)；业务 Shadow 与隔离安全控制边界由 [ADR-0003](../adr/0003-shadow-safety-control-exceptions.md) 澄清，JD raw 清除后的准备包行为由 [ADR-0004](../adr/0004-jd-raw-retention-and-preparation-pack.md) 修订；唯一维护者决策权及机器信任职责由 [ADR-0005](../adr/0005-sole-maintainer-governance.md) 固定。这四份 Accepted ADR 共同构成当前权威产品与治理基线。
 
 以下运行与治理要求是 PRD 级验收契约，不依赖读者另行推断 ADR：
 
@@ -287,4 +287,4 @@ v0.1 的 19 项产品与目标设计决定已经接受，原始基线见 [ADR-00
 3. 默认跟进冷却期的具体时长；自动次数已经锁定为每个 Application 最多一次；
 4. 邮件、日历和可选 Webhook 的具体 Provider 与认证方式。
 
-任何实现选择都不能弱化 ADR-0002、ADR-0003 与 ADR-0004 的授权、故障恢复、数据保留和安全边界。若找不到合规稳定的写入路径，真实业务动作继续保持 L2 或人工交接。
+任何实现选择都不能弱化 ADR-0002、ADR-0003、ADR-0004 与 ADR-0005 的授权、故障恢复、数据保留、安全和治理边界。若找不到合规稳定的写入路径，真实业务动作继续保持 L2 或人工交接。

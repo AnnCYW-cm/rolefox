@@ -6,6 +6,8 @@
 
 完整的发布阻断场景与验收规则见 [v0.1 P0 Case 验收基线](p0-case-baseline-v0.1.md)。
 
+验证治理依据 [ADR-0005：采用单一维护者决策治理](../adr/0005-sole-maintainer-governance.md)：`github:AnnCYW-cm` 是唯一 `MAINTAINER_DECIDER`，负责本计划全部 Gate、范围和继续/收窄/停止决策，也可以同时提交并决定同一 Gate。GitHub Actions OIDC 只负责 Evidence 生产、proof 验证、decision-envelope 来源证明/attestation、checkpoint 机器签名和外部锚定，不是第二位产品评审人；任何机器证明都不能替代下列真实样本、冻结分母、阈值和原始受控证据。
+
 ## 1. 验证目标
 
 v0.1 需要回答的核心问题不是“用户喜不喜欢一个求职 Dashboard”，而是：
@@ -173,6 +175,8 @@ ABQI 先按每个活跃用户月计算，再报告均值、中位数、分布与
 未授权动作、重复投递、虚假事实、硬条件误投、错误排期、敏感数据泄漏均以事件数统计，发布要求始终为 0。
 
 ## 7. 决策门
+
+以下各 Gate 均由唯一 `MAINTAINER_DECIDER` `github:AnnCYW-cm` 根据登记证据作出决定。决定必须绑定完整 canonical payload、当前 Candidate/Spec/Catalog/Protocol 与 Evidence refs，并由获准的 GitHub Actions OIDC 工作负载签名后进入只追加 Gate/checkpoint 链；允许提交者与决定者为同一维护者，但不允许无证据 override、删除失败记录或降低本节门槛。样本 cohort、holdout 与规则提炼集之间的独立性仍按各自统计语义强制执行，不因治理角色合并而改变。
 
 ### Gate 1：是否值得继续做完整闭环（Pre-W1）
 

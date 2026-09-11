@@ -8,6 +8,7 @@ import {
 import {
   GATE_IDS,
   PATHS,
+  SOLE_MAINTAINER_AUTHORITY,
   TRUST_VERIFICATION_STATUS,
   VERIFICATION_TOOLCHAIN_FILES,
 } from "./config.mjs";
@@ -45,7 +46,7 @@ const PRE_W1_CRITERION_REFS = [
   "pain_interview_threshold",
   "target_channel_feasibility",
   "rules_replay_coverage",
-  "independent_gate_approval",
+  "maintainer_gate_decision",
   "registry_integrity",
 ];
 const IDENTITY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:@/-]*$/;
@@ -116,6 +117,25 @@ function requireIdentity(value, label) {
   requireString(value, label);
   invariant(IDENTITY_PATTERN.test(value), `${label} must be a stable, whitespace-free identity.`);
   return value;
+}
+
+function requireSoleMaintainerDecision(identity, roleVersion, label) {
+  invariant(
+    identity === SOLE_MAINTAINER_AUTHORITY.identity,
+    `${label} must use the configured sole-maintainer identity.`,
+  );
+  invariant(
+    roleVersion === SOLE_MAINTAINER_AUTHORITY.role_version,
+    `${label} must use the configured sole-maintainer role version.`,
+  );
+}
+
+function requireSoleMaintainerProtocol(protocol) {
+  invariant(
+    canonicalDigest(protocol.decision_authority) ===
+      canonicalDigest(SOLE_MAINTAINER_AUTHORITY),
+    "Current research protocol decision authority does not match the configured sole maintainer.",
+  );
 }
 
 function requireDigest(value, label) {
@@ -570,6 +590,7 @@ function validateFailEvidence(evidenceRefs, evidenceById, context, submittedAt) 
 }
 
 function requireDecisionAuthorities(context) {
+  requireSoleMaintainerProtocol(context.protocol);
   invariant(context.catalog.status === "ACCEPTED", "Required Release Scope Catalog is not accepted.");
   approvalIsValid(
     {
@@ -588,6 +609,11 @@ function requireDecisionAuthorities(context) {
     ["catalog_digest"],
     "catalog.review",
   );
+  requireSoleMaintainerDecision(
+    context.catalog.review.reviewed_by,
+    context.catalog.review.approver_role_version,
+    "catalog.review",
+  );
   invariant(context.protocol.status === "APPROVED", "Research protocol is not approved.");
   approvalIsValid({ status: context.protocol.status, ...context.protocol.approval }, "protocol.approval");
   verifyApprovalPayload(
@@ -596,11 +622,21 @@ function requireDecisionAuthorities(context) {
     ["protocol_digest"],
     "protocol.approval",
   );
+  requireSoleMaintainerDecision(
+    context.protocol.approval.approved_by,
+    context.protocol.approval.approver_role_version,
+    "protocol.approval",
+  );
   approvalIsValid(context.candidate.approval, "candidate.approval");
   verifyApprovalPayload(
     context.candidate,
     "approval",
     ["candidate_scope_manifest_id", "manifest_digest"],
+    "candidate.approval",
+  );
+  requireSoleMaintainerDecision(
+    context.candidate.approval.approved_by,
+    context.candidate.approval.approver_role_version,
     "candidate.approval",
   );
   invariant(
@@ -743,14 +779,19 @@ function bindDecision(input, context, previous, evidenceById, { prepare = false 
     if (prepare) {
       invariant(
         bound.approval_proof_digest === null,
-        "Prepared PASS/FAIL must leave approval_proof_digest null for the independent approver.",
+        "Prepared PASS/FAIL must leave approval_proof_digest null for the maintainer decision proof.",
       );
     } else {
       requireDigest(bound.approval_proof_digest, "approval_proof_digest");
     }
+    requireSoleMaintainerDecision(
+      bound.approved_by,
+      bound.approver_role_version,
+      "Gate decision",
+    );
     invariant(
-      bound.submitted_by !== bound.approved_by,
-      "Gate submitter cannot approve the same PASS/FAIL decision.",
+      bound.submitted_by === bound.approved_by,
+      "Sole-maintainer PASS/FAIL must be submitted and decided by the configured maintainer.",
     );
     invariant(approvedAt >= submittedAt, "Gate approval predates submission.");
     invariant(decidedAt >= approvedAt, "decided_at predates Gate approval.");

@@ -8,6 +8,7 @@ import {
   PATHS,
   PRE_W1_RESEARCH_SCOPE_IDS,
   REQUIRED_RELEASE_SCOPE_IDS,
+  SOLE_MAINTAINER_AUTHORITY,
   TRUST_VERIFICATION_STATUS,
   VERIFICATION_TOOLCHAIN_FILES,
 } from "./config.mjs";
@@ -46,13 +47,31 @@ const EVIDENCE_KINDS = new Map([
 ]);
 const EVIDENCE_RESULTS = new Set(["PASS", "FAIL", "INCONCLUSIVE"]);
 const GATE_RESULTS = new Set(["PASS", "ACCEPTED_FALLBACK", "FAIL", "BLOCKED"]);
-const PRE_W1_CRITERION_REFS = [
+const LEGACY_PRE_W1_CRITERION_REFS = [
   "pain_interview_threshold",
   "target_channel_feasibility",
   "rules_replay_coverage",
   "independent_gate_approval",
   "registry_integrity",
 ];
+const PRE_W1_CRITERION_REFS = [
+  "pain_interview_threshold",
+  "target_channel_feasibility",
+  "rules_replay_coverage",
+  "maintainer_gate_decision",
+  "registry_integrity",
+];
+const COMMON_PROTOCOL_OUTPUTS = [
+  "DEIDENTIFIED_PAIN_INTERVIEW_EVIDENCE",
+  "DEIDENTIFIED_TARGET_CHANNEL_ELIGIBILITY_EVIDENCE",
+  "FROZEN_PER_PARTICIPANT_JOB_DATASET_DIGESTS",
+  "RULE_REPLAY_MEASUREMENTS",
+  "COHORT_DENOMINATOR_AND_EXCLUSION_SUMMARY",
+];
+const LEGACY_GATE_DECISION_OUTPUT =
+  "INDEPENDENT_GATE_DECISION_AND_APPROVAL_PROOF";
+const MAINTAINER_GATE_DECISION_OUTPUT =
+  "MAINTAINER_GATE_DECISION_AND_APPROVAL_PROOF";
 const SHA256_PATTERN = /^[a-f0-9]{64}$/;
 const IDENTIFIER_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:@/-]*$/;
 const PARTICIPANT_SURROGATE_PATTERN = /^participant_[a-z0-9]{12,64}$/;
@@ -91,6 +110,55 @@ function requireIdentity(value, label) {
   requireString(value, label);
   invariant(IDENTIFIER_PATTERN.test(value), `${label} is not a stable identity.`);
   return value;
+}
+
+function isSoleMaintainerProtocol(protocol) {
+  return protocol?.decision_authority?.governance_mode === "SOLE_MAINTAINER";
+}
+
+function requireSoleMaintainerProtocol(protocol, label = "protocol") {
+  invariant(
+    canonicalDigest(protocol.decision_authority) ===
+      canonicalDigest(SOLE_MAINTAINER_AUTHORITY),
+    `${label}.decision_authority does not match the configured sole maintainer.`,
+  );
+}
+
+function requireSoleMaintainerDecision(identity, roleVersion, label) {
+  invariant(
+    identity === SOLE_MAINTAINER_AUTHORITY.identity,
+    `${label} must use the configured sole-maintainer identity.`,
+  );
+  invariant(
+    roleVersion === SOLE_MAINTAINER_AUTHORITY.role_version,
+    `${label} must use the configured sole-maintainer role version.`,
+  );
+}
+
+function criterionRefsForProtocol(protocol) {
+  return isSoleMaintainerProtocol(protocol)
+    ? PRE_W1_CRITERION_REFS
+    : LEGACY_PRE_W1_CRITERION_REFS;
+}
+
+function validateGateDecisionAuthority(record, protocol, label) {
+  if (isSoleMaintainerProtocol(protocol)) {
+    requireSoleMaintainerProtocol(protocol, `${label} protocol`);
+    requireSoleMaintainerDecision(
+      record.approved_by,
+      record.approver_role_version,
+      label,
+    );
+    invariant(
+      record.submitted_by === record.approved_by,
+      `${label} must be submitted and decided by the configured sole maintainer.`,
+    );
+    return;
+  }
+  invariant(
+    record.approved_by !== record.submitted_by,
+    `${label} legacy decision cannot be self-approved.`,
+  );
 }
 
 function requireSha256(value, label) {
@@ -305,6 +373,7 @@ function validateCatalog() {
     "docs/adr/0002-v0.1-product-decision-baseline.md",
     "docs/adr/0003-shadow-safety-control-exceptions.md",
     "docs/adr/0004-jd-raw-retention-and-preparation-pack.md",
+    "docs/adr/0005-sole-maintainer-governance.md",
     "docs/product/implementation-verification-v0.1.md",
   ], "catalog.compiled_from");
 
@@ -413,7 +482,7 @@ function validateCatalog() {
   }
 
   invariant(
-    ["PROPOSED_PENDING_INDEPENDENT_REVIEW", "ACCEPTED"].includes(catalog.status),
+    ["PROPOSED_PENDING_MAINTAINER_DECISION", "ACCEPTED"].includes(catalog.status),
     "catalog.status is invalid.",
   );
   const review = requireObject(catalog.review, "catalog.review");
@@ -442,7 +511,15 @@ function validateCatalog() {
     "catalog.review",
     new Set(["ACCEPTED"]),
   );
-  if (!reviewIsReady) blocker("REQUIRED_SCOPE_CATALOG_REVIEW_PENDING");
+  if (reviewIsReady) {
+    requireSoleMaintainerDecision(
+      review.reviewed_by,
+      review.approver_role_version,
+      "catalog.review",
+    );
+  } else {
+    blocker("REQUIRED_SCOPE_CATALOG_MAINTAINER_DECISION_PENDING");
+  }
   return catalog;
 }
 
@@ -458,6 +535,7 @@ function validateProtocol() {
   validateFixedDigest(protocol, "protocol_digest", "protocol");
   invariant(protocol.gate_id === GATE_IDS.preW1, "Protocol gate_id mismatch.");
   invariant(protocol.failure_state === "BLOCKED_NOT_STARTED", "Protocol failure_state must fail closed.");
+  requireSoleMaintainerProtocol(protocol, "protocol");
   invariant(
     protocol.collection_guard === "NO_RECRUITMENT_OR_EVIDENCE_COLLECTION_BEFORE_APPROVAL",
     "Protocol collection_guard mismatch.",
@@ -523,14 +601,11 @@ function validateProtocol() {
   invariant(replay.dataset_freeze_before_replay === true, "Rules replay dataset must be frozen before replay.");
   invariant(replay.pass_criteria?.explicit_rejection_reasons_covered === "ALL", "Rules replay must cover all explicit rejection reasons.");
   invariant(replay.pass_criteria?.remaining_ambiguity === "FINITE_EXCEPTION_CATEGORIES", "Rules replay ambiguity must reduce to finite exception categories.");
-  exactStringSet(protocol.required_outputs, [
-    "DEIDENTIFIED_PAIN_INTERVIEW_EVIDENCE",
-    "DEIDENTIFIED_TARGET_CHANNEL_ELIGIBILITY_EVIDENCE",
-    "FROZEN_PER_PARTICIPANT_JOB_DATASET_DIGESTS",
-    "RULE_REPLAY_MEASUREMENTS",
-    "COHORT_DENOMINATOR_AND_EXCLUSION_SUMMARY",
-    "INDEPENDENT_GATE_DECISION_AND_APPROVAL_PROOF",
-  ], "protocol.required_outputs");
+  exactStringSet(
+    protocol.required_outputs,
+    [...COMMON_PROTOCOL_OUTPUTS, MAINTAINER_GATE_DECISION_OUTPUT],
+    "protocol.required_outputs",
+  );
 
   invariant(
     ["DRAFT_PENDING_PRODUCT_OWNER_APPROVAL", "APPROVED"].includes(protocol.status),
@@ -554,7 +629,15 @@ function validateProtocol() {
     { status: protocol.status, ...protocol.approval },
     "protocol.approval",
   );
-  if (!approved) blocker("RESEARCH_PROTOCOL_APPROVAL_PENDING");
+  if (approved) {
+    requireSoleMaintainerDecision(
+      protocol.approval.approved_by,
+      protocol.approval.approver_role_version,
+      "protocol.approval",
+    );
+  } else {
+    blocker("RESEARCH_PROTOCOL_APPROVAL_PENDING");
+  }
   return protocol;
 }
 
@@ -826,6 +909,11 @@ function validateCandidate(manifest, catalog, protocol, archives) {
   }
   const approved = approvalReady(candidate.approval, "candidate.approval");
   if (approved) {
+    requireSoleMaintainerDecision(
+      candidate.approval.approved_by,
+      candidate.approval.approver_role_version,
+      "candidate.approval",
+    );
     const approvedAt = requireIsoTimestamp(candidate.approval.approved_at, "candidate.approval.approved_at");
     invariant(approvedAt >= candidateCreatedAt, "Candidate approval predates candidate creation.");
     invariant(
@@ -1340,7 +1428,6 @@ function validateGateRecords(
       requireIdentity(record.approved_by, `gate ${record.record_id}.approved_by`);
       requireString(record.approver_role_version, `gate ${record.record_id}.approver_role_version`);
       requireSha256(record.approval_proof_digest, `gate ${record.record_id}.approval_proof_digest`);
-      invariant(record.approved_by !== record.submitted_by, `Gate ${record.record_id} cannot be self-approved.`);
       invariant(approvedAt >= submittedAt && decidedAt >= approvedAt, `Gate ${record.record_id} approval/decision chronology is invalid.`);
     }
     invariant(record.candidate_artifact_kind === "SPEC_OR_EXPERIMENT", `Pre-W1 gate ${record.record_id} candidate kind mismatch.`);
@@ -1372,6 +1459,14 @@ function validateGateRecords(
     invariant(
       historicalProtocol,
       `Gate ${record.record_id} references a missing protocol snapshot.`,
+    );
+    const historicalDecisionOutput = isSoleMaintainerProtocol(historicalProtocol)
+      ? MAINTAINER_GATE_DECISION_OUTPUT
+      : LEGACY_GATE_DECISION_OUTPUT;
+    exactStringSet(
+      historicalProtocol.required_outputs,
+      [...COMMON_PROTOCOL_OUTPUTS, historicalDecisionOutput],
+      `Gate ${record.record_id} historical protocol outputs`,
     );
     assertNoSensitivePublicData(
       record,
@@ -1420,6 +1515,34 @@ function validateGateRecords(
       `Gate ${record.record_id} historical candidate binding mismatch.`,
     );
     if (["PASS", "ACCEPTED_FALLBACK", "FAIL"].includes(record.result)) {
+      validateGateDecisionAuthority(
+        record,
+        historicalProtocol,
+        `Gate ${record.record_id}`,
+      );
+      if (isSoleMaintainerProtocol(historicalProtocol)) {
+        invariant(
+          historicalCatalog.status === "ACCEPTED" &&
+            historicalProtocol.status === "APPROVED" &&
+            historicalCandidate.approval?.status === "APPROVED",
+          `Gate ${record.record_id} sole-maintainer authorities are not approved.`,
+        );
+        requireSoleMaintainerDecision(
+          historicalCatalog.review?.reviewed_by,
+          historicalCatalog.review?.approver_role_version,
+          `Gate ${record.record_id} catalog decision`,
+        );
+        requireSoleMaintainerDecision(
+          historicalProtocol.approval?.approved_by,
+          historicalProtocol.approval?.approver_role_version,
+          `Gate ${record.record_id} protocol decision`,
+        );
+        requireSoleMaintainerDecision(
+          historicalCandidate.approval?.approved_by,
+          historicalCandidate.approval?.approver_role_version,
+          `Gate ${record.record_id} candidate decision`,
+        );
+      }
       invariant(
         record.evidence_manifest_refs.length > 0,
         `Decided gate ${record.record_id} must reference completed Evidence.`,
@@ -1433,7 +1556,7 @@ function validateGateRecords(
         const evidence = evidenceById.get(reference.evidence_id);
         invariant(
           evidenceAttestationReady(evidence),
-          `Gate ${record.record_id} evidence ${reference.evidence_id} lacks a verified independent attestation.`,
+          `Gate ${record.record_id} evidence ${reference.evidence_id} lacks a verified trusted attestation.`,
         );
         invariant(
           requireIsoTimestamp(
@@ -1491,7 +1614,11 @@ function validateGateRecords(
       `Gate ${record.record_id} was submitted before not_before.`,
     );
     if (record.gate_id === GATE_IDS.preW1) {
-      exactStringSet(record.criterion_refs, PRE_W1_CRITERION_REFS, `gate ${record.record_id}.criterion_refs`);
+      exactStringSet(
+        record.criterion_refs,
+        criterionRefsForProtocol(historicalProtocol),
+        `gate ${record.record_id}.criterion_refs`,
+      );
       invariant(record.result !== "ACCEPTED_FALLBACK", "Pre-W1 never allows ACCEPTED_FALLBACK.");
     }
   }
@@ -1540,7 +1667,7 @@ function validatePassPrerequisites(head, evidenceById, protocol, candidate, cand
   requireIsoTimestamp(head.approved_at, "Pre-W1 PASS approved_at");
   requireString(head.approver_role_version, "Pre-W1 PASS approver_role_version");
   requireSha256(head.approval_proof_digest, "Pre-W1 PASS approval_proof_digest");
-  invariant(head.approved_by !== head.submitted_by, "Pre-W1 PASS cannot be self-approved.");
+  validateGateDecisionAuthority(head, protocol, "Pre-W1 PASS");
 
   const candidateApprovedAt = requireIsoTimestamp(candidate.approval.approved_at, "candidate.approval.approved_at");
   invariant(candidateApprovedAt >= candidateCreatedAt, "Candidate approval predates its immutable manifest.");
@@ -1550,7 +1677,7 @@ function validatePassPrerequisites(head, evidenceById, protocol, candidate, cand
   const selectedByKind = new Map();
   for (const evidence of referenced) {
     invariant(evidence.result === "PASS", `Pre-W1 PASS references non-PASS evidence ${evidence.evidence_id}.`);
-    invariant(evidenceAttestationReady(evidence), `Evidence ${evidence.evidence_id} lacks a verified independent attestation.`);
+    invariant(evidenceAttestationReady(evidence), `Evidence ${evidence.evidence_id} lacks a verified trusted attestation.`);
     const startedAt = requireIsoTimestamp(evidence.started_at, `evidence ${evidence.evidence_id}.started_at`);
     invariant(startedAt >= candidateApprovedAt, `Evidence ${evidence.evidence_id} was collected before Candidate Scope approval.`);
     const entries = selectedByKind.get(evidence.evidence_kind) ?? [];

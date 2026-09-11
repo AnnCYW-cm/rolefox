@@ -2,7 +2,7 @@
 
 RoleFox 采用本地默认、可自托管的模块化单体架构，并将“生成草稿、制定动作、授权判断、执行”拆开。它需要持续运行到约成面试，但模型或第三方连接器的输出不能直接变成外部动作。
 
-v0.1 产品与目标设计约束以 [ADR-0002](adr/0002-v0.1-product-decision-baseline.md)、[ADR-0003](adr/0003-shadow-safety-control-exceptions.md) 与 [ADR-0004](adr/0004-jd-raw-retention-and-preparation-pack.md) 为准；本文件描述目标架构，不表示当前 M0 已实现。
+v0.1 产品与目标设计约束以 [ADR-0002](adr/0002-v0.1-product-decision-baseline.md)、[ADR-0003](adr/0003-shadow-safety-control-exceptions.md) 与 [ADR-0004](adr/0004-jd-raw-retention-and-preparation-pack.md) 为准，决策权与机器信任职责以 [ADR-0005](adr/0005-sole-maintainer-governance.md) 为准；本文件描述目标架构，不表示当前 M0 已实现。
 
 ```text
 Job / inbox connectors

@@ -16,7 +16,8 @@ not claim a production release, Gate pass, or usable end-to-end product.
   append-only Gate Registry, continuous checkpoints, schemas, writers,
   validators, and verification tests.
 - Added accepted ADRs for business Shadow versus isolated safety controls and
-  for raw-JD retention versus interview preparation-pack behavior.
+  for raw-JD retention versus interview preparation-pack behavior, plus the
+  sole-maintainer product and Gate decision-governance model.
 - Added the implementation-evidence and release-closure contract for the 254
   P0 product, security, and technical cases.
 
@@ -27,6 +28,9 @@ not claim a production release, Gate pass, or usable end-to-end product.
   evidence more precisely.
 - Clarified throughout the public documentation that the current application
   is an M0 static/dry-run foundation, not an implemented or released Autopilot.
+- Replaced the unworkable external-human approval prerequisite with an explicit
+  `github:AnnCYW-cm` sole-maintainer authority while preserving signed proofs,
+  frozen evidence criteria, append-only history, and fail-closed trust checks.
 
 #### Security
 

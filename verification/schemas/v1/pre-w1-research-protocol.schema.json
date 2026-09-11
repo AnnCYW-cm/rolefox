@@ -40,6 +40,9 @@
     "approval": {
       "$ref": "#/$defs/approval"
     },
+    "decision_authority": {
+      "$ref": "#/$defs/decisionAuthority"
+    },
     "collection_guard": {
       "const": "NO_RECRUITMENT_OR_EVIDENCE_COLLECTION_BEFORE_APPROVAL"
     },
@@ -64,7 +67,8 @@
           "FROZEN_PER_PARTICIPANT_JOB_DATASET_DIGESTS",
           "RULE_REPLAY_MEASUREMENTS",
           "COHORT_DENOMINATOR_AND_EXCLUSION_SUMMARY",
-          "INDEPENDENT_GATE_DECISION_AND_APPROVAL_PROOF"
+          "INDEPENDENT_GATE_DECISION_AND_APPROVAL_PROOF",
+          "MAINTAINER_GATE_DECISION_AND_APPROVAL_PROOF"
         ]
       }
     },
@@ -104,6 +108,43 @@
           }
         }
       }
+    },
+    {
+      "if": {
+        "properties": {
+          "required_outputs": {
+            "type": "array",
+            "contains": {
+              "const": "MAINTAINER_GATE_DECISION_AND_APPROVAL_PROOF"
+            }
+          }
+        },
+        "required": [
+          "required_outputs"
+        ]
+      },
+      "then": {
+        "required": [
+          "decision_authority"
+        ]
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "decision_authority"
+        ]
+      },
+      "then": {
+        "properties": {
+          "required_outputs": {
+            "type": "array",
+            "contains": {
+              "const": "MAINTAINER_GATE_DECISION_AND_APPROVAL_PROOF"
+            }
+          }
+        }
+      }
     }
   ],
   "$defs": {
@@ -116,6 +157,36 @@
       "minLength": 3,
       "maxLength": 256,
       "pattern": "^[^\\s]+$"
+    },
+    "decisionAuthority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "governance_mode",
+        "identity",
+        "role_version",
+        "gate_submitter_may_decide",
+        "trusted_signer_policy"
+      ],
+      "properties": {
+        "governance_mode": {
+          "const": "SOLE_MAINTAINER"
+        },
+        "identity": {
+          "$ref": "#/$defs/identity"
+        },
+        "role_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "gate_submitter_may_decide": {
+          "const": true
+        },
+        "trusted_signer_policy": {
+          "const": "GITHUB_ACTIONS_OIDC_PROTECTED_MAIN"
+        }
+      }
     },
     "nullableIdentity": {
       "oneOf": [

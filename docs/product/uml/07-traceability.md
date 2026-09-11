@@ -4,7 +4,7 @@
 - 上级索引：[UML 设计基线](README.md)
 - 机器可检查明细：[254 条 Case → UML 映射](case-to-uml-v0.1.csv)
 - 验收源：[P0 Case 验收基线](../p0-case-baseline-v0.1.md)
-- 决策依据：[ADR-0002：接受 v0.1 产品与目标设计基线](../../adr/0002-v0.1-product-decision-baseline.md)、[ADR-0003：安全控制 Shadow 边界](../../adr/0003-shadow-safety-control-exceptions.md)、[ADR-0004：JD raw 清除后的准备包](../../adr/0004-jd-raw-retention-and-preparation-pack.md)
+- 决策依据：[ADR-0002：接受 v0.1 产品与目标设计基线](../../adr/0002-v0.1-product-decision-baseline.md)、[ADR-0003：安全控制 Shadow 边界](../../adr/0003-shadow-safety-control-exceptions.md)、[ADR-0004：JD raw 清除后的准备包](../../adr/0004-jd-raw-retention-and-preparation-pack.md)、[ADR-0005：采用单一维护者决策治理](../../adr/0005-sole-maintainer-governance.md)
 
 ## 1. 追踪模型
 
@@ -25,7 +25,9 @@ CSV 是 Case 级权威追踪源，不再按 Case 前缀批量路由。254 条 P0
 
 `primary_anchor` 必须写在对应 Mermaid block 内，格式为 `%% @anchor TOKEN`。Diagram 改写时保留已有 token；确需迁移时，同一变更必须同步更新 CSV。涉及外部副作用的 Case 至少需要状态或活动视图加时序视图；涉及幂等、并发或部分成功时还要关联 `REL` 可靠性视图；涉及数据、凭证、插件或信任边界时还要关联 `CMP`、`DEP` 或 `SEC` 视图。
 
-全部 254 行的产品与 UML 设计映射已依据 ADR-0002、ADR-0003 与 ADR-0004 的当前 Accepted 基线接受，因此 `review_status` 固定为 `ACCEPTED`。当前实现尚未逐 Case 绑定并通过测试，故 `implementation_status` 全部保持 `NOT_VERIFIED`；设计接受不构成实现完成、L3 开放或发布就绪证明。实施期不直接把本设计 CSV 改成发布看板，而按[实现证据与发布闭合协议](../implementation-verification-v0.1.md)建立独立 Case Verification Registry、Evidence Manifest、Gate Evidence Registry 与失败关闭的 `release:check`。
+全部 254 行的产品与 UML 设计映射已依据 ADR-0002、ADR-0003、ADR-0004 与 ADR-0005 的当前 Accepted 基线接受，因此 `review_status` 固定为 `ACCEPTED`。当前实现尚未逐 Case 绑定并通过测试，故 `implementation_status` 全部保持 `NOT_VERIFIED`；设计接受不构成实现完成、L3 开放或发布就绪证明。实施期不直接把本设计 CSV 改成发布看板，而按[实现证据与发布闭合协议](../implementation-verification-v0.1.md)建立独立 Case Verification Registry、Evidence Manifest、Gate Evidence Registry 与失败关闭的 `release:check`。
+
+ADR-0005 只合并治理决策权，不合并技术证据边界：`github:AnnCYW-cm` 是唯一 `MAINTAINER_DECIDER`，可同时提交并决定 Gate；GitHub Actions OIDC 只作为受限 Evidence producer、proof verifier、decision-envelope provenance/attestation signer、checkpoint signer 与外部锚执行者。每项维护者决定仍须绑定当前 payload、Candidate、Spec、Catalog、Protocol 与 Evidence digest，并进入只追加 checkpoint 链；样本 cohort、holdout、Operation、Watchdog、cleanup executor、Case/Evidence registry 及 UML 视图所称的“独立”继续表示统计或技术隔离，不表示另有人员审批，也不得因独立开发者治理而合并或绕过。
 
 ## 2. 覆盖口径与高风险簇
 
@@ -109,12 +111,12 @@ CSV 是 Case 级权威追踪源，不再按 Case 前缀批量路由。254 条 P0
 
 | 交付里程碑门 | 目的 | 能力开放门关系 |
 | --- | --- | --- |
-| Pre-W1 · Gate 1 | 访谈 6–8 位近期活跃求职者；规则回放只计至少 5 位达到痛点门槛者，每人预先冻结 20 个近期岗位，其他访谈者不得补分母；证据包记录去敏样本/数据集 hash、阈值结果、范围、评审人和接受时间 | 是启动 W1/10 周实施的硬前置，不属于 G0/G1/G2/G3；未通过只允许验证原型与只读 spike，必须收窄用户或通道后重新评审 |
+| Pre-W1 · Gate 1 | 访谈 6–8 位近期活跃求职者；规则回放只计至少 5 位达到痛点门槛者，每人预先冻结 20 个近期岗位，其他访谈者不得补分母；证据包记录去敏样本/数据集 hash、阈值结果、范围，以及唯一 `MAINTAINER_DECIDER` 的稳定身份、决定时间和绑定 payload 的签名 proof | 是启动 W1/10 周实施的硬前置，不属于 G0/G1/G2/G3；未通过只允许验证原型与只读 spike，必须收窄用户或通道后重新验证并由维护者重新决定 |
 | Gate A · 通用性 | 两组不同候选人只换数据和配置即可跑同一流程 | 建立通用数据模型和产品验证证据；不作为 READ scope 的 G0/C-read 前置，但所有 `BUSINESS_OUTBOUND_MUTATION` scope 开始 Shadow 前必须 PASS |
 | Gate B · 安全闭环 | Fake Connector 跑通成功、拒绝、异常、重放和急停 | 为 G1/G2 提供合成证据，但不能单独授权真实写入 |
 | Gate C-pre · 平台连接前置可行性 | 条款、最小 requested scope、认证/只读接口、可观测与沙箱/conformance 契约在静态/Fake/test 环境可接受，真实业务数据为 0 | 真实 credential intake、业务读取和 pre-L2 Shadow 前必须 PASS；真实读取稳定性由后续 Gate C-read 证明，避免循环 |
 | Gate C-read · 真实只读可行性 | G0/C-pre 与 finalized binding 后，以真实最小权限验证岗位、邮箱和日历只读行为 | 必须 PASS且不能 fallback；READ scope 不要求 Shadow/G1/Mutation Operation |
-| Gate C-live · 平台运行可行性 | 取得有效 Shadow receipt 后，用真实 L2 mutation canary 验证结果确认、限流与认证恢复 | 邮箱回复、默认 Email notification、日历 tentative create/cancel 必须 PASS；calendar update 仅在 BUILD 启用或 calendar 可达 L3 时条件触发，触发后也必须 PASS且不得 fallback；`application_submit_l2` 可由产品负责人记录 scoped ACCEPTED_FALLBACK 并保持写关闭/只读交接。G2 再要求更多真实 L2/决策/异常样本与零错误门槛 |
+| Gate C-live · 平台运行可行性 | 取得有效 Shadow receipt 后，用真实 L2 mutation canary 验证结果确认、限流与认证恢复 | 邮箱回复、默认 Email notification、日历 tentative create/cancel 必须 PASS；calendar update 仅在 BUILD 启用或 calendar 可达 L3 时条件触发，触发后也必须 PASS且不得 fallback；`application_submit_l2` 可由唯一 `MAINTAINER_DECIDER` `github:AnnCYW-cm` 记录绑定证据和签名决定 proof 的 scoped ACCEPTED_FALLBACK，并保持写关闭/只读交接。G2 再要求更多真实 L2/决策/异常样本与零错误门槛 |
 | 隔离安全控制门 | 固定 heartbeat、一次停止告警，以及 Connector 支持且删除请求触发的固定撤权通过专用 conformance/real canary | 走 `SAFETY_CONTROL_GUARD`，不复用业务 Shadow/G1/L2/L3；heartbeat/停止告警必须真实 C-live PASS；撤权仅在支持且触发时要求 C-live，不支持时以 conformance + residual + 官方入口 + 本地删除证据收敛 |
 | v0.1 真实 Provider 发布门 | 用真实邮箱与真实日历证明邮件入站、受控 L2 回复、busy 查询/对账、候选人私有 tentative event、招聘确认与失败补偿；消息评估集至少 100 条去重记录，每个必需 intent ≥10、低风险/必须升级各 ≥30、混合敏感/对抗 ≥20，事实/越权错误为 0 | 独立于是否达到 G2/L3；相应业务能力可保持 L2，但必须先满足关联 G0/G1，且 Fake Inbox、测试日历、合成 Saga 或投递交接不能替代 |
 | W9–W10 RC/发布 | 安装、恢复、供应链、外部试用及上述真实 Provider 闭环 | G3 与真实 Provider 门是 v0.1 发布的合取条件；任一未通过都不能对外称可试用/发布 |
@@ -169,4 +171,4 @@ CSV 是 Case 级权威追踪源，不再按 Case 前缀批量路由。254 条 P0
 14. `01`—`06` 不得重新出现 proposed/pending/待确认形式的 DEC 标记；
 15. `01`—`07` 与 UML 索引必须保留对应的 Accepted 基线状态头，防止后续改动把已确认设计静默回退为草稿。
 
-以上是当前 `docs:check` 的设计完整性门，不是发布门。W1 必须另行实现[证据登记协议](../implementation-verification-v0.1.md)定义的 `release:check`：它要求 Evidence Requirement/Verification 两个独立 registry 都与设计 CSV 精确同集；所有适用 Case 的证据类型、assertion、运行次数和环境必须满足从该 Case 原文逐项评审的最低 profile，并绑定当前候选制品/spec，不能用 `MANUAL_REVIEW` 替代其 UT/CT/IT/E2E/FI/CHAOS/DR/SEC/A11Y/真实 Provider 要求；所有 `Future/N/A` 有完整批准元数据；同时验证 G3 与真实邮箱 + 真实日历 `v0.1-R` manifest。任一缺失一律失败关闭。
+以上是当前 `docs:check` 的设计完整性门，不是发布门。W1 必须另行实现[证据登记协议](../implementation-verification-v0.1.md)定义的 `release:check`：它要求 Evidence Requirement/Verification 两个独立 registry 都与设计 CSV 精确同集；所有适用 Case 的证据类型、assertion、运行次数和环境必须满足从该 Case 原文逐项评审的最低 profile，并绑定当前候选制品/spec，不能用 `MANUAL_REVIEW` 替代其 UT/CT/IT/E2E/FI/CHAOS/DR/SEC/A11Y/真实 Provider 要求；所有 `Future/N/A` 有唯一 `MAINTAINER_DECIDER` 的身份、决定时间、payload digest 与签名 proof；同时验证 G3 与真实邮箱 + 真实日历 `v0.1-R` manifest。任一缺失一律失败关闭。

@@ -3,7 +3,7 @@
   "manifest_version": "v0.1-bootstrap-1",
   "canonicalization": "rolefox-canonical-digest-v1",
   "algorithm": "sha256",
-  "normative_set_digest": "5669e6837419a8c45365cff1ee37304f0c1df09aa00670d8a49acd33c66ed326",
+  "normative_set_digest": "b536fa7e89a2cbffbcd6f597d77dcb3af12785fb92c8b565c6c915d1439fa886",
   "normative_file_count": 28,
   "verification_toolchain": {
     "algorithm": "sha256",
@@ -179,8 +179,8 @@
     },
     {
       "path": "docs/adr/0005-sole-maintainer-governance.md",
-      "bytes": 3888,
-      "sha256": "0f158df3cdf307e9eec0660b9319bee36ac6dcb31396e128aaa07d449c6f6d6d",
+      "bytes": 3887,
+      "sha256": "713e5867e547d6ef5d05eb3ab0be07168f8c1c4b0caae2ec43b6d76065b6f138",
       "authority_status": "ACCEPTED",
       "included_in_normative_set": true,
       "status_source": "Pre-W1 normative classification declared by scripts/verification/config.mjs",
@@ -233,8 +233,8 @@
     },
     {
       "path": "docs/product/delivery-plan-v0.1.md",
-      "bytes": 22198,
-      "sha256": "c378940fdda5dec2941ba84f0e4daaa46e749f3a348924cb84dafc8ff9338b00",
+      "bytes": 22164,
+      "sha256": "ec768c9c3af4213d0e993dfd16a7b3376d5ea80b71c92de3c88ac3381a42e539",
       "authority_status": "ACCEPTED",
       "included_in_normative_set": true,
       "status_source": "Pre-W1 normative classification declared by scripts/verification/config.mjs",
@@ -242,8 +242,8 @@
     },
     {
       "path": "docs/product/implementation-verification-v0.1.md",
-      "bytes": 54903,
-      "sha256": "81eea8031e73f956ffa2f257c61b33ab93978383f7a5b7223aae9a95e5b7a07a",
+      "bytes": 54917,
+      "sha256": "e623b51d5cfc65b4f1613321c68cd4fe71001f008376524c374a67cf9250a7dc",
       "authority_status": "ACCEPTED",
       "included_in_normative_set": true,
       "status_source": "Pre-W1 normative classification declared by scripts/verification/config.mjs",
@@ -323,8 +323,8 @@
     },
     {
       "path": "docs/product/uml/07-traceability.md",
-      "bytes": 21338,
-      "sha256": "dad1bab34a67296f1d98aabadbb08cc5bc8b6eb48b7e75a135750023c5b64fb8",
+      "bytes": 21297,
+      "sha256": "21a5bfa70a7bbf5c89367aa0c8e9c33ac113e307ea98b567f4801516e69c5bb4",
       "authority_status": "ACCEPTED",
       "included_in_normative_set": true,
       "status_source": "Pre-W1 normative classification declared by scripts/verification/config.mjs",
@@ -359,8 +359,8 @@
     },
     {
       "path": "docs/product/validation-plan-v0.1.md",
-      "bytes": 16938,
-      "sha256": "54884d4a98279e77c040445a9a82d33729ad96a53e45393a8e22da7ea2cd439c",
+      "bytes": 16900,
+      "sha256": "030f59d00a2682601affd6f8e8560156dfbcc68e45d6a340e14bdc4270a93669",
       "authority_status": "ACCEPTED",
       "included_in_normative_set": true,
       "status_source": "Pre-W1 normative classification declared by scripts/verification/config.mjs",
@@ -398,5 +398,5 @@
     "tool": "scripts/verification/bootstrap-pre-w1.mjs",
     "deterministic_inputs": true
   },
-  "manifest_digest": "c1de439f2a206b1942f6e08105d9b4e31150b96fd75f9b869bf9ed1406dd71a2"
+  "manifest_digest": "ea4aa928480d6d6d118a1b1a63a77786965764baedeb3646b6cb5cd313d03abf"
 }

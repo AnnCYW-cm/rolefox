@@ -32,6 +32,7 @@
     "status": {
       "enum": [
         "PROPOSED_PENDING_INDEPENDENT_REVIEW",
+        "PROPOSED_PENDING_MAINTAINER_DECISION",
         "ACCEPTED",
         "REJECTED",
         "SUPERSEDED"

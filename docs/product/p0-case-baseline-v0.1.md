@@ -212,7 +212,7 @@ P1/P2 可以排期，但不能通过引入新能力破坏 P0 不变量。
 
 ## 13. 已接受的产品与目标设计决策
 
-v0.1 的 19 项原始开放决策已经由产品负责人分四组全部确认，历史基线见 [ADR-0002](../adr/0002-v0.1-product-decision-baseline.md)；当前安全控制边界与 JD raw/准备包语义分别由 Accepted [ADR-0003](../adr/0003-shadow-safety-control-exceptions.md) 和 [ADR-0004](../adr/0004-jd-raw-retention-and-preparation-pack.md) 补充。`DEC-13` 已合并到 `DEC-04`，编号保留且不复用。
+v0.1 的 19 项原始开放决策已经由产品负责人分四组全部确认，历史基线见 [ADR-0002](../adr/0002-v0.1-product-decision-baseline.md)；当前安全控制边界与 JD raw/准备包语义分别由 Accepted [ADR-0003](../adr/0003-shadow-safety-control-exceptions.md) 和 [ADR-0004](../adr/0004-jd-raw-retention-and-preparation-pack.md) 补充，单一维护者决策治理由 [ADR-0005](../adr/0005-sole-maintainer-governance.md) 固定。`DEC-13` 已合并到 `DEC-04`，编号保留且不复用。
 
 本基线据此固定首条真实通道、分 capability 的 L3 门槛、默认值和硬上限、通知组合、数据保留期、安装支持矩阵、准备包、calendar-first Saga、去重与关闭语义、离线阈值、日历能力、Campaign 约束、SQLite 范围、严重度、急停和恢复规则。`RES-003` 的 PostgreSQL pool 分支、`OSS-008` 的 SQLite↔PostgreSQL 迁移分支，以及其他 PostgreSQL/跨库测试在 v0.1 明确为未来范围/N/A；SQLite 与支持 OS 相关部分仍适用。
 

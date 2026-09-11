@@ -8,6 +8,7 @@ import {
 import {
   EVIDENCE_TYPES,
   PATHS,
+  SOLE_MAINTAINER_AUTHORITY,
   TRUST_VERIFICATION_STATUS,
   VERIFICATION_TOOLCHAIN_FILES,
 } from "./config.mjs";
@@ -115,6 +116,17 @@ function requireIdentity(value, label) {
   requireString(value, label);
   invariant(IDENTITY_PATTERN.test(value), `${label} must be a stable, whitespace-free identity.`);
   return value;
+}
+
+function requireSoleMaintainerDecision(identity, roleVersion, label) {
+  invariant(
+    identity === SOLE_MAINTAINER_AUTHORITY.identity,
+    `${label} must use the configured sole-maintainer identity.`,
+  );
+  invariant(
+    roleVersion === SOLE_MAINTAINER_AUTHORITY.role_version,
+    `${label} must use the configured sole-maintainer role version.`,
+  );
 }
 
 function requireDigest(value, label) {
@@ -657,6 +669,11 @@ function validateFormalAttestation(evidence) {
 }
 
 function requireCollectionApprovals(context) {
+  invariant(
+    canonicalDigest(context.protocol.decision_authority) ===
+      canonicalDigest(SOLE_MAINTAINER_AUTHORITY),
+    "Research protocol decision authority does not match the configured sole maintainer.",
+  );
   invariant(context.catalog.status === "ACCEPTED", "Required Release Scope Catalog is not accepted.");
   invariant(context.protocol.status === "APPROVED", "Research protocol is not approved.");
   invariant(context.candidate.approval?.status === "APPROVED", "Current Candidate Scope Manifest is not approved.");
@@ -666,6 +683,11 @@ function requireCollectionApprovals(context) {
     context.catalog.review?.approver_role_version,
     "catalog.review.approver_role_version",
   );
+  requireSoleMaintainerDecision(
+    context.catalog.review.reviewed_by,
+    context.catalog.review.approver_role_version,
+    "catalog.review",
+  );
   for (const [approval, label] of [
     [context.protocol.approval, "protocol.approval"],
     [context.candidate.approval, "candidate.approval"],
@@ -673,6 +695,11 @@ function requireCollectionApprovals(context) {
     requireIdentity(approval?.approved_by, `${label}.approved_by`);
     requireIsoTimestamp(approval?.approved_at, `${label}.approved_at`);
     requireString(approval?.approver_role_version, `${label}.approver_role_version`);
+    requireSoleMaintainerDecision(
+      approval.approved_by,
+      approval.approver_role_version,
+      label,
+    );
   }
   const approvalContracts = [
     {

@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   ACCEPTED_SPEC_FILES,
+  SOLE_MAINTAINER_AUTHORITY,
   VERIFICATION_TOOLCHAIN_FILES,
 } from "../config.mjs";
 import {
@@ -69,9 +70,9 @@ const approveFrozenInputsAndWriteFailedEvidence = (temporaryRoot) => {
   let catalog = readJson(catalogPath);
   catalog.status = "ACCEPTED";
   Object.assign(catalog.review, {
-    reviewed_by: "catalog-reviewer",
+    reviewed_by: SOLE_MAINTAINER_AUTHORITY.identity,
     reviewed_at: "2099-01-01T00:01:00.000Z",
-    approver_role_version: "catalog-reviewer-v1",
+    approver_role_version: SOLE_MAINTAINER_AUTHORITY.role_version,
     approval_proof_digest: "1".repeat(64),
   });
   catalog.review.signed_payload_digest = canonicalDigestExcluding(catalog, [
@@ -97,9 +98,9 @@ const approveFrozenInputsAndWriteFailedEvidence = (temporaryRoot) => {
   let protocol = readJson(protocolPath);
   protocol.status = "APPROVED";
   Object.assign(protocol.approval, {
-    approved_by: "product-owner",
+    approved_by: SOLE_MAINTAINER_AUTHORITY.identity,
     approved_at: "2099-01-01T00:02:00.000Z",
-    approver_role_version: "product-owner-v1",
+    approver_role_version: SOLE_MAINTAINER_AUTHORITY.role_version,
     approval_proof_digest: "2".repeat(64),
   });
   protocol.approval.signed_payload_digest = canonicalDigestExcluding(protocol, [
@@ -146,9 +147,9 @@ const approveFrozenInputsAndWriteFailedEvidence = (temporaryRoot) => {
   });
   candidate.approval = {
     status: "APPROVED",
-    approved_by: "candidate-owner",
+    approved_by: SOLE_MAINTAINER_AUTHORITY.identity,
     approved_at: "2099-01-01T00:03:00.000Z",
-    approver_role_version: "candidate-owner-v1",
+    approver_role_version: SOLE_MAINTAINER_AUTHORITY.role_version,
     approval_proof_digest: "3".repeat(64),
     signed_payload_digest: null,
   };
@@ -287,6 +288,26 @@ const approveFrozenInputsAndWriteFailedEvidence = (temporaryRoot) => {
   );
   return evidence;
 };
+
+const failedGateDecision = (evidence, overrides = {}) => ({
+  result: "FAIL",
+  reason_codes: ["RESEARCH_THRESHOLD_NOT_MET"],
+  evidence_manifest_refs: [
+    {
+      evidence_id: evidence.evidence_id,
+      manifest_digest: evidence.manifest_digest,
+      record_digest: evidence.record_digest,
+    },
+  ],
+  submitted_by: SOLE_MAINTAINER_AUTHORITY.identity,
+  submitted_at: "2099-01-01T00:07:00.000Z",
+  approved_by: SOLE_MAINTAINER_AUTHORITY.identity,
+  approved_at: "2099-01-01T00:08:00.000Z",
+  approver_role_version: SOLE_MAINTAINER_AUTHORITY.role_version,
+  approval_proof_digest: null,
+  decided_at: "2099-01-01T00:08:00.000Z",
+  ...overrides,
+});
 
 test("the W1 readiness command fails closed on the checked-in blockers", () => {
   const result = spawnSync(
@@ -518,24 +539,7 @@ test("Gate CLI prepares an evidenced FAIL and finalize fails closed on trust", (
   const temporaryRoot = temporaryCliRepository(t);
   const evidence = approveFrozenInputsAndWriteFailedEvidence(temporaryRoot);
   const inputPath = path.join(temporaryRoot, "fail-decision.json");
-  writeJson(inputPath, {
-    result: "FAIL",
-    reason_codes: ["RESEARCH_THRESHOLD_NOT_MET"],
-    evidence_manifest_refs: [
-      {
-        evidence_id: evidence.evidence_id,
-        manifest_digest: evidence.manifest_digest,
-        record_digest: evidence.record_digest,
-      },
-    ],
-    submitted_by: "gate-submitter",
-    submitted_at: "2099-01-01T00:07:00.000Z",
-    approved_by: "gate-approver",
-    approved_at: "2099-01-01T00:08:00.000Z",
-    approver_role_version: "pre-w1-gate-approver-v1",
-    approval_proof_digest: null,
-    decided_at: "2099-01-01T00:08:00.000Z",
-  });
+  writeJson(inputPath, failedGateDecision(evidence));
   const gateScript = path.join(
     temporaryRoot,
     "scripts",
@@ -580,6 +584,55 @@ test("Gate CLI prepares an evidenced FAIL and finalize fails closed on trust", (
     /Cannot append FAIL while cryptographic trust verification is not implemented/,
   );
   assert.equal(fs.readFileSync(registryPath, "utf8"), before);
+});
+
+test("Gate CLI rejects a non-maintainer identity and an unapproved maintainer role", (t) => {
+  const temporaryRoot = temporaryCliRepository(t);
+  const evidence = approveFrozenInputsAndWriteFailedEvidence(temporaryRoot);
+  const inputPath = path.join(temporaryRoot, "invalid-maintainer-decision.json");
+  const gateScript = path.join(
+    temporaryRoot,
+    "scripts",
+    "verification",
+    "append-gate.mjs",
+  );
+  const registryPath = path.join(
+    temporaryRoot,
+    "verification",
+    "gate-evidence-v0.1.jsonl",
+  );
+  const registryBefore = fs.readFileSync(registryPath, "utf8");
+
+  writeJson(
+    inputPath,
+    failedGateDecision(evidence, { approved_by: "github:not-the-maintainer" }),
+  );
+  const wrongIdentity = spawnSync(
+    process.execPath,
+    [gateScript, "--", "--input", inputPath, "--prepare"],
+    { cwd: temporaryRoot, encoding: "utf8" },
+  );
+  assert.equal(wrongIdentity.status, 1);
+  assert.match(
+    wrongIdentity.stderr,
+    /Gate decision must use the configured sole-maintainer identity/,
+  );
+
+  writeJson(
+    inputPath,
+    failedGateDecision(evidence, { approver_role_version: "unapproved-role-v1" }),
+  );
+  const wrongRole = spawnSync(
+    process.execPath,
+    [gateScript, "--", "--input", inputPath, "--prepare"],
+    { cwd: temporaryRoot, encoding: "utf8" },
+  );
+  assert.equal(wrongRole.status, 1);
+  assert.match(
+    wrongRole.stderr,
+    /Gate decision must use the configured sole-maintainer role version/,
+  );
+  assert.equal(fs.readFileSync(registryPath, "utf8"), registryBefore);
 });
 
 test("Gate CLI still appends BLOCKED as BLOCKED_NOT_STARTED without approval", (t) => {

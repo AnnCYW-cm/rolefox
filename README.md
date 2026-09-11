@@ -127,7 +127,7 @@ pnpm check
 - 想看 254 个 Case 如何绑定实现证据并关闭发布门：阅读 [实现证据与发布闭合协议](docs/product/implementation-verification-v0.1.md)
 - 想了解产品边界：阅读 [产品范围](docs/product-scope.md)
 - 想了解为何选择面试前 Autopilot：阅读 [ADR-0001](docs/adr/0001-pre-interview-autopilot.md)
-- 想查看 v0.1 已确认产品决策：阅读 [ADR-0002](docs/adr/0002-v0.1-product-decision-baseline.md)、[ADR-0003](docs/adr/0003-shadow-safety-control-exceptions.md) 与 [ADR-0004](docs/adr/0004-jd-raw-retention-and-preparation-pack.md)
+- 想查看 v0.1 已确认产品与治理决策：阅读 [ADR-0002](docs/adr/0002-v0.1-product-decision-baseline.md)、[ADR-0003](docs/adr/0003-shadow-safety-control-exceptions.md)、[ADR-0004](docs/adr/0004-jd-raw-retention-and-preparation-pack.md) 与 [ADR-0005](docs/adr/0005-sole-maintainer-governance.md)
 - 想了解开发顺序：阅读 [路线图](docs/roadmap.md)
 - 想查看公开项目变更：阅读 [版本变更记录](CHANGELOG.md)
 - 想贡献连接器：先阅读 [架构](docs/architecture.md) 和 [贡献指南](CONTRIBUTING.md)

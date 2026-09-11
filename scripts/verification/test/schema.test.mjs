@@ -3,7 +3,7 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { PATHS } from "../config.mjs";
+import { PATHS, SOLE_MAINTAINER_AUTHORITY } from "../config.mjs";
 import {
   addressDocument,
   canonicalDigestExcluding,
@@ -65,7 +65,34 @@ test("all seven schemas compile and every checked-in registry artifact validates
   assert.ok(true);
 });
 
-test("FAIL is a decided, evidenced, independently approved Gate result", () => {
+test("maintainer Gate output requires an explicit decision authority without breaking legacy protocols", () => {
+  const current = readJson(absolute(PATHS.protocol));
+  const withoutAuthority = structuredClone(current);
+  delete withoutAuthority.decision_authority;
+  assert.throws(
+    () =>
+      validateSchema(
+        root,
+        SCHEMA_NAMES.protocol,
+        withoutAuthority,
+        "maintainer protocol without decision authority",
+      ),
+    /must have required property 'decision_authority'/,
+  );
+
+  const legacy = jsonFiles(absolute(PATHS.protocolSnapshotDirectory))
+    .map((file) => readJson(file))
+    .find((protocol) => protocol.decision_authority === undefined);
+  assert.ok(legacy, "a legacy protocol snapshot must remain available");
+  validateSchema(
+    root,
+    SCHEMA_NAMES.protocol,
+    legacy,
+    "legacy independent protocol",
+  );
+});
+
+test("FAIL is a decided, evidenced, maintainer-approved Gate result", () => {
   const [source] = parseJsonLines(absolute(PATHS.gateRegistry));
   const body = structuredClone(source);
   delete body.record_id;
@@ -80,9 +107,10 @@ test("FAIL is a decided, evidenced, independently approved Gate result", () => {
       record_digest: "b".repeat(64),
     },
   ];
-  body.approved_by = "independent-gate-approver";
+  body.submitted_by = SOLE_MAINTAINER_AUTHORITY.identity;
+  body.approved_by = SOLE_MAINTAINER_AUTHORITY.identity;
   body.approved_at = body.decided_at;
-  body.approver_role_version = "pre-w1-gate-approver-v1";
+  body.approver_role_version = SOLE_MAINTAINER_AUTHORITY.role_version;
   body.approval_proof_digest = "c".repeat(64);
   body.approval_payload_digest = canonicalDigestExcluding(body, [
     "approval_payload_digest",

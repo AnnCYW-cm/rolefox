@@ -3,7 +3,7 @@
 - 状态：Accepted Design Baseline
 - 上级索引：[UML 设计基线](README.md)
 - 建模原则：先如实描述 M0，再给出 v0.1 目标；未来托管形态不冒充当前承诺。
-- 标注规则：节点中的 `M0` 是当前仓库事实，`v0.1 Target` 是尚未实现的目标；产品选择以已接受的 [ADR-0002](../../adr/0002-v0.1-product-decision-baseline.md)、[ADR-0003](../../adr/0003-shadow-safety-control-exceptions.md) 与 [ADR-0004](../../adr/0004-jd-raw-retention-and-preparation-pack.md) 为准。
+- 标注规则：节点中的 `M0` 是当前仓库事实，`v0.1 Target` 是尚未实现的目标；产品选择以已接受的 [ADR-0002](../../adr/0002-v0.1-product-decision-baseline.md)、[ADR-0003](../../adr/0003-shadow-safety-control-exceptions.md) 与 [ADR-0004](../../adr/0004-jd-raw-retention-and-preparation-pack.md) 为准，决策治理以 [ADR-0005](../../adr/0005-sole-maintainer-governance.md) 为准。
 
 ## RF-UML-CMP-M0-01 当前 M0 真实组件
 

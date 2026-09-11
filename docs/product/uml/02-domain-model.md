@@ -3,7 +3,7 @@
 - 状态：Accepted Design Baseline
 - 上级索引：[UML 设计基线](README.md)
 - 标注规则：`<<M0>>` 表示当前 TypeScript 中已经存在的类型或接口；`<<M0_utility_functions>>` 表示为便于类图表达而归组展示的现有顶层函数，不表示源码存在同名类型；`<<v0.1_target>>` 表示为 P0 Case 设计、尚未实现的目标对象。图只列与本视图相关的字段，不能据此推断 M0 类型还有图外能力。
-- 决策规则：v0.1 当前产品选择由 [ADR-0002](../../adr/0002-v0.1-product-decision-baseline.md)、[ADR-0003](../../adr/0003-shadow-safety-control-exceptions.md) 与 [ADR-0004](../../adr/0004-jd-raw-retention-and-preparation-pack.md) 共同约束；本图中的约束是目标设计，不代表 M0 已实现。
+- 决策规则：v0.1 当前产品选择由 [ADR-0002](../../adr/0002-v0.1-product-decision-baseline.md)、[ADR-0003](../../adr/0003-shadow-safety-control-exceptions.md) 与 [ADR-0004](../../adr/0004-jd-raw-retention-and-preparation-pack.md) 共同约束，决策治理遵守 [ADR-0005](../../adr/0005-sole-maintainer-governance.md)；本图中的约束是目标设计，不代表 M0 已实现。
 
 ## RF-UML-CD-DOM-01 聚合、所有权与本地化值对象
 

@@ -11,6 +11,7 @@ import {
   PATHS,
   PRE_W1_RESEARCH_SCOPE_IDS,
   REQUIRED_RELEASE_SCOPE_IDS,
+  SOLE_MAINTAINER_AUTHORITY,
   TRUST_VERIFICATION_STATUS,
   VERIFICATION_TOOLCHAIN_FILES,
 } from "./config.mjs";
@@ -39,6 +40,13 @@ import { SCHEMA_NAMES, validateSchema } from "./schema.mjs";
 const root = repositoryRoot(import.meta.url);
 const absolute = (relativePath) => path.join(root, ...relativePath.split("/"));
 const now = () => new Date().toISOString();
+const PRE_W1_CRITERION_REFS = [
+  "pain_interview_threshold",
+  "target_channel_feasibility",
+  "rules_replay_coverage",
+  "maintainer_gate_decision",
+  "registry_integrity",
+];
 
 const digestFixedDocument = (document, field) => {
   const body = structuredClone(document);
@@ -122,6 +130,11 @@ const protocol = normalizeAuthorityDocument(protocolInput, {
   label: "Pre-W1 Research Protocol",
 });
 validateSchema(root, SCHEMA_NAMES.protocol, protocol, "Pre-W1 Research Protocol");
+invariant(
+  canonicalDigest(protocol.decision_authority) ===
+    canonicalDigest(SOLE_MAINTAINER_AUTHORITY),
+  "Pre-W1 Research Protocol must bind the configured sole-maintainer authority.",
+);
 assertNoSensitivePublicData(protocol.approval, "Pre-W1 Research Protocol approval");
 if (protocol.status !== "APPROVED") writeJsonAtomic(protocolPath, protocol);
 writeJsonImmutable(
@@ -431,7 +444,7 @@ if (!headMatchesCandidate || passIsPremature) {
   const gateTimestamp = now();
   const reasonCodes = [];
   if (catalog.status !== "ACCEPTED") {
-    reasonCodes.push("REQUIRED_SCOPE_CATALOG_REVIEW_PENDING");
+    reasonCodes.push("REQUIRED_SCOPE_CATALOG_MAINTAINER_DECISION_PENDING");
   }
   if (protocol.status !== "APPROVED") {
     reasonCodes.push("RESEARCH_PROTOCOL_APPROVAL_PENDING");
@@ -454,13 +467,7 @@ if (!headMatchesCandidate || passIsPremature) {
       scope_id: "pre_w1_problem_and_rules_research",
       previous,
       criteria_version: protocol.protocol_version,
-      criterion_refs: [
-        "pain_interview_threshold",
-        "target_channel_feasibility",
-        "rules_replay_coverage",
-        "independent_gate_approval",
-        "registry_integrity",
-      ],
+      criterion_refs: [...PRE_W1_CRITERION_REFS],
       result: "BLOCKED",
       lifecycle_state: "BLOCKED_NOT_STARTED",
       reason_codes: reasonCodes,
@@ -535,7 +542,7 @@ console.log(`Required release scopes: ${catalog.scopes.length}`);
 console.log(`Candidate scope: ${candidate.candidate_scope_manifest_id}`);
 console.log(`Gate head: ${preW1Head.record_id} (${preW1Head.lifecycle_state})`);
 console.log(`Checkpoint: ${checkpoint.checkpoint_id} (sequence ${checkpoint.sequence})`);
-console.log("Readiness remains BLOCKED_NOT_STARTED until independent approvals and real research evidence exist.");
+console.log("Readiness remains BLOCKED_NOT_STARTED until maintainer decisions, trusted proofs, and real research evidence exist.");
 }
 
 withVerificationLock(root, "bootstrap-pre-w1", bootstrap);

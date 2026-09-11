@@ -25,12 +25,13 @@ v0.1 不按“先做完数据库，再做完匹配，再做完材料……”的
 4. **L2 先于 L3**：逐次确认产生校准证据，满足门槛后才按能力开启局部 L3。
 5. **安全失败**：结果不确定、策略失效、载荷变化或认证异常都暂停相关动作。
 6. **演示必须真实**：界面明确区分 Demo、Dry-run、待确认、已授权、已执行和外部已确认。
+7. **独立开发者治理**：依据 [ADR-0005](../adr/0005-sole-maintainer-governance.md)，`github:AnnCYW-cm` 是唯一 `MAINTAINER_DECIDER`，负责所有产品、范围与 Gate 决策，也可以同时提交并决定同一 Gate；GitHub Actions OIDC 只承担 Evidence producer、proof verifier、decision-envelope provenance/attestation、checkpoint signer 与外部锚定等机器职责，不能替代或伪装成人类决策者。该治理变化不降低任何证据、样本、阈值、payload binding、只追加链或失败关闭要求。
 
 ## 3. 10 周纵向计划
 
 | 周次 | 用户可见结果 | 主要交付 | 验收 |
 | --- | --- | --- | --- |
-| Pre-W1 | 团队确认问题值得做、首条目标通道值得验证 | 在研究开始前先建立 Spec digest、从 Accepted spec 编译并独立签名的 Required Release Scope Catalog、引用该 catalog 的获批 `SPEC_OR_EXPERIMENT` Candidate Scope Manifest、共享 evidence enum、content-addressed Evidence Manifest、Gate Registry schema/writer/validator，以及 Registry Integrity Checkpoint writer/validator 与受保护 CI 外部锚定；随后完成验证计划 Gate 1 的痛点样本访谈与历史岗位规则回放，独立招募并登记目标通道 feasibility cohort，并登记 Gate 1 的 repo/spec/catalog/研究 artifact digest、判定与批准事实 | 痛点访谈通过；只计入至少 5 位达到痛点门槛者、每人冻结并回放 20 个岗位，其他访谈者不得补分母；目标通道 cohort `eligibleN≥5`；每个 Gate 输入先有合法 manifest，两类 cohort 标签/分母独立，Gate 链无分叉且 candidate digest 不为空；每批追加都有连续 checkpoint，current root 严格扩展受保护 CI 已知最新锚点，尾部删除/回退失败关闭；未通过则收窄用户或通道并重新验证，不启动 W1 或本轮 10 周实施 |
+| Pre-W1 | 唯一维护者确认问题值得做、首条目标通道值得验证 | 在研究开始前先建立 Spec digest、从 Accepted spec 编译 Required Release Scope Catalog，并由唯一 `MAINTAINER_DECIDER` `github:AnnCYW-cm` 对 catalog 与 `SPEC_OR_EXPERIMENT` Candidate Scope Manifest 作出绑定精确 payload digest 的签名决定；建立共享 evidence enum、content-addressed Evidence Manifest、Gate Registry schema/writer/validator，以及 Registry Integrity Checkpoint writer/validator、GitHub Actions OIDC 机器签名与外部锚定；随后完成验证计划 Gate 1 的痛点样本访谈与历史岗位规则回放，另行招募并登记目标通道 feasibility cohort，并登记 Gate 1 的 repo/spec/catalog/研究 artifact digest、维护者判定与签名决定事实 | 痛点访谈通过；只计入至少 5 位达到痛点门槛者、每人冻结并回放 20 个岗位，其他访谈者不得补分母；目标通道 cohort `eligibleN≥5`；每个 Gate 输入先有合法 manifest，两类 cohort 标签/分母独立，Gate 链无分叉且 candidate digest 不为空；每批追加都有连续 checkpoint，current root 严格扩展受保护 CI 已知最新锚点，尾部删除/回退失败关闭；维护者可以同时提交并决定 Gate，但不能绕过 Evidence、阈值、payload binding 或 OIDC 签名；未通过则收窄用户或通道并重新验证，不启动 W1 或本轮 10 周实施 |
 | W1 | 新用户可建立本地工作区并开始配置 | SQLite、schema/migration、Docker Compose 三系统安装检查、macOS 原生开发、时区/语言/币种、数据导出删除骨架、引导流程、保留期限字段与删除任务契约；为 JD 建立 raw 可空引用、`structuredJdSummary`、去敏 source/hash、`rawSnapshotStatus`、重导入 lineage 与显式延长期限；全量回验 Pre-W1 bootstrap records，在已有 Evidence/Gate 基础设施上建立 BUILD Candidate Scope Manifest introspection、Runtime Binding Manifest schema/writer/validator、Case Evidence Requirement/Verification registry、Golden Journey & Invariant Verification Registry 与失败关闭的完整 `release:check` 骨架；把运行时配置加载/验证和样例值统一到已接受默认值 | 无需修改代码即可创建工作区；重启后数据仍在；支持矩阵与实际测试一致；原始/结构化/备份数据分别具有 90 天/1 年/30 天期限元数据；可证明 raw 到期必删而非重建摘要/source/hash仍保留，重导入不暗中重置时钟；254 Case 与 20 GOLD/12 INV registry 均与设计精确同集且当前为 `NOT_VERIFIED`，BUILD capability inventory 可复算；每次真实数据/凭证读取及 evidence run 前必须有绑定 candidate/spec/catalog 的 content-addressed Runtime Binding Manifest；bootstrap 不兼容或 release 校验缺失时失败关闭；默认约面为 3/日、普通配置硬上限为 8/日、自动跟进默认关闭且每 Application 最多一次，样例配置不能成为更宽权限来源 |
 | W2 | 用户可导入岗位与历史申请并看到可靠的过滤结果 | CandidateProfile evidence、一个 Campaign、CSV/JSON/手动链接、历史 Application 导入/手工登记及岗位关联、标准化、精确去重、跨源疑似重复人工消歧、过期判断、硬过滤 | 两组不同合成候选人跑通同一流程；历史已投机会可关联且不会再次投递；疑似重复不自动合并 |
 | W3 | 用户可理解并校准推荐 | 分项评分、解释、风险、缺失信息、反馈、评分版本、固定评估集 | 每个决定可复现；硬条件误放行为 0；建立 Top 推荐接受率基线 |
@@ -70,7 +71,7 @@ G0 与 Gate C-pre 当前 PASS、Runtime Binding INTENT 已完成受控连接并�
 
 对应 capability 取得有效 7 天 Shadow receipt 后，才用逐次批准的真实 L2 canary 证明动作结果可验证、限流可处理、认证失效可恢复。
 
-不通过时：招聘平台投递可由产品负责人记录 capability-scoped `ACCEPTED_FALLBACK`，正式选择“只读 + 材料导出 + 深链接交接”，并把该动作的真实 L3 移出 v0.1；不得通过规避 CAPTCHA 或访问控制强行完成。真实邮箱、真实日历与默认 Email notification 必须 PASS，不能使用 fallback；该降级不豁免三者及联合投后闭环的发布门。
+不通过时：招聘平台投递可由唯一 `MAINTAINER_DECIDER` `github:AnnCYW-cm` 记录绑定证据与签名决定 proof 的 capability-scoped `ACCEPTED_FALLBACK`，正式选择“只读 + 材料导出 + 深链接交接”，并把该动作的真实 L3 移出 v0.1；不得通过规避 CAPTCHA 或访问控制强行完成。真实邮箱、真实日历与默认 Email notification 必须 PASS，不能使用 fallback；该降级不豁免三者及联合投后闭环的发布门。
 
 ## 5. 版本范围与优先级
 
@@ -139,7 +140,7 @@ v0.1 只有同时满足以下条件才能对外称为可试用版本：
 - 全部演示和自动测试使用合成数据；
 - CI 覆盖 lint、typecheck、unit test 和 build；
 - 已知限制与渠道能力矩阵公开，不把计划能力描述成已实现。
-- 254 个已登记 P0 Case 中，所有适用于 v0.1 的 Case 均按[实现证据与发布闭合协议](implementation-verification-v0.1.md)进入独立 Case Verification Registry，绑定当前候选制品/spec 的测试证据并标记为 `VERIFIED`；任何 `Future` / `N/A` 必须记录对应范围决策、理由、批准人和批准时间，不得用它们隐藏未完成的 v0.1 要求。`pnpm release:check` 未实现、registry/manifest 缺失或校验失败都阻断发布，不能用当前只验证设计的 `docs:check` 替代。
+- 254 个已登记 P0 Case 中，所有适用于 v0.1 的 Case 均按[实现证据与发布闭合协议](implementation-verification-v0.1.md)进入独立 Case Verification Registry，绑定当前候选制品/spec 的测试证据并标记为 `VERIFIED`；任何 `Future` / `N/A` 必须记录对应范围决策、理由、唯一 `MAINTAINER_DECIDER` 的身份、决定时间与签名 proof，不得用它们隐藏未完成的 v0.1 要求。`pnpm release:check` 未实现、registry/manifest 缺失或校验失败都阻断发布，不能用当前只验证设计的 `docs:check` 替代。
 
 ### 验证证据
 

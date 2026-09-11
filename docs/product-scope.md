@@ -4,7 +4,7 @@
 
 RoleFox 的目标是成为候选人掌控的、本地默认、可自托管的自主求职智能体：用户一次性提供真实资料、求职目标和授权边界后，它持续完成岗位发现、筛选、材料定制、投递、跟进、初步沟通和面试排期，直到把合格面试交给用户。
 
-v0.1 的具体产品与目标设计边界已经由 [ADR-0002](adr/0002-v0.1-product-decision-baseline.md)、[ADR-0003](adr/0003-shadow-safety-control-exceptions.md) 与 [ADR-0004](adr/0004-jd-raw-retention-and-preparation-pack.md) 接受。
+v0.1 的具体产品与目标设计边界已经由 [ADR-0002](adr/0002-v0.1-product-decision-baseline.md)、[ADR-0003](adr/0003-shadow-safety-control-exceptions.md) 与 [ADR-0004](adr/0004-jd-raw-retention-and-preparation-pack.md) 接受；决策治理由 [ADR-0005](adr/0005-sole-maintainer-governance.md) 固定为单一维护者模式。
 
 产品类别是 **candidate-side job search operating system（候选人侧求职操作系统）**，不是招聘方 ATS，也不是批量投递脚本。
 

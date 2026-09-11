@@ -2,7 +2,7 @@
 
 - 状态：Accepted Product and Design Baseline
 - 版本：v0.1
-- 更新日期：2026-09-09
+- 更新日期：2026-09-11
 - 建模范围：单用户、本地默认的一条面试前 Autopilot 完整通道
 - 实现范围：目标态设计；不代表当前 M0 已实现
 
@@ -21,7 +21,7 @@
 
 发生冲突时按以下顺序处理：
 
-1. 已确认的产品决策（[ADR-0001](../../adr/0001-pre-interview-autopilot.md)、[ADR-0002](../../adr/0002-v0.1-product-decision-baseline.md)、[ADR-0003](../../adr/0003-shadow-safety-control-exceptions.md)、[ADR-0004](../../adr/0004-jd-raw-retention-and-preparation-pack.md)）与 [P0 Case 验收基线](../p0-case-baseline-v0.1.md)；后两份 ADR 对前序基线的窄化澄清/修订优先；
+1. 已确认的产品与治理决策（[ADR-0001](../../adr/0001-pre-interview-autopilot.md)、[ADR-0002](../../adr/0002-v0.1-product-decision-baseline.md)、[ADR-0003](../../adr/0003-shadow-safety-control-exceptions.md)、[ADR-0004](../../adr/0004-jd-raw-retention-and-preparation-pack.md)、[ADR-0005](../../adr/0005-sole-maintainer-governance.md)）与 [P0 Case 验收基线](../p0-case-baseline-v0.1.md)；ADR-0003/0004 对前序产品基线作窄化澄清/修订，ADR-0005 固定决策治理；
 2. [v0.1 PRD](../prd-v0.1.md) 与 [用户体验设计](../user-experience-v0.1.md)；
 3. 本 UML 设计基线；
 4. [架构说明](../../architecture.md) 与 [自动化安全说明](../../automation-safety.md)；
@@ -97,7 +97,7 @@
 
 ## 7. 已接受的 v0.1 产品决定
 
-以下 19 项原始产品决定均已由产品负责人确认并进入 [ADR-0002](../../adr/0002-v0.1-product-decision-baseline.md)，另保留已合并的 `DEC-13`；当前解释还必须同时遵守 Accepted [ADR-0003](../../adr/0003-shadow-safety-control-exceptions.md) 与 [ADR-0004](../../adr/0004-jd-raw-retention-and-preparation-pack.md)。表内内容是工程约束，不是建议；`DEC-13` 已合并到 `DEC-04`，编号永久保留、不复用。
+以下 19 项原始产品决定均已由产品负责人确认并进入 [ADR-0002](../../adr/0002-v0.1-product-decision-baseline.md)，另保留已合并的 `DEC-13`；当前解释还必须同时遵守 Accepted [ADR-0003](../../adr/0003-shadow-safety-control-exceptions.md)、[ADR-0004](../../adr/0004-jd-raw-retention-and-preparation-pack.md) 与单一维护者治理 [ADR-0005](../../adr/0005-sole-maintainer-governance.md)。表内内容是工程约束，不是建议；`DEC-13` 已合并到 `DEC-04`，编号永久保留、不复用。
 
 | 决策 ID | 状态 | Accepted baseline | 影响图 |
 | --- | --- | --- | --- |

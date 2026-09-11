@@ -5,6 +5,7 @@ export const ACCEPTED_SPEC_FILES = [
   "docs/adr/0002-v0.1-product-decision-baseline.md",
   "docs/adr/0003-shadow-safety-control-exceptions.md",
   "docs/adr/0004-jd-raw-retention-and-preparation-pack.md",
+  "docs/adr/0005-sole-maintainer-governance.md",
   "docs/architecture.md",
   "docs/automation-safety.md",
   "docs/open-source-strategy.md",
@@ -49,6 +50,14 @@ export const PRE_W1_RESEARCH_SCOPE_IDS = [
   "rules_replay",
   "target_channel_feasibility",
 ];
+
+export const SOLE_MAINTAINER_AUTHORITY = Object.freeze({
+  governance_mode: "SOLE_MAINTAINER",
+  identity: "github:AnnCYW-cm",
+  role_version: "rolefox-sole-maintainer-v1",
+  gate_submitter_may_decide: true,
+  trusted_signer_policy: "GITHUB_ACTIONS_OIDC_PROTECTED_MAIN",
+});
 
 // This closed file set defines the verifier whose semantics are bound into the
 // Spec Manifest, Candidate artifact, Gate records, and registry checkpoints.
