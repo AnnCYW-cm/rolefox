@@ -19,7 +19,7 @@
 - [x] 首份产品北极星决策记录（[ADR-0001](adr/0001-pre-interview-autopilot.md)）
 - [x] v0.1 产品需求、用户体验、验证与纵向交付计划
 - [x] 19 项 v0.1 产品决策、业务 Shadow/安全控制边界、JD raw 清除后的准备包行为及完整 UML 基线（[ADR-0002](adr/0002-v0.1-product-decision-baseline.md)、[ADR-0003](adr/0003-shadow-safety-control-exceptions.md)、[ADR-0004](adr/0004-jd-raw-retention-and-preparation-pack.md)）
-- [ ] 公开版本变更记录
+- [x] 公开版本变更记录（[CHANGELOG.md](../CHANGELOG.md)）
 
 完成标准：`pnpm check` 通过；公共材料不含个人化默认值；README 能准确区分 legacy M0 基础版与 Accepted 目标模型，不把可配置阈值判断描述成系统硬上限、原子计数或 L3 readiness。
 

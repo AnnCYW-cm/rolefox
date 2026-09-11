@@ -129,6 +129,7 @@ pnpm check
 - 想了解为何选择面试前 Autopilot：阅读 [ADR-0001](docs/adr/0001-pre-interview-autopilot.md)
 - 想查看 v0.1 已确认产品决策：阅读 [ADR-0002](docs/adr/0002-v0.1-product-decision-baseline.md)、[ADR-0003](docs/adr/0003-shadow-safety-control-exceptions.md) 与 [ADR-0004](docs/adr/0004-jd-raw-retention-and-preparation-pack.md)
 - 想了解开发顺序：阅读 [路线图](docs/roadmap.md)
+- 想查看公开项目变更：阅读 [版本变更记录](CHANGELOG.md)
 - 想贡献连接器：先阅读 [架构](docs/architecture.md) 和 [贡献指南](CONTRIBUTING.md)
 - 想了解开源与未来商业化边界：阅读 [开源策略](docs/open-source-strategy.md)
 - 发现漏洞：按 [安全政策](SECURITY.md) 私下报告

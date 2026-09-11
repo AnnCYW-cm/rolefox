@@ -84,7 +84,7 @@ pnpm check
 
 Run `pnpm verification:check` to validate the Pre-W1 registry structure. W1 may start only when `pnpm verification:ready` succeeds; it currently fails closed by design.
 
-See the [product scope](docs/product-scope.md), [Autopilot decision record](docs/adr/0001-pre-interview-autopilot.md), [accepted v0.1 decision baseline](docs/adr/0002-v0.1-product-decision-baseline.md), [safety-control Shadow boundary](docs/adr/0003-shadow-safety-control-exceptions.md), [JD raw-retention and preparation-pack decision](docs/adr/0004-jd-raw-retention-and-preparation-pack.md), [implementation evidence and release-closure contract](docs/product/implementation-verification-v0.1.md), [architecture](docs/architecture.md), [roadmap](docs/roadmap.md), [open-source strategy](docs/open-source-strategy.md), and [contribution guide](CONTRIBUTING.md).
+See the [product scope](docs/product-scope.md), [Autopilot decision record](docs/adr/0001-pre-interview-autopilot.md), [accepted v0.1 decision baseline](docs/adr/0002-v0.1-product-decision-baseline.md), [safety-control Shadow boundary](docs/adr/0003-shadow-safety-control-exceptions.md), [JD raw-retention and preparation-pack decision](docs/adr/0004-jd-raw-retention-and-preparation-pack.md), [implementation evidence and release-closure contract](docs/product/implementation-verification-v0.1.md), [architecture](docs/architecture.md), [roadmap](docs/roadmap.md), [public changelog](CHANGELOG.md), [open-source strategy](docs/open-source-strategy.md), and [contribution guide](CONTRIBUTING.md).
 
 ## License
 

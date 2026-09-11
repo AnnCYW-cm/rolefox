@@ -477,6 +477,12 @@ test("Evidence prepare rejects an email-like producer identity before writing", 
 test("Gate CLI rejects an unevidenced FAIL without appending it", (t) => {
   const temporaryRoot = temporaryCliRepository(t);
   const inputPath = path.join(temporaryRoot, "fail-decision.json");
+  const registryPath = path.join(
+    temporaryRoot,
+    "verification",
+    "gate-evidence-v0.1.jsonl",
+  );
+  const registryBefore = fs.readFileSync(registryPath, "utf8");
   fs.writeFileSync(
     inputPath,
     `${JSON.stringify({
@@ -505,12 +511,7 @@ test("Gate CLI rejects an unevidenced FAIL without appending it", (t) => {
     result.stderr,
     /Pre-W1 FAIL must reference at least one VERIFIED FAIL evidence manifest/,
   );
-  assert.equal(
-    parseJsonLines(
-      path.join(temporaryRoot, "verification", "gate-evidence-v0.1.jsonl"),
-    ).length,
-    1,
-  );
+  assert.equal(fs.readFileSync(registryPath, "utf8"), registryBefore);
 });
 
 test("Gate CLI prepares an evidenced FAIL and finalize fails closed on trust", (t) => {
