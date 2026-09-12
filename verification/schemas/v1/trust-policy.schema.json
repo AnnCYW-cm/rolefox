@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:rolefox:schema:trust-policy:v1",
+  "title": "RoleFox GitHub Actions trust policy v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "policy_version",
+    "status",
+    "repository",
+    "maintainer",
+    "evidence_producers",
+    "signer",
+    "sigstore",
+    "predicate_type",
+    "proof_directory"
+  ],
+  "properties": {
+    "schema_version": { "const": "rolefox.trust-policy.v1" },
+    "policy_version": { "const": "rolefox-github-actions-trust-v1" },
+    "status": { "const": "IMPLEMENTED" },
+    "repository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "id", "owner_login", "owner_id", "visibility", "source_ref"],
+      "properties": {
+        "name": { "const": "AnnCYW-cm/rolefox" },
+        "id": { "const": "1362056259" },
+        "owner_login": { "const": "AnnCYW-cm" },
+        "owner_id": { "const": "71166510" },
+        "visibility": { "const": "public" },
+        "source_ref": { "const": "refs/heads/main" }
+      }
+    },
+    "maintainer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["identity", "login", "actor_id", "role_version"],
+      "properties": {
+        "identity": { "const": "github:AnnCYW-cm" },
+        "login": { "const": "AnnCYW-cm" },
+        "actor_id": { "const": "71166510" },
+        "role_version": { "const": "rolefox-sole-maintainer-v1" }
+      }
+    },
+    "evidence_producers": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1,
+      "prefixItems": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["identity", "identity_kind", "allowlist_version"],
+          "properties": {
+            "identity": { "const": "github:AnnCYW-cm" },
+            "identity_kind": { "const": "APPROVED_OPERATOR" },
+            "allowlist_version": { "const": "rolefox-research-operators-v1" }
+          }
+        }
+      ],
+      "items": false
+    },
+    "signer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["workflow_path", "signer_workflow", "workflow_identity", "workflow_uri", "oidc_issuer", "runner_environment", "event_name"],
+      "properties": {
+        "workflow_path": { "const": ".github/workflows/verification-attest.yml" },
+        "signer_workflow": { "const": "github.com/AnnCYW-cm/rolefox/.github/workflows/verification-attest.yml" },
+        "workflow_identity": { "const": "github-actions:AnnCYW-cm/rolefox/.github/workflows/verification-attest.yml@refs/heads/main" },
+        "workflow_uri": { "const": "https://github.com/AnnCYW-cm/rolefox/.github/workflows/verification-attest.yml@refs/heads/main" },
+        "oidc_issuer": { "const": "https://token.actions.githubusercontent.com" },
+        "runner_environment": { "const": "github-hosted" },
+        "event_name": { "const": "workflow_dispatch" }
+      }
+    },
+    "sigstore": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["instance", "external_anchor_provider", "minimum_verified_rekor_timestamps", "minimum_transparency_log_entries"],
+      "properties": {
+        "instance": { "const": "PUBLIC_GOOD" },
+        "external_anchor_provider": { "const": "SIGSTORE_REKOR" },
+        "minimum_verified_rekor_timestamps": { "const": 1 },
+        "minimum_transparency_log_entries": { "const": 1 }
+      }
+    },
+    "predicate_type": { "const": "https://rolefox.dev/attestations/verification/v1" },
+    "proof_directory": { "const": "verification/trust-proofs" }
+  }
+}

@@ -1,0 +1,114 @@
+{
+  "_template_notice": {
+    "status": "NOT_COLLECTED",
+    "registerable": false,
+    "instructions": "Copy outside Git into the controlled artifact store. Create one file per cohort-local participant surrogate. Remove _template_notice and _rules_replay_job_decision_entry_template before freezing. For a completed rules replay, fill exactly 20 job_decisions in the frozen dataset sequence. Never add names, contacts, employers, job titles, URLs, verbatim quotes, credentials, raw messages, or cross-cohort identity links. Hash the final frozen bytes and record that digest in the controlled cohort log and Evidence aggregation worksheet."
+  },
+  "template_version": "pre-w1-participant-observation-v0.1",
+  "run_bindings": {
+    "run_id": null,
+    "research_protocol_digest": null,
+    "required_release_scope_catalog_digest": null,
+    "spec_manifest_digest": null,
+    "candidate_scope_manifest_id": null,
+    "candidate_scope_manifest_digest": null,
+    "ops_bundle_digest": null
+  },
+  "cohort_kind": null,
+  "participant_surrogate": null,
+  "consent": {
+    "consent_version": "pre-w1-consent-v0.1",
+    "consented_at": null,
+    "consent_receipt_sha256": null,
+    "interview_allowed": null,
+    "rules_replay_allowed": null,
+    "job_snapshot_allowed": null,
+    "recording_allowed": null,
+    "append_only_boundary_acknowledged": null,
+    "withdrawal_status": null,
+    "withdrawn_at": null
+  },
+  "session": {
+    "started_at": null,
+    "completed_at": null,
+    "status": null,
+    "interviewer_identity": null,
+    "raw_note_artifact_id": null,
+    "raw_note_sha256": null,
+    "raw_note_locator_hmac": null,
+    "recording_artifact_id": null,
+    "recording_sha256": null,
+    "recording_locator_hmac": null
+  },
+  "screening": {
+    "adult_consent_capacity": null,
+    "recent_active_search": null,
+    "current_job_search": null,
+    "applications_primarily_online": null,
+    "recruiting_email_reachable": null,
+    "willing_real_mailbox": null,
+    "willing_real_calendar": null,
+    "duplicate_check": null
+  },
+  "pain_observation": {
+    "opportunities_per_week": null,
+    "top_pain_codes_ranked": [],
+    "repetitive_work_rank": null,
+    "explicit_rejection_reason_codes": [],
+    "rule_type_by_rejection_reason": [],
+    "qualification_result": "INCONCLUSIVE"
+  },
+  "target_channel_observation": {
+    "currently_job_searching": null,
+    "applications_primarily_online": null,
+    "recruiting_communication_can_reach_email": null,
+    "willing_to_connect_real_mailbox": null,
+    "willing_to_connect_one_real_calendar_provider": null,
+    "eligibility_result": "INCONCLUSIVE"
+  },
+  "delegation_boundaries": {
+    "never_delegate_codes": [],
+    "per_action_confirmation_codes": [],
+    "limited_delegation_codes": [],
+    "stop_condition_codes": []
+  },
+  "rules_replay_summary": {
+    "dataset_id": null,
+    "dataset_digest": null,
+    "dataset_frozen_at": null,
+    "replay_started_at": null,
+    "replay_completed_at": null,
+    "jobs_expected": 20,
+    "jobs_completed": null,
+    "job_decisions": [],
+    "dataset_digest_unchanged": null,
+    "explicit_rejection_reasons_covered": "UNKNOWN",
+    "remaining_ambiguity": "UNKNOWN",
+    "exception_category_codes": []
+  },
+  "_rules_replay_job_decision_entry_template": {
+    "sequence": null,
+    "job_surrogate": null,
+    "participant_decision": null,
+    "participant_rejection_reason_codes": [],
+    "participant_rule_type": null,
+    "decided_at": null,
+    "system_decision_after_participant": null,
+    "decision_match": null,
+    "covered_by_hard_filter_or_manual_exception": null,
+    "exception_category_code": null,
+    "evaluated_at": null
+  },
+  "coding": {
+    "rubric_version": "pre-w1-coding-v0.1",
+    "coded_by": null,
+    "coded_at": null,
+    "quality_status": "INCONCLUSIVE",
+    "protocol_deviation_codes": [],
+    "exclusion_code": null
+  },
+  "retention": {
+    "retention_class": "R3_DEIDENTIFIED_WORKING",
+    "delete_by": null
+  }
+}

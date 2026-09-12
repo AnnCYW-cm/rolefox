@@ -1,0 +1,83 @@
+{
+  "_template_notice": {
+    "status": "NOT_COLLECTED",
+    "registerable": false,
+    "instructions": "Copy outside the repository and remove _template_notice, evidence_id, manifest_digest, and record_digest. Fill only fields produced by controlled deidentified research. Leave current authority refs null for the writer to bind, and keep attestation PENDING with all four trust fields null for finalize to derive from the proof bundle. Keep this cohort denominator separate from pain interviews."
+  },
+  "schema_version": "rolefox.evidence-manifest.v1",
+  "evidence_id": null,
+  "manifest_digest": null,
+  "record_digest": null,
+  "evidence_type": "USER_RESEARCH",
+  "evidence_kind": "TARGET_CHANNEL_FEASIBILITY",
+  "research_scope_id": "target_channel_feasibility",
+  "producer": {
+    "identity": "github:AnnCYW-cm",
+    "identity_kind": "APPROVED_OPERATOR",
+    "allowlist_version": "rolefox-research-operators-v1"
+  },
+  "attestation": {
+    "status": "PENDING",
+    "attested_by": null,
+    "attested_at": null,
+    "signed_payload_digest": null,
+    "proof_digest": null
+  },
+  "run_id": null,
+  "started_at": null,
+  "completed_at": null,
+  "result": "INCONCLUSIVE",
+  "candidate_artifact_kind": "SPEC_OR_EXPERIMENT",
+  "candidate_artifact_digest": null,
+  "candidate_scope_manifest_ref": {
+    "candidate_scope_manifest_id": null,
+    "manifest_digest": null
+  },
+  "spec_manifest_ref": {
+    "manifest_digest": null,
+    "normative_set_digest": null
+  },
+  "required_release_scope_catalog_ref": {
+    "catalog_digest": null
+  },
+  "research_protocol_ref": {
+    "protocol_digest": null
+  },
+  "deidentification": {
+    "scheme": "RANDOM_COHORT_LOCAL_SURROGATE",
+    "scheme_version": null,
+    "mapping_location": "CONTROLLED_ARTIFACT_STORE_ONLY"
+  },
+  "artifact_refs": [],
+  "subject_refs": [
+    {
+      "subject_type": "GATE_CRITERION",
+      "gate_id": "PRE_W1_PROBLEM_RULES",
+      "criterion_id": "target_channel_eligible_n"
+    }
+  ],
+  "measurements": [
+    {
+      "measurement_id": "pre_w1_target_channel_eligibility",
+      "measurement_type": "CHANNEL_ELIGIBILITY",
+      "cohort_denominator": null,
+      "eligible_n": null,
+      "participant_surrogates": [],
+      "eligibility_refs": [],
+      "eligibility_and_exclusion_policy_digest": null,
+      "calculation_version": null
+    }
+  ],
+  "criterion_results": [
+    {
+      "criterion_id": "target_channel_eligible_n",
+      "comparator": "GTE",
+      "expected": 5,
+      "actual_or_measurement_refs": [
+        "pre_w1_target_channel_eligibility"
+      ],
+      "result": "INCONCLUSIVE",
+      "calculation_version": null
+    }
+  ]
+}

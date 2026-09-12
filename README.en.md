@@ -10,6 +10,10 @@ RoleFox aims to take over the routine work between a candidate's goals and a boo
 
 This repository is currently **M0 / pre-alpha**. It includes a static product demo, domain state machine, foundational policy rules and extensibility contracts. It does not connect to real job boards or submit real applications yet.
 
+The Pre-W1 verification control plane now includes a Spec Manifest bound to both normative inputs and the verifier toolchain, a Required Release Scope Catalog, immutable authority snapshots, a frozen Candidate Scope, a schema and writer for two-layer content-addressed Evidence, an append-only Gate Registry, chained checkpoints, and protected-`main` GitHub Actions OIDC + Sigstore/Rekor trust verification. RoleFox uses a sole-maintainer governance model: `github:AnnCYW-cm` makes product and Gate decisions, while the machine signer proves provenance and never substitutes for that decision. Live status is derived by `pnpm verification:ready`; W1 must not start until real interviews, rules replay, a Gate 1 PASS, and a trusted checkpoint are all present.
+
+The v0.1 release has a separate real-provider gate that a demo cannot satisfy: RoleFox must connect to a real mailbox and a real calendar provider and verify inbound mail, controlled L2 replies after the seven-day Shadow gate, busy-time query and reconciliation, a candidate-private tentative event, recruiter confirmation, and failure compensation end to end. Reaching limited L3 is not required for v0.1—capabilities may remain at L2—but a fake inbox, test calendar, or application handoff cannot replace this release evidence. M0 has not implemented or passed this gate.
+
 ## Principles
 
 - **Candidate-owned data** — profiles, rules, credentials and audit history stay under the user's control.
@@ -24,8 +28,8 @@ RoleFox started from one person's real job search, but that person is the projec
 | Capability | Status |
 | --- | --- |
 | Web workspace with synthetic demo data | Implemented demo |
-| Application state machine | M0 foundation implemented; accepted Interview lifecycle, Operation/Saga evidence, and CAS guards are not yet implemented |
-| Dry-run, kill switch, level matrix and limit rules | Initial implementation with unit tests |
+| Application state machine | M0 legacy foundation only: string transitions and illegal-transition tests exist; the accepted Application/Interview lifecycles, Operation/Saga evidence, CAS and recovery semantics are not implemented |
+| Dry-run, kill switch, level matrix and limit rules | M0 legacy evaluator only: it compares caller-supplied usage and configuration; system hard ceilings, atomic counters/reservations, authorization records and L3 readiness are not implemented |
 | Capability-based job, messaging, notification and calendar connector contracts | Initial version |
 | Provider-agnostic AI contract | Initial version |
 | Worker and local runner | Safe stubs; no authorization store, exception workflow or external execution |
@@ -36,17 +40,23 @@ General-purpose does not mean every job site is supported on day one. The core s
 
 ## Safety model
 
-RoleFox starts in `L2` with `DRY_RUN=true`, so the foundational policy evaluator returns `preview_only`. M0 does not yet implement ActionPlan creation, authorization and exception services, or execution.
+RoleFox starts in `L2` with `DRY_RUN=true`, so the legacy foundational policy evaluator returns `preview_only`. M0 does not yet implement accepted hard ceilings, atomic usage counters/reservations, ActionPlan creation, authorization and exception services, L3 readiness, or execution.
 
 The target experience is **L3 Autopilot**, not unbounded L4 autonomy. RoleFox may keep working only while the job, content, answers and calendar slot remain inside the candidate's versioned delegation policy. Missing facts, out-of-range answers, ambiguous times, calendar conflicts and high-risk commitments become exceptions.
 
 ```text
-Connector draft → core ActionPlan → policy decision
-                                      ├─ approval when required
-                                      └─ pre-approved L3 rule
-                                                   ↓
-                                               execution
+Connector draft → immutable ActionPlan → durable policy evaluation
+                                           ↓
+                         current 7-day pre-L2 Shadow receipt gate
+                                           ↓
+                           L2 approval or current limited L3 grant
+                                           ↓
+            atomic Authorization / Operation / AuditIntent / Outbox
+                                           ↓
+          execution-time binding + receipt recheck → external execution
 ```
+
+Human approval never bypasses Shadow. The exact field bindings, composite scheduling receipt set, and three-state reconciliation rules are defined by the [common mutation sequence](docs/product/uml/05-sequence-flows.md).
 
 Compensation ranges, start dates and locations may be handled only when explicitly preauthorized and supported by candidate evidence; anything outside that range is escalated. Offer acceptance, legal declarations and unverifiable identity or experience claims always remain with the user. RoleFox will not solve CAPTCHAs or bypass access controls and platform safeguards.
 
@@ -72,7 +82,9 @@ Before opening a pull request:
 pnpm check
 ```
 
-See the [product scope](docs/product-scope.md), [Autopilot decision record](docs/adr/0001-pre-interview-autopilot.md), [accepted v0.1 decision baseline](docs/adr/0002-v0.1-product-decision-baseline.md), [architecture](docs/architecture.md), [roadmap](docs/roadmap.md), [open-source strategy](docs/open-source-strategy.md), and [contribution guide](CONTRIBUTING.md).
+Run `pnpm verification:check` to validate the Pre-W1 registry structure. W1 may start only when `pnpm verification:ready` succeeds; it currently fails closed by design.
+
+See the [product scope](docs/product-scope.md), [Autopilot decision record](docs/adr/0001-pre-interview-autopilot.md), [accepted v0.1 decision baseline](docs/adr/0002-v0.1-product-decision-baseline.md), [safety-control Shadow boundary](docs/adr/0003-shadow-safety-control-exceptions.md), [JD raw-retention and preparation-pack decision](docs/adr/0004-jd-raw-retention-and-preparation-pack.md), [sole-maintainer governance decision](docs/adr/0005-sole-maintainer-governance.md), [implementation evidence and release-closure contract](docs/product/implementation-verification-v0.1.md), [architecture](docs/architecture.md), [roadmap](docs/roadmap.md), [public changelog](CHANGELOG.md), [open-source strategy](docs/open-source-strategy.md), and [contribution guide](CONTRIBUTING.md).
 
 ## License
 

@@ -1,0 +1,577 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:rolefox:schema:candidate-scope-manifest:v1",
+  "title": "RoleFox Candidate Scope Manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "manifest_kind",
+    "candidate_scope_manifest_id",
+    "manifest_digest",
+    "created_at",
+    "candidate_artifact_kind",
+    "candidate_artifact_digest",
+    "verification_toolchain_ref",
+    "spec_manifest_ref",
+    "required_release_scope_catalog_ref",
+    "research_protocol_ref",
+    "release_scope_ids",
+    "research_scope_ids",
+    "software_capabilities_claimed",
+    "cohort_and_criteria_frozen",
+    "approval",
+    "collection_guard"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "rolefox.candidate-scope-manifest.v1"
+    },
+    "manifest_kind": {
+      "enum": [
+        "SPEC_OR_EXPERIMENT",
+        "BUILD"
+      ]
+    },
+    "candidate_scope_manifest_id": {
+      "type": "string",
+      "pattern": "^candidate_[0-9a-f]{64}$"
+    },
+    "manifest_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "candidate_artifact_kind": {
+      "enum": [
+        "SPEC_OR_EXPERIMENT",
+        "BUILD"
+      ]
+    },
+    "candidate_artifact_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "verification_toolchain_ref": {
+      "$ref": "#/$defs/digestRef"
+    },
+    "spec_manifest_ref": {
+      "$ref": "#/$defs/specManifestRef"
+    },
+    "required_release_scope_catalog_ref": {
+      "$ref": "#/$defs/catalogRef"
+    },
+    "research_protocol_ref": {
+      "$ref": "#/$defs/protocolRef"
+    },
+    "release_scope_ids": {
+      "$ref": "#/$defs/scopeIds"
+    },
+    "research_scope_ids": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "enum": [
+          "pain_interviews",
+          "target_channel_feasibility",
+          "rules_replay"
+        ]
+      }
+    },
+    "software_capabilities_claimed": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/softwareCapability"
+      }
+    },
+    "cohort_and_criteria_frozen": {
+      "type": "boolean"
+    },
+    "approval": {
+      "$ref": "#/$defs/approval"
+    },
+    "collection_guard": {
+      "enum": [
+        "BLOCKED_UNTIL_APPROVED",
+        "APPROVED_FOR_PROTOCOL_BOUND_COLLECTION",
+        "NOT_APPLICABLE_TO_BUILD"
+      ]
+    },
+    "build_attestation": {
+      "$ref": "#/$defs/attestation"
+    },
+    "w1_kickoff_attestation": {
+      "$ref": "#/$defs/w1KickoffAttestation"
+    },
+    "first_w1_build_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate_scope_manifest_id",
+        "manifest_digest"
+      ],
+      "properties": {
+        "candidate_scope_manifest_id": {
+          "type": "string",
+          "pattern": "^candidate_[0-9a-f]{64}$"
+        },
+        "manifest_digest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "manifest_kind": {
+            "const": "SPEC_OR_EXPERIMENT"
+          }
+        },
+        "required": [
+          "manifest_kind"
+        ]
+      },
+      "then": {
+        "properties": {
+          "candidate_artifact_kind": {
+            "const": "SPEC_OR_EXPERIMENT"
+          },
+          "software_capabilities_claimed": {
+            "type": "array",
+            "maxItems": 0
+          },
+          "cohort_and_criteria_frozen": {
+            "const": true
+          },
+          "collection_guard": {
+            "enum": [
+              "BLOCKED_UNTIL_APPROVED",
+              "APPROVED_FOR_PROTOCOL_BOUND_COLLECTION"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "manifest_kind": {
+            "const": "BUILD"
+          }
+        },
+        "required": [
+          "manifest_kind"
+        ]
+      },
+      "then": {
+        "required": [
+          "build_attestation"
+        ],
+        "properties": {
+          "candidate_artifact_kind": {
+            "const": "BUILD"
+          },
+          "collection_guard": {
+            "const": "NOT_APPLICABLE_TO_BUILD"
+          }
+        },
+        "oneOf": [
+          {
+            "required": [
+              "w1_kickoff_attestation"
+            ],
+            "not": {
+              "required": [
+                "first_w1_build_ref"
+              ]
+            }
+          },
+          {
+            "required": [
+              "first_w1_build_ref"
+            ],
+            "not": {
+              "required": [
+                "w1_kickoff_attestation"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "approval": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "const": "APPROVED"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          }
+        },
+        "required": [
+          "approval"
+        ]
+      },
+      "then": {
+        "properties": {
+          "approval": {
+            "$ref": "#/$defs/completedApproval"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "digestRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "digest"
+      ],
+      "properties": {
+        "digest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "repositoryPath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[^\\u0000\\\\]+$"
+    },
+    "identity": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 256,
+      "pattern": "^[^\\s]+$"
+    },
+    "scopeIds": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_]{2,127}$"
+      }
+    },
+    "specManifestRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "manifest_digest",
+        "normative_set_digest"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/repositoryPath"
+        },
+        "manifest_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "normative_set_digest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "catalogRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "catalog_digest"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/repositoryPath"
+        },
+        "catalog_digest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "protocolRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "protocol_digest"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/repositoryPath"
+        },
+        "protocol_digest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "approval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "signed_payload_digest",
+        "approved_by",
+        "approved_at",
+        "approver_role_version",
+        "approval_proof_digest"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "PENDING",
+            "APPROVED",
+            "REJECTED"
+          ]
+        },
+        "signed_payload_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "approved_by": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/identity"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "approved_at": {
+          "oneOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "approver_role_version": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "approval_proof_digest": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/digest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "completedApproval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "signed_payload_digest",
+        "approved_by",
+        "approved_at",
+        "approver_role_version",
+        "approval_proof_digest"
+      ],
+      "properties": {
+        "status": {
+          "const": "APPROVED"
+        },
+        "signed_payload_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "approved_by": {
+          "$ref": "#/$defs/identity"
+        },
+        "approved_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "approver_role_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "approval_proof_digest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "softwareCapability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scope_id",
+        "capability",
+        "channel_role",
+        "release_disposition",
+        "execution_class",
+        "max_enabled_mode",
+        "adapter_interfaces",
+        "criteria_contract_version",
+        "reads_real_data",
+        "performs_real_outbound",
+        "fallback_eligible",
+        "required_gate_ids"
+      ],
+      "properties": {
+        "scope_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{2,127}$"
+        },
+        "capability": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "channel_role": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "release_disposition": {
+          "enum": [
+            "REQUIRED",
+            "ENABLED",
+            "DISABLED_EXPERIMENTAL"
+          ]
+        },
+        "execution_class": {
+          "enum": [
+            "READ_ONLY",
+            "BUSINESS_MODE",
+            "SAFETY_CONTROL_ONLY",
+            "JOINED_RELEASE"
+          ]
+        },
+        "max_enabled_mode": {
+          "enum": [
+            "DRY_RUN",
+            "PRE_L2_SHADOW",
+            "L2",
+            "L3",
+            null
+          ]
+        },
+        "adapter_interfaces": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        },
+        "criteria_contract_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "reads_real_data": {
+          "type": "boolean"
+        },
+        "performs_real_outbound": {
+          "type": "boolean"
+        },
+        "fallback_eligible": {
+          "type": "boolean"
+        },
+        "required_gate_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]{2,127}$"
+          }
+        }
+      }
+    },
+    "attestation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "producer_identity",
+        "issued_at",
+        "proof_digest"
+      ],
+      "properties": {
+        "producer_identity": {
+          "$ref": "#/$defs/identity"
+        },
+        "issued_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "proof_digest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "w1KickoffAttestation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pre_w1_record_id",
+        "pre_w1_record_digest",
+        "decided_at",
+        "spec_manifest_digest",
+        "catalog_digest",
+        "research_protocol_digest",
+        "proof_digest"
+      ],
+      "properties": {
+        "pre_w1_record_id": {
+          "type": "string",
+          "pattern": "^gate_[0-9a-f]{64}$"
+        },
+        "pre_w1_record_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "decided_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "spec_manifest_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "catalog_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "research_protocol_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "proof_digest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    }
+  }
+}

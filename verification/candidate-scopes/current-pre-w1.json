@@ -1,0 +1,7 @@
+{
+  "schema_version": "rolefox.current-candidate-scope.v1",
+  "candidate_scope_manifest_id": "candidate_9586f13527a8c1c9ed4af3a8fe1daa8a00f17b72f64d0e1cf66de487eb682ec0",
+  "manifest_digest": "9586f13527a8c1c9ed4af3a8fe1daa8a00f17b72f64d0e1cf66de487eb682ec0",
+  "path": "verification/candidate-scopes/candidate_9586f13527a8c1c9ed4af3a8fe1daa8a00f17b72f64d0e1cf66de487eb682ec0.json",
+  "readiness": "PENDING_PRODUCT_OWNER_APPROVAL"
+}

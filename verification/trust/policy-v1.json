@@ -1,0 +1,43 @@
+{
+  "schema_version": "rolefox.trust-policy.v1",
+  "policy_version": "rolefox-github-actions-trust-v1",
+  "status": "IMPLEMENTED",
+  "repository": {
+    "name": "AnnCYW-cm/rolefox",
+    "id": "1362056259",
+    "owner_login": "AnnCYW-cm",
+    "owner_id": "71166510",
+    "visibility": "public",
+    "source_ref": "refs/heads/main"
+  },
+  "maintainer": {
+    "identity": "github:AnnCYW-cm",
+    "login": "AnnCYW-cm",
+    "actor_id": "71166510",
+    "role_version": "rolefox-sole-maintainer-v1"
+  },
+  "evidence_producers": [
+    {
+      "identity": "github:AnnCYW-cm",
+      "identity_kind": "APPROVED_OPERATOR",
+      "allowlist_version": "rolefox-research-operators-v1"
+    }
+  ],
+  "signer": {
+    "workflow_path": ".github/workflows/verification-attest.yml",
+    "signer_workflow": "github.com/AnnCYW-cm/rolefox/.github/workflows/verification-attest.yml",
+    "workflow_identity": "github-actions:AnnCYW-cm/rolefox/.github/workflows/verification-attest.yml@refs/heads/main",
+    "workflow_uri": "https://github.com/AnnCYW-cm/rolefox/.github/workflows/verification-attest.yml@refs/heads/main",
+    "oidc_issuer": "https://token.actions.githubusercontent.com",
+    "runner_environment": "github-hosted",
+    "event_name": "workflow_dispatch"
+  },
+  "sigstore": {
+    "instance": "PUBLIC_GOOD",
+    "external_anchor_provider": "SIGSTORE_REKOR",
+    "minimum_verified_rekor_timestamps": 1,
+    "minimum_transparency_log_entries": 1
+  },
+  "predicate_type": "https://rolefox.dev/attestations/verification/v1",
+  "proof_directory": "verification/trust-proofs"
+}

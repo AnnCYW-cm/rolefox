@@ -58,7 +58,7 @@ flowchart LR
 - 外部平台、邮件、附件、JD、模型输出和第三方插件全部是不可信输入。
 - AI Provider 只能生成结构化候选结果，不能持有授权或直接调用外部 mutation。
 - Local Runner 不是另一个决策中心，只能执行 Core 已签发且仍有效的具体动作。
-- v0.1 官方首条端到端闭环是“开放导入或合规只读岗位源 + 邮件 + 日历 + 通知”，真实外发默认 L2 或人工交接；BOSS 直聘是后续重点 Connector，但不作为 v0.1 发布阻塞项。
+- v0.1 官方首条端到端闭环是“开放导入或合规只读岗位源 + 邮件 + 日历 + 通知”；每项真实外发先完成连续 7 天 pre-L2 Shadow，随后默认以 L2 逐次批准或人工交接；BOSS 直聘是后续重点 Connector，但不作为 v0.1 发布阻塞项。对外发布还必须把真实邮箱入站/受控回复与真实日历 busy 对账/私有 tentative event/招聘确认/失败补偿放在同一端到端验收中，Fake Inbox、测试日历或投递交接不能替代；未达局部 L3 时保持 L2，不阻断这项验证。
 
 ## RF-UML-UC-CAND-01 候选人主用例
 
@@ -87,7 +87,7 @@ flowchart LR
 
     subgraph Delegate[建立委托]
         U07([运行 Dry-run])
-        U08([完成 L2 校准])
+        U08([完成 7 天 pre-L2 Shadow<br/>再进行真实 L2 校准])
         U09([按能力发布 L3 策略])
         U10([暂停、撤销或急停])
     end
@@ -159,7 +159,8 @@ flowchart TB
     Intent[待处理动作]
     Internal{是否只改变 RoleFox 内部数据}
     Boundary{是否属于固定人工处理或平台禁止事项}
-    Control{三级控制是否允许该动作}
+    Control{Workspace 三级控制是否允许该动作}
+    CapabilityControl{该 capability 的用户控制已启用<br/>且 safety hold 为 CLEAR 吗}
     Level{当前 capability 模式}
     Allowlist{该动作是否逐项命中非空 allowlist}
     Manifest{已启用的精确 Connector 版本<br/>是否声明该 capability 且所需权限均已批准}
@@ -186,7 +187,10 @@ flowchart TB
     Boundary -->|普通可委托动作| Control
     Control -->|PAUSE_NEW 且为新机会| Deny
     Control -->|STOP_OUTBOUND 或 KILL_SWITCH| Deny
-    Control -->|RUNNING 或已有申请仍允许推进| Level
+    Control -->|RUNNING 或已有申请仍允许推进| CapabilityControl
+    CapabilityControl -->|userMode=PAUSED| Deny
+    CapabilityControl -->|safetyHoldStatus=HELD 或状态缺失/未知| Deny
+    CapabilityControl -->|userMode=ENABLED 且 safetyHoldStatus=CLEAR| Level
     Level -->|Demo 或 Dry-run| Preview
     Level -->|L2| Approval
     Level -->|限定 L3| Allowlist
@@ -291,8 +295,8 @@ flowchart TB
 | UC-005 | 候选人 | Workspace 可用 | 唯一 active Campaign 拥有可执行硬条件和偏好 | 模糊条件要求消歧 |
 | UC-006 | 候选人 | 已阅读权限说明 | 所需连接器按 capability 独立授权、验证并展示健康状态 | 非必要连接器可跳过；失败只降级对应能力 |
 | UC-007 | 候选人 | 事实和 Campaign 完整 | Dry-run 生成判断、材料和动作预览 | 不产生真实外部副作用 |
-| UC-008 | 候选人 | Dry-run 完成 | L2 决定和修改被记录为校准证据 | 单次选择不自动升级长期策略 |
-| UC-009 | 候选人 | 满足 L3 就绪门槛 | 发布按能力、范围、期限和限额绑定的策略版本 | 任一缺项保持 L2 |
+| UC-008 | 候选人 | Dry-run 完成；外发 capability 尚未获得真实执行权 | 先连续 7 天记录零外发 Shadow；coverage、绑定和零错误门通过后，才允许逐次批准真实 L2，并把决定与修改记录为后续校准证据 | 人工批准不能跳过 Shadow；单次选择不自动升级长期策略 |
+| UC-009 | 候选人 | 有效 pre-L2 Shadow receipt 仍与当前绑定一致，且满足额外 L3 样本与零错误门槛 | 发布按能力、范围、期限和限额绑定的策略版本 | 任一缺项保持 L2；Shadow receipt 失效则回到零外发 Shadow |
 | UC-010 | 候选人 | 自动化正在或即将运行 | 对应范围停止，新动作不再执行 | 在途未知动作进入对账而非假回滚 |
 | UC-011 | Worker | Campaign active 且来源健康 | 岗位被标准化、保留来源并去重 | 失效、恶意或硬条件失败时关闭该机会 |
 | UC-012 | Worker | 岗位通过阈值且 Evidence 可用 | 生成有版本、有 Diff、有 evidence 链接的 MaterialSet | 未验证、冲突或无证据声明失败关闭 |

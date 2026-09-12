@@ -1,0 +1,72 @@
+{
+  "schema_version": "rolefox.pre-w1-research-protocol.v1",
+  "protocol_version": "pre-w1-v0.1-draft-1",
+  "canonicalization": "rolefox-canonical-digest-v1",
+  "status": "DRAFT_PENDING_PRODUCT_OWNER_APPROVAL",
+  "approval": {
+    "signed_payload_digest": "86ca9d3c84dcb175fd443acab8bf98b2d94a621e6b5160a9c4a717ad450fd2a8",
+    "approved_by": null,
+    "approved_at": null,
+    "approver_role_version": null,
+    "approval_proof_digest": null
+  },
+  "collection_guard": "NO_RECRUITMENT_OR_EVIDENCE_COLLECTION_BEFORE_APPROVAL",
+  "privacy": {
+    "public_repository_content": "DEIDENTIFIED_MANIFESTS_AND_DIGESTS_ONLY",
+    "raw_interviews_and_mappings": "CONTROLLED_ARTIFACT_STORE_ONLY",
+    "participant_identifier": "RANDOM_COHORT_LOCAL_SURROGATE",
+    "forbidden_public_fields": [
+      "name",
+      "email",
+      "resume_text",
+      "message_text",
+      "calendar_content",
+      "credential",
+      "direct_external_id"
+    ]
+  },
+  "cohorts": {
+    "pain_interviews": {
+      "target_minimum": 6,
+      "target_maximum": 8,
+      "qualification_window": "ACTIVE_JOB_SEARCH_WITHIN_PREVIOUS_3_MONTHS",
+      "pass_numerator_minimum": 5,
+      "pass_criteria": {
+        "opportunities_per_week_minimum": 10,
+        "repetitive_work_rank_maximum": 3
+      }
+    },
+    "target_channel_feasibility": {
+      "eligible_n_minimum": 5,
+      "eligibility_all_of": [
+        "CURRENTLY_JOB_SEARCHING",
+        "APPLICATIONS_PRIMARILY_ONLINE",
+        "RECRUITING_COMMUNICATION_CAN_REACH_EMAIL",
+        "WILLING_TO_CONNECT_REAL_MAILBOX",
+        "WILLING_TO_CONNECT_ONE_REAL_CALENDAR_PROVIDER"
+      ],
+      "counting_rule": "SEPARATE_DENOMINATOR_FROM_PAIN_INTERVIEWS"
+    }
+  },
+  "rules_replay": {
+    "participants_minimum": 5,
+    "participant_must_pass_pain_threshold": true,
+    "jobs_per_participant": 20,
+    "dataset_freeze_before_replay": true,
+    "pass_criteria": {
+      "explicit_rejection_reasons_covered": "ALL",
+      "remaining_ambiguity": "FINITE_EXCEPTION_CATEGORIES"
+    }
+  },
+  "required_outputs": [
+    "DEIDENTIFIED_PAIN_INTERVIEW_EVIDENCE",
+    "DEIDENTIFIED_TARGET_CHANNEL_ELIGIBILITY_EVIDENCE",
+    "FROZEN_PER_PARTICIPANT_JOB_DATASET_DIGESTS",
+    "RULE_REPLAY_MEASUREMENTS",
+    "COHORT_DENOMINATOR_AND_EXCLUSION_SUMMARY",
+    "INDEPENDENT_GATE_DECISION_AND_APPROVAL_PROOF"
+  ],
+  "gate_id": "PRE_W1_PROBLEM_RULES",
+  "failure_state": "BLOCKED_NOT_STARTED",
+  "protocol_digest": "172a87db0174ccf2d38739d90f13bfef9119682e99afeec4a994d044a13a1ede"
+}

@@ -1,0 +1,282 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:rolefox:schema:spec-manifest:v1",
+  "title": "RoleFox Spec Manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "manifest_version",
+    "canonicalization",
+    "algorithm",
+    "manifest_digest",
+    "normative_set_digest",
+    "normative_file_count",
+    "verification_toolchain",
+    "required_release_scope_catalog_ref",
+    "research_protocol_ref",
+    "inventory",
+    "generation"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "rolefox.spec-manifest.v1"
+    },
+    "manifest_version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "canonicalization": {
+      "const": "rolefox-canonical-digest-v1"
+    },
+    "algorithm": {
+      "const": "sha256"
+    },
+    "manifest_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "normative_set_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "normative_file_count": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "verification_toolchain": {
+      "$ref": "#/$defs/fileSet"
+    },
+    "required_release_scope_catalog_ref": {
+      "$ref": "#/$defs/catalogRef"
+    },
+    "research_protocol_ref": {
+      "$ref": "#/$defs/protocolRef"
+    },
+    "inventory": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/inventoryEntry"
+      }
+    },
+    "generation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tool",
+        "deterministic_inputs"
+      ],
+      "properties": {
+        "tool": {
+          "$ref": "#/$defs/repositoryPath"
+        },
+        "deterministic_inputs": {
+          "const": true
+        }
+      }
+    }
+  },
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "repositoryPath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[^\\u0000\\\\]+$"
+    },
+    "authorityStatus": {
+      "enum": [
+        "ACCEPTED",
+        "PROPOSED"
+      ]
+    },
+    "fileSet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "algorithm",
+        "canonicalization",
+        "digest",
+        "files"
+      ],
+      "properties": {
+        "algorithm": {
+          "const": "sha256"
+        },
+        "canonicalization": {
+          "const": "rolefox-canonical-digest-v1"
+        },
+        "digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "files": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/fileEntry"
+          }
+        }
+      }
+    },
+    "fileEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "bytes",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/repositoryPath"
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sha256": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "catalogRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "catalog_digest",
+        "authority_status"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/repositoryPath"
+        },
+        "catalog_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "authority_status": {
+          "$ref": "#/$defs/authorityStatus"
+        }
+      }
+    },
+    "protocolRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "protocol_digest",
+        "authority_status"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/repositoryPath"
+        },
+        "protocol_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "authority_status": {
+          "$ref": "#/$defs/authorityStatus"
+        }
+      }
+    },
+    "inventoryEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "bytes",
+        "sha256",
+        "authority_status",
+        "included_in_normative_set",
+        "status_source",
+        "approval_proof_digest"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/repositoryPath"
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sha256": {
+          "$ref": "#/$defs/digest"
+        },
+        "authority_status": {
+          "enum": [
+            "ACCEPTED",
+            "PROPOSED",
+            "DRAFT",
+            "INFORMATIONAL",
+            "DEPRECATED"
+          ]
+        },
+        "included_in_normative_set": {
+          "type": "boolean"
+        },
+        "status_source": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "approval_proof_digest": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/digest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "included_in_normative_set": {
+                "const": true
+              }
+            },
+            "required": [
+              "included_in_normative_set"
+            ]
+          },
+          "then": {
+            "properties": {
+              "authority_status": {
+                "const": "ACCEPTED"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "authority_status": {
+                "not": {
+                  "const": "ACCEPTED"
+                }
+              }
+            },
+            "required": [
+              "authority_status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "included_in_normative_set": {
+                "const": false
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

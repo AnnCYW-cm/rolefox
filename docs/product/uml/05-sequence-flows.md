@@ -2,7 +2,7 @@
 
 - 状态：Accepted Design Baseline
 - 上级索引：[UML 设计基线](README.md)
-- 原则：所有业务 mutation 与删除期 `credential_revocation` 都必须经过统一的计划、授权、durable intent、执行前复核、结果确认、审计和对账协议。Liveness heartbeat 与一次急停告警是唯一独立的安全信号协议，但仍必须使用固定不可变 Plan、窄化授权、durable Operation、AuditIntent、专用 Outbox、执行前绑定复核和三态对账，不能成为业务外发旁路。
+- 原则：任何真实外发 capability（包括首次 L2、liveness heartbeat、停止告警与删除期 `credential_revocation`）都必须先取得与当前执行绑定的 7 天 pre-L2 Shadow receipt，并经过统一的计划、评估、授权、durable intent、执行前复核、结果确认、审计和对账协议；Accepted Design Baseline 不包含外发旁路或 Shadow 例外。除复合约面使用具名 receipt-set 外，所有专用序列即使为可读性缩写字段清单，也规范性继承 `RF-UML-SEQ-OPR-01`：Plan/PolicyEvaluation/Auth/Operation 必须冻结同一 receipt ID/hash/coverage epoch，并在外部调用紧前与当前 binding 逐项复核。所有 campaign-governed progression kind 还必须继承 `BusinessCampaignExecutionBindingV01`：Plan/PolicyEvaluation/Auth/Operation 冻结同一 active Campaign ID/revision/takeover binding hash，并在授权和每次业务外呼前 CAS 复核。Application 来源 Campaign 已为 `LISTENING/ENDED/ARCHIVED` 且没有用户在当前唯一活跃 Campaign 下显式创建的有效 takeover 时，序列在落盘入站事实与 Exception 后终止，零业务 Plan/Auth/Operation/外呼；图中字段缩写不得省略该 guard。
 
 ## RF-UML-SEQ-ONB-01 初始化、连接和撤销
 
@@ -11,72 +11,187 @@ sequenceDiagram
     actor User as 候选人
     participant Web as Web Console
     participant Core as Core API
+    participant Supervisor as Local Supervisor
+    participant ControlStore as Independent Control Store
+    participant Storage as Workspace File Layer
     participant DB as Local Store
     participant Registry as Connector Registry
     participant OAuth as 外部授权服务
     participant Vault as 本地凭证域
 
-    User->>Web: 创建 Workspace
-    Web->>Core: locale、时区、币种和隐私选择
-    Core->>DB: 原子创建 Workspace 与 onboarding checkpoint
-    DB-->>Core: workspaceId
-    Core-->>Web: 下一步骤
-    loop 每个配置步骤
-        User->>Web: 保存事实、Campaign 或设置
-        Web->>Core: 带当前版本提交
-        Core->>DB: 校验 workspace 并持久化 checkpoint
-        Core-->>Web: 已保存，可中断恢复
+    %% @anchor WORKSPACE_INITIALIZATION_RECOVERY_GUARD
+    alt 首次创建 Workspace
+        User->>Web: 提交 locale、时区、币种和隐私选择
+        Web->>Core: initializeWorkspace(settings)
+        Core->>Supervisor: bootstrapPreflight(binary/config/key refs, requested storage target)
+        Supervisor->>Storage: immutable/read-only/no-create 检查目标路径所有权、既有 header/schema 与文件范围
+        Supervisor->>Vault: 只验证主密钥引用/namespace 可用性；不读取或创建业务凭证
+        alt 配置/密钥缺失、未来 schema、损坏、错密钥、所有权或既有 control envelope 无法验证
+            Supervisor->>ControlStore: 可证明从未 onboarding 时写 INITIALIZATION_BLOCKED；<br/>既有 DB 不可读或 lifecycle=ACTIVE/UNKNOWN 时写 RUNTIME_STORAGE_BLOCKED + faultEpoch<br/>两者均绑定随机 request/workspace surrogate、精确已知 scope 与 fence；不写业务 DB
+            Core-->>Web: 仅允许修复后重跑 bootstrap preflight，或确认永久删除本地已知 scope
+            break bootstrap preflight 失败；禁止创建 DB/WAL/ledger/checkpoint
+                Note over Supervisor,DB: 业务 DB 保持未创建或 immutable read-only；零业务 DB mutation
+            end
+        else 全新空目标且 bootstrap preflight 通过
+            Supervisor->>ControlStore: 原子创建最小 WorkspaceControlEnvelope<br/>随机 workspaceId、精确 storage/Vault namespace、fencing epoch；无 PII/secret
+            Core->>DB: 随后才单 TX 原子初始化 schema、Workspace=INITIALIZING、<br/>WorkspaceRecoveryRecord 与初始 checkpoint；业务 mutation gate=CLOSED
+            DB-->>Core: workspaceId + persisted recovery facts + checkpoint revision
+        else 发现既有/未完成目标且 control envelope 与只读完整性通过
+            Supervisor->>ControlStore: 加载并验证既有 WorkspaceControlEnvelope
+            Core->>DB: immutable/read-only/no-create 加载 WorkspaceRecoveryRecord 与最后 checkpoint
+            DB-->>Core: 持久恢复事实、checkpoint 或完整性错误
+        end
+    else 初始化或 onboarding 中断后恢复
+        User->>Web: 重新打开未完成 Workspace
+        Web->>Core: resumeOnboarding(workspaceId, observed checkpoint revision)
+        Core->>DB: 只读加载 WorkspaceRecoveryRecord 与最后已提交 checkpoint
+        DB-->>Core: 持久恢复事实、checkpoint 或完整性错误
+    else 运行期故障或重启恢复
+        Web->>Core: recoverWorkspace(workspaceId)
+        Core->>Supervisor: 先在 OOB control store 关闭 mutation admission 并提升 fence<br/>业务 DB 未通过只读完整性检查前零写入
+        Core->>DB: immutable/read-only/no-create 加载 WorkspaceRecoveryRecord、completion receipt 与 operation ledger
+        DB-->>Core: 原稳定状态、故障 epoch、checkpoint、receipt 与未终态 operation
     end
-    %% @anchor CONNECTOR_CONSENT
-    User->>Web: 连接一个 Connector
-    Web->>Registry: 读取签名 manifest、条款版本、权限、runtime 与数据处理声明
-    Registry-->>Web: read scopes、write scopes、credential storage location、runtime location<br/>revoke 方法/官方入口、disconnect impact、terms URL/version/reviewedAt
-    Web-->>User: 分项展示上述内容；若数据发送 Provider，再展示 purpose、region<br/>retention 与 training use 选择（training 默认拒绝）
-    User->>Web: 选择跳过，或明确提交 readAllowlist/writeAllowlist<br/>及逐 Provider purpose/region/retention/training choice
-    Note over User,Core: read/write 空 allowlist 分别恒为 deny，不解释成 all；未授予 capability 不得继承
-    alt 用户跳过/不同意，或 read/write allowlist 均为空
-        Web->>Core: consent declined/skipped
-        Core->>DB: capability 保持 MISSING/LOCAL_ONLY；零凭证、OAuth、账户或外部调用
-    else 至少一项 capability 被明确授予
-        Web->>Core: versioned consent receipt + exact allowlists + provider choices
-        alt OAuth2
-            Web->>Core: 创建 state、PKCE 与账户绑定
-            Core->>OAuth: 发起授权
-            OAuth-->>Core: callback code、state
-            Core->>Core: 校验 state、PKCE、redirect URI 与账户
-        else API key
-            Web->>Core: 通过一次性 secret channel 提交
-            Core->>Core: 校验格式、目标 host 与最小权限
-        else local session
-            Web->>Core: 创建短期配对 challenge
-            Core->>Core: 校验本机 Runner、设备和账户绑定
-        else 无凭证只读 Connector
-            Web->>Core: 确认数据来源与使用条款
+    Core->>DB: 只读 preflight：Workspace 所有权、record/checkpoint revision 与 inputHash<br/>受支持 schema、key 可解密性、migration ledger 完整性；此前 bootstrap 已禁止写前失败
+    DB-->>Core: immutable preflight result
+    alt 首次/未完成 onboarding 事实完整且没有有效 completion receipt
+        Core->>DB: CAS Workspace=ONBOARDING；保留已验证 checkpoint；业务 mutation gate 仍 CLOSED
+        Core-->>Web: 返回精确 nextStep；禁止重复导入、OAuth 或账户绑定
+    else 可证明从未完成 onboarding，且恢复事实缺失或无效
+        Core->>Supervisor: 关闭业务 DB handle；上报只读 preflight digest 与阻断原因
+        Supervisor->>ControlStore: 写 INITIALIZATION_BLOCKED + 当前 fencing epoch 与精确已知 scope<br/>业务 DB 保持 immutable read-only；不得合成 checkpoint/completion receipt
+        Core-->>Web: 仅允许修复后重跑只读 preflight，或确认永久删除
+    else 既有存储 future/corrupt/wrong-key/ledger 不可读，或 prior lifecycle 为 ACTIVE/UNKNOWN
+        Core->>Supervisor: 关闭业务 DB handle；写 RUNTIME_STORAGE_BLOCKED + 新 faultEpoch<br/>保存非权威 priorLifecycleHint、preflight digest、精确 scope 与 fencing；业务 DB 零写入
+        Core-->>Web: 仅允许修复后重跑 no-create preflight，或按 OOB journal 永久删除<br/>不得跳入首次 ONBOARDING 或直接恢复 ACTIVE
+    else WorkspaceRecoveryRecord 指向原稳定 ACTIVE 或已有 completion receipt
+        Core->>DB: preflight 通过后的首个 TX 导入任何 OOB faultEpoch 为 RUNTIME_FAULT/OPEN barrier<br/>Workspace=SAFE_READ_ONLY；保留人工控制覆盖层
+        Core->>DB: 只读复核 completion receipt、RuntimeHealth 与全部未终态 operation 对账
+        alt receipt 有效且依赖健康、对账完整
+            Core->>DB: CAS Workspace=ACTIVE；不得复活旧 Plan/Auth 或放宽控制覆盖层
+            Core-->>Web: 恢复只读事实后再按现行授权接受新命令
+        else receipt 缺失/失效但存在完整的已验证 onboarding checkpoint
+            Core->>DB: CAS Workspace=ONBOARDING；从精确 nextStep 继续；业务 mutation gate=CLOSED<br/>保留 RUNTIME_FAULT 的 faultEpoch 与 runtimeRecoveryBarrier=OPEN
+            Core-->>Web: 返回恢复步骤；不得从客户端状态推断或清除 runtime barrier
+        else 任一 runtime 恢复条件失败或仍有 operation 未收敛
+            Core->>DB: Workspace=SAFE_READ_ONLY；业务 mutation gate=CLOSED
+            Core-->>Web: 展示缺失项与只读对账状态；禁止自动恢复外发 authority
         end
-        alt 校验通过
-            Core->>Vault: 按声明位置保存可复用凭证或本机 credentialRef
-            Core->>Registry: probe 仅已授权 capability
-            Registry-->>Core: capability health
-            Core->>DB: 保存 consent receipt、allowlists、provider choices、credentialRef 与健康状态
-            Core-->>Web: 已连接或局部降级；writeAllowlist 为空时所有写能力关闭
-        else 任一绑定不匹配
-            Core->>DB: 清理临时授权状态并记录安全事件
-            Core-->>Web: 连接失败，零账户绑定
+    end
+    opt recovery guard 后 Workspace=ONBOARDING
+        loop 每个配置步骤
+            User->>Web: 保存事实、Campaign 或设置
+            Web->>Core: 带当前 checkpoint revision 与 inputHash 提交
+            Core->>DB: 校验 workspace 并 CAS 持久化 checkpoint 与 WorkspaceRecoveryRecord
+            Core-->>Web: 已保存，可中断恢复
         end
-        opt terms、official scope、purpose、region、retention 或 training policy 变化
-            Registry->>Core: compliance diff + 新版本证据
-            Core->>DB: 暂停受影响 capability；失效未外发 Plan/Auth
-            Core-->>User: 展示 diff 并要求重新同意；旧 consent 不自动延续
+        %% @anchor CONNECTOR_CONSENT
+        User->>Web: 连接一个 Connector
+        Web->>Registry: 读取签名 manifest、条款版本、权限、runtime 与数据处理声明
+        Registry-->>Web: read scopes、write scopes、credential storage location、runtime location<br/>revoke 方法/官方入口、disconnect impact、terms URL/version/reviewedAt
+        Web-->>User: 分项展示上述内容；若数据发送 Provider，再展示 purpose、region<br/>retention 与 training use 选择（training 默认拒绝）
+        User->>Web: 选择跳过，或明确提交 readAllowlist/writeAllowlist<br/>及逐 Provider purpose/region/retention/training choice
+        Note over User,Core: read/write 空 allowlist 分别恒为 deny，不解释成 all；未授予 capability 不得继承
+        alt 用户跳过/不同意，或 read/write allowlist 均为空
+            Web->>Core: consent declined/skipped
+            Core->>DB: capability 保持 MISSING/LOCAL_ONLY；零凭证、OAuth、账户或外部调用
+        else 至少一项 capability 被明确授予
+            Web->>Core: versioned consent receipt + exact allowlists + provider choices
+            break 真实外部账号缺少同 candidate/spec/catalog 的 G0 或 Gate C-pre 当前 PASS
+                Core->>DB: 只记录阻断原因；零 Runtime Binding、凭证、账户绑定和真实业务数据 probe
+                Core-->>Web: 返回缺失 Gate 与修复入口；不得以 onboarding 绕过发布因果链
+            end
+            opt 会读取真实业务数据的外部账号
+                Core->>DB: 在任何凭证接收前创建 content-addressed Runtime Binding INTENT<br/>冻结 Provider、requested scopes、redirect/target、candidate/spec/catalog 与 criteria；尚无 account/lineage
+            end
+            alt OAuth2
+                Web->>Core: 创建 state、PKCE 与账户绑定
+                Core->>OAuth: 发起授权
+                OAuth-->>Core: callback code、state
+                Core->>Core: 校验 state、PKCE、redirect URI 与账户
+            else API key
+                Web->>Core: 通过一次性 secret channel 提交
+                Core->>Core: 校验格式、目标 host 与最小权限
+            else local session
+                Web->>Core: 创建短期配对 challenge
+                Core->>Core: 校验本机 Runner、设备和账户绑定
+            else 无凭证只读 Connector
+                Web->>Core: 确认数据来源与使用条款
+            end
+            alt 校验通过
+                Core->>Vault: 按声明位置保存可复用凭证或本机 credentialRef
+                opt 会读取真实业务数据的外部账号
+                    Core->>DB: 在任何真实业务数据 read/probe 前创建引用 INTENT 的 FINALIZED Runtime Binding Manifest<br/>冻结去敏 account/binding/credential lineage、manifest/binding digest、criteria epoch 与 max permitted mode
+                end
+                Core->>Registry: probe 仅已授权 capability；真实账号只使用 FINALIZED manifest 指定的 binding
+                Registry-->>Core: capability health；若读取真实业务数据则生成 Gate C-read evidence，不创建 mutation Operation
+                Core->>DB: 保存 consent receipt、allowlists、provider choices、credentialRef、Runtime Binding refs 与健康状态
+                Core-->>Web: 已连接或局部降级；writeAllowlist 为空时所有写能力关闭
+            else 任一绑定不匹配
+                Core->>DB: 清理临时授权状态并记录安全事件
+                Core-->>Web: 连接失败，零账户绑定
+            end
+            opt terms、official scope、purpose、region、retention 或 training policy 变化
+                Registry->>Core: compliance diff + 新版本证据
+                Core->>DB: 暂停受影响 capability；失效未外发 Plan/Auth
+                Core-->>User: 展示 diff 并要求重新同意；旧 consent 不自动延续
+            end
+            opt 用户断开连接
+                User->>Web: 撤销 Connector
+                Web->>Core: revoke(connectorAccountId)
+                Core->>Vault: 立即删除本地凭证或使 credentialRef 不可用
+                Core->>DB: 失效未外发 Plan/授权；PREPARED 或 EXECUTING Operation 按外部三态收敛
+                Core-->>Web: 展示受影响能力、外部授权残留和 Provider 官方撤销入口
+            end
         end
-        opt 用户断开连接
-            User->>Web: 撤销 Connector
-            Web->>Core: revoke(connectorAccountId)
-            Core->>Vault: 立即删除本地凭证或使 credentialRef 不可用
-            Core->>DB: 失效未外发 Plan/授权；PREPARED 或 EXECUTING Operation 按外部三态收敛
-            Core-->>Web: 展示受影响能力、外部授权残留和 Provider 官方撤销入口
+        %% @anchor ONBOARDING_COMPLETION_RECEIPT
+        Core->>DB: 只读复核 final checkpoint、关键事实、历史申请声明<br/>唯一 Campaign、合成 Dry-run、引用 revision、业务 mutation gate<br/>以及是否存在 RUNTIME_FAULT 的 OPEN runtimeRecoveryBarrier
+        opt 存在 OPEN runtimeRecoveryBarrier
+            Core->>DB: 额外只读复核原 faultEpoch、RuntimeHealth、全部非终态 operation 已收敛<br/>旧 Plan/Auth 未复活且当前人工控制覆盖层未被放宽
+        end
+        DB-->>Core: completion candidate 或精确缺项
+        alt 首次 onboarding 全部完成、无 OPEN runtime barrier，且 expected revision 仍当前
+            Core->>DB: 单 TX 创建 immutable OnboardingCompletionReceipt<br/>Workspace=ACTIVE；更新 WorkspaceRecoveryRecord 与 final checkpoint
+            DB-->>Core: committed receipt id + workspace/recovery revisions
+            Core-->>Web: 首次配置完成；保持 DRY_RUN，真实外发仍为 0
+        else runtime re-onboarding 全部输入与 RuntimeHealth/operation/控制复核通过
+            Core->>DB: 单 TX 创建新的 immutable OnboardingCompletionReceipt<br/>runtimeRecoveryBarrier=SATISFIED、resolvedAt=now、Workspace=ACTIVE<br/>保持旧 Plan/Auth 失效与原人工控制覆盖层
+            DB-->>Core: committed new receipt + resolved faultEpoch + workspace revision
+            Core-->>Web: 恢复完成；只接受基于当前事实与新授权的新命令
+        else OPEN runtime barrier 的健康、对账或控制复核失败
+            Core->>DB: Workspace=SAFE_READ_ONLY；业务 mutation gate=CLOSED<br/>barrier 保持 OPEN，不创建 completion receipt
+            Core-->>Web: 展示阻断项与只读对账状态
+        else 任一缺项、版本变化或事务失败
+            Core->>DB: Workspace 保持 ONBOARDING；业务 mutation gate=CLOSED<br/>不创建或补写 completion receipt
+            Core-->>Web: 返回精确缺项或冲突；继续原 checkpoint
+        end
+    end
+    opt 用户从 INITIALIZATION_BLOCKED 确认永久删除
+        User->>Web: 再次确认不可恢复本地删除与外部授权残留风险
+        Web->>Supervisor: deleteBlockedWorkspace(control record, expected revision)
+        Supervisor->>ControlStore: 原子生成 deletionRequestId、固定 deadline 与新 fencing epoch<br/>journal=PENDING；冻结当前可验证的精确 storage/Vault/inventory scope
+        Supervisor->>Supervisor: 停止该 workspace 进程、任务与句柄；业务 mutation 永久保持 CLOSED
+        Supervisor->>Storage: 验证 control envelope 指定的文件/备份 scope；不解析、迁移或写业务 DB
+        Supervisor->>Vault: 只读枚举被 control envelope 精确限定且可验证的 credential namespace
+        alt inventory 可验证并含已知外部账户
+            Supervisor->>ControlStore: 每个目标记录 NOT_ATTEMPTED residual、官方手工撤权入口与 deadline<br/>无有效业务 ledger/Shadow receipt 时零自动撤权调用
+        else inventory 不存在、不可读或无法证明完整
+            Supervisor->>ControlStore: 记录 INVENTORY_UNREADABLE residual 与 Provider 手工检查指引<br/>不猜测账户、binding 或外部结果
+        end
+        Supervisor->>Storage: 关闭句柄后幂等删除精确 workspace 文件、临时物与受管备份
+        Supervisor->>Vault: 幂等删除精确 credential namespace；不触碰其他 workspace
+        Supervisor->>Storage: 验证精确 scope 内零文件/备份/活动进程
+        Supervisor->>Vault: 验证精确 namespace 内零 credential item
+        alt 任一精确本地 scope 未清空
+            Supervisor->>ControlStore: journal 保持 PENDING；隔离并安全重试
+        else 本地 scope 全部清空
+            Supervisor->>ControlStore: journal=LOCAL_DELETED_WITH_EXTERNAL_RESIDUALS<br/>仅保留不可反推个人的限时摘要；业务 DB 终态写入不是完成前提
+            Supervisor-->>Web: 本地删除完成；展示仍需手工检查/撤销的外部授权
         end
     end
 ```
+
+恢复决策只接受持久 `WorkspaceRecoveryRecord`、已提交 checkpoint、completion receipt，以及在 business DB 不可写窗口内由独立 Supervisor 生成的 OOB fault/fence；客户端页面、内存进度或缺失记录不能被补写成恢复事实。首次创建必须先由业务 DB 外的 Supervisor 完成 no-create bootstrap preflight；只有可证明从未完成 onboarding 的失败才进入 `INITIALIZATION_BLOCKED`。已知 ACTIVE 或生命周期未知且 DB future/corrupt/wrong-key/ledger 不可读时进入 `RUNTIME_STORAGE_BLOCKED`，绝不写未知业务 DB；修复并通过 preflight 后，第一笔安全事务先把 OOB fault epoch 导入 `RUNTIME_FAULT/OPEN` barrier 和 `SAFE_READ_ONLY`，再做完整运行期对账，不能直接进入 onboarding 或 ACTIVE。阻断状态下的永久删除只依赖已验证的 control envelope、文件层和 Vault namespace，无法证明外部撤权时记录残留并给出人工入口，不得猜测调用。即使缺失/失效 receipt 而进入 onboarding UI，原 runtime barrier 仍保持 OPEN；只有重建输入、RuntimeHealth、schema/key/ledger、所有非终态 operation 对账和人工控制覆盖层一起验证完成，并在同一事务关闭 barrier、签发新 receipt 后才可回到 `ACTIVE`。
 
 ## RF-UML-SEQ-IMPORT-01 历史申请接管、消歧与去重索引
 
@@ -200,10 +315,15 @@ sequenceDiagram
     AppConn-->>Worker: ActionDraft 不含授权权威
     Worker->>Core: createActionPlan(ActionDraft, context)
     Core->>Core: 重建 kind、workspace、connector、risk 和 hash
+    Core->>DB: 单 TX 读取并 CAS Application origin Campaign、当前唯一 CALIBRATING/ACTIVE Campaign 与显式 takeover；<br/>仅成功时构造 BusinessCampaignExecutionBindingV01，并保存冻结该 binding/hash 的不可变投递 Plan 与最小审计
+    break origin 已为 LISTENING/ENDED/ARCHIVED 且无当前有效 takeover，或无唯一活跃 Campaign
+        Core->>DB: 创建“需在当前 Campaign 显式接管”的 Exception；零投递 Plan/Auth/Operation/Outbox/Platform 调用
+    end
     %% @anchor PLAN_CREATED
-    Core->>DB: 保存不可变 Plan 与最小审计
-    Core->>Policy: evaluate(plan, current policy, usage)
-    alt Demo 或 Dry-run
+    DB-->>Core: planId + active Campaign ID/revision/takeover/businessCampaignBindingHash
+    Core->>Policy: evaluate(plan, current policy, usage, preL2ShadowReceipt,<br/>BusinessCampaignExecutionBindingV01)
+    Note over Core,Policy: 真实 L2/L3 都要求 receipt 精确绑定当前投递 capability 与 Connector/version/account/lineage<br/>缺失、过期或绑定变化只能 preview/deny 并回到零外发 Shadow；人工批准不可覆盖
+    alt Demo、Dry-run 或 pre-L2 Shadow
         Policy-->>Core: preview_only
         Core-->>User: 展示完整预览，零 outbound
     else deny
@@ -213,9 +333,9 @@ sequenceDiagram
         Policy-->>Core: require_approval
         Core-->>User: 目标、字段、附件、风险、证据和期限
         User->>Core: 批准当前 payload
-        Core->>DB: 重新读取 Plan、Policy、岗位、材料、账户和 Connector 绑定
+        Core->>DB: 重新读取 Plan、Policy、岗位、材料、账户、Connector 绑定<br/>与 active Campaign ID/revision/takeover/businessCampaignBindingHash
         alt 任一绑定或 payload 已变化
-            Core->>DB: 旧 Plan INVALIDATED；保存新不可变 Plan
+            Core->>DB: 单 TX 令旧 Plan INVALIDATED，并再次 CAS 当前 active Campaign ID/revision/takeover；<br/>仅仍有合法 authority 时保存绑定新 revision/hash 的不可变 Plan，否则只建需接管 Exception、零新 Plan
             Core-->>User: 展示新预览并重新请求授权
         else 与预览完全一致
             Core->>Core: 形成 human authorization candidate
@@ -226,21 +346,21 @@ sequenceDiagram
     end
     opt 存在仍有效的 authorization candidate
         %% @anchor AUTH_OPERATION_OUTBOX_COMMITTED
-        Core->>DB: TX guard 当前绑定 + Authorization + Operation QUEUED + Reservation + AuditIntent + OutboxJob
+        Core->>DB: TX guard 当前绑定 + active Campaign ID/revision/takeover + PolicyEvaluationRecord<br/>+ Authorization + Operation QUEUED + Reservation + AuditIntent + OutboxJob；Plan/Evaluation/Auth/Operation<br/>冻结同一投递 receipt ID/hash/coverage epoch 与 businessCampaignBindingHash
         DB-->>Core: committed(operationId)
         Outbox->>DB: claim OutboxJob
         Outbox->>Queue: publish(operationId)
         Outbox->>DB: mark dispatched
         Queue->>Worker: lease(operationId, fencingToken)
         %% @anchor EXECUTION_RECHECK
-        Worker->>Core: 执行前 CAS 复核 Plan/Auth、control、Policy/version、job/material revisions<br/>account、connector+version、payload/attachment hashes、Evidence、额度和 trusted expiry
+        Worker->>Core: 执行前 CAS 复核 Plan/Evaluation/Auth/Operation 的同一 receipt ID/hash/coverage epoch<br/>与当前投递 capability/connector/version/account/credential lineage/criteria 一致；再复核同一 active Campaign<br/>ID/revision/takeover/businessCampaignBindingHash、recovery barrier、control、Policy/version、job/material revisions、<br/>payload/attachment hashes、Evidence、额度和 trusted expiry
         alt deny、过期、撤权、急停、stale revision 或任一 binding/hash diff
             %% @anchor EXECUTION_RECHECK_DENY
-            Core->>DB: 请求前 Operation CANCELLED；按原因将 Plan INVALIDATED/EXPIRED/CANCELLED<br/>释放可释放 reservation/额度并追加审计
+            Core->>DB: 请求前 Operation CANCELLED；已进入 EXECUTING 的 Plan CANCELLED<br/>记录 INVALIDATED/EXPIRED/CONTROL_CLOSED 原因；释放 reservation/额度并追加审计
             Core-->>Worker: reject without authorizationToken
             Note over Worker,Platform: 零 Runner、AppConn 与 Platform 调用；后续只能创建新 Plan 并重新授权
         else 全部绑定当前且 policy 仍允许
-            Core-->>Worker: 绑定 operation/kind/account/connectorVersion/payloadHash/expiry 的一次性 authorizationToken
+            Core-->>Worker: 绑定 operation/kind/account/connectorVersion/payloadHash/expiry、<br/>active Campaign/revision/takeover/businessCampaignBindingHash 的一次性 authorizationToken
             Worker->>Runner: execute(plan, expected bindings, token)
             Runner->>Runner: 校验 kind、workspace、账号、hash、版本、期限、单次 token 和急停
             %% @anchor REQUIRED_FIELD_RECHECK
@@ -248,9 +368,9 @@ sequenceDiagram
             AppConn->>Platform: inspect current application form
             Platform-->>AppConn: current revision、required fields、job status、account identity
             AppConn-->>Runner: normalized form evidence
-            Runner->>Core: 逐字段复核 Evidence、AnswerPreauthorization 与预览绑定
-            alt 岗位、账户、表单或必填字段变化，或答案无证据/未预授权
-                Core->>DB: 当前 Authorization INVALIDATED；Operation 请求前 CANCELLED；释放 reservation
+            Runner->>Core: 逐字段 CAS 复核 Evidence、AnswerPreauthorization、预览绑定<br/>及当前 active Campaign/revision/takeover/businessCampaignBindingHash
+            alt 岗位、账户、Campaign/takeover、表单或必填字段变化，或答案无证据/未预授权
+                Core->>DB: 当前 Authorization INVALIDATED；Operation 请求前 CANCELLED<br/>已进入 EXECUTING 的 Plan CANCELLED；释放 reservation
                 Core->>DB: 以新表单创建新 Plan；敏感或未知字段转人工
                 Core-->>User: 展示差异并重新确认，零 submit
             else 与已授权 payload 完全一致且岗位仍有效
@@ -283,24 +403,28 @@ sequenceDiagram
     %% @anchor PLAN_CREATED
     Core->>DB: TX1 不可变 Plan + planning audit
     DB-->>Core: plan committed
-    Core->>Policy: evaluate(plan, current bindings, usage, control)
-    alt preview 或 deny
+    %% @anchor PRE_L2_SHADOW_AUTHORIZATION_GATE
+    Core->>Policy: evaluate(plan, current bindings, usage, control, preL2ShadowReceipt)
+    alt 业务外发的 Shadow receipt 缺失/过期，或 capability/Connector/version/account/lineage/criteria/ledger 不匹配
+        Policy-->>Core: deny(PRE_L2_SHADOW_REQUIRED)
+        Core->>DB: 保存 decision；零 Authorization、Operation、OutboxJob 与 Remote 调用<br/>该 capability 回到 PRE_L2_SHADOW
+    else preview 或其他 deny
         Policy-->>Core: preview_only or deny
         Core->>DB: 保存 decision；不创建 Operation 或 OutboxJob
     else 人工批准或策略允许
         Policy-->>Core: executable authorization candidate
         %% @anchor AUTH_OPERATION_OUTBOX_COMMITTED
-        Core->>DB: TX2 guard + Authorization + Operation QUEUED + 0..n Reservations + AuditIntent + OutboxJob
+        Core->>DB: TX2 guard + PolicyEvaluationRecord + Authorization + Operation QUEUED<br/>+ 0..n Reservations + AuditIntent + OutboxJob；Plan/Evaluation/Auth/Operation<br/>冻结同一 receipt ID/hash/coverage epoch
         DB-->>Core: committed(operationId)
         Outbox->>DB: claim undispatched job
         Outbox->>Queue: publish(operationId)
         Outbox->>DB: mark dispatched
         Queue->>Worker: lease + fencingToken
         Worker->>DB: CAS QUEUED to LEASED
-        Worker->>DB: CAS 复核 Plan/Auth、Policy/control、subject revision、account<br/>connector+version、payloadHash、expiry、reservations 与 fencing token
+        Worker->>DB: CAS 复核 Plan/Evaluation/Auth/Operation 的同一 receipt ID/hash/coverage epoch<br/>与当前 capability/connector/version/account/credential lineage/criteria 一致；再复核 Policy/control<br/>subject revision、payloadHash、expiry、reservations 与 fencing token
         alt 任一绑定无效、过期或撤权
             DB-->>Worker: not executable
-            Worker->>DB: Operation CANCELLED；Plan INVALIDATED/EXPIRED/CANCELLED<br/>释放可释放 reservation；零 Remote 调用
+            Worker->>DB: Operation CANCELLED；已进入 EXECUTING 的 Plan CANCELLED<br/>记录绑定/过期/撤权原因；释放 reservation；零 Remote 调用
         else 全部当前
             Worker->>DB: TX PREPARED + attempt + current bindings
             DB-->>Worker: committed
@@ -353,12 +477,12 @@ sequenceDiagram
             Core-->>Web: 展示具体变化并要求创建新 Plan；旧 Plan/Auth/token 不续期
         else 全部时间和绑定仍精确一致
             DB-->>Core: current
-            Core->>DB: TX Authorization + Operation + AuditIntent + OutboxJob
+            Core->>DB: TX PolicyEvaluationRecord + Authorization + Operation + AuditIntent + OutboxJob<br/>真实外发时 Plan/Evaluation/Auth/Operation 冻结同一 receipt ID/hash/coverage epoch
             Outbox->>Executor: dispatch 已提交 operation
             Executor->>Clock: 执行前读取可信当前时间
-            Executor->>DB: CAS 重验 strict time interval、Plan/Auth/token expiry 与全部绑定
+            Executor->>DB: CAS 重验 strict time interval、Plan/Evaluation/Auth/Operation/token expiry<br/>真实外发 receipt ID/hash/coverage epoch 等值、当前 binding 与全部其他绑定
             alt 到期、不可解析或先后非法
-                Executor->>DB: Operation CANCELLED；Plan/Auth 标记 EXPIRED/INVALIDATED<br/>零新 Operation/Outbox，零外部调用
+                Executor->>DB: Operation CANCELLED；已进入 EXECUTING 的 Plan CANCELLED<br/>Authorization 标记 EXPIRED/INVALIDATED；零新 Operation/Outbox，零外部调用
                 Note over Executor,Core: 后续动作只能来自全新 Plan + 新 Authorization；旧 expiresAt 永不延长
             else 仍位于全部授权区间内
                 DB-->>Executor: executable
@@ -431,7 +555,7 @@ sequenceDiagram
                 DB-->>WorkerB: resumable same operation
                 WorkerB->>DB: 继续同一 operationId/idempotencyKey 与原 expiresAt<br/>仅新增 attempt/fencing token；不得延长任何期限或新增额度
             else 原状态已 OUTCOME_UNKNOWN，或策略/载荷/绑定/期限任一失效
-                WorkerB->>DB: 收敛 FAILED_CONFIRMED/CANCELLED；Plan INVALIDATED/EXPIRED<br/>零普通 retry；需要动作时创建全新 Plan 并重新授权
+                WorkerB->>DB: 收敛 FAILED_CONFIRMED/CANCELLED；Plan 对应进入 FAILED/CANCELLED<br/>记录 INVALIDATED/EXPIRED 原因；零普通 retry；需要动作时创建全新 Plan 并重新授权
             end
         else 零、一或多候选无法唯一判断
             Remote-->>WorkerB: ambiguous
@@ -470,7 +594,7 @@ sequenceDiagram
         else 已证明零 outbound 且 Plan、授权、Policy、control、账户、期限仍精确有效
             Human->>DB: CAS requeue 同一 operationId 与 idempotencyKey<br/>不创建第二个业务意图、不新增 quota/slot reservation
         else 已证明零 outbound但任一绑定失效
-            Human->>DB: 原 operation CANCELLED/FAILED_CONFIRMED；旧 Plan 失效
+            Human->>DB: 原 operation 收敛 CANCELLED/FAILED_CONFIRMED<br/>旧 Plan 对应收敛 CANCELLED/FAILED，并记录 binding invalid 原因
             Note over Human,DB: 若仍需动作，必须离开 DLQ 流程另行显式规划和批准；不得由 requeue 自动新建 Plan
         end
     end
@@ -480,6 +604,8 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
+    participant P1 as Webhook/Poll Producer
+    participant P2 as Replay/Scheduler Producer
     participant Core
     participant DB as Authorization, Ledger and Locks
     participant Outbox
@@ -488,13 +614,29 @@ sequenceDiagram
     participant W2 as Worker 2
     participant Remote as External System
 
+    %% @anchor MULTI_PRODUCER_SOURCE_PLAN_ADMISSION_DEDUP
+    par 同一 source event / intent 由实时 producer 提交
+        P1->>Core: signed sourceEvent(connector, account, externalEventId, revision, contentHash)
+    and 同一 source event / ActionPlan intent 由补拉或 replay 并发提交
+        P2->>Core: same sourceEvent or canonical plan intent
+    end
+    Core->>Core: 验签并从认证上下文重建 workspaceId/account binding<br/>规范化 source dedupe key 与 plan intent key；不信任 producer 自报内部 ID
+    Core->>DB: 单 TX insert-on-conflict SourceEventInbox<br/>unique(workspace, connector, account, externalEventId, revision/contentHash)<br/>并按 unique(workspace, actionKind, subjectStableId, subjectRevision, canonicalPayloadHash) 准入 Plan
+    alt source event、Plan intent 或 operation 已存在
+        DB-->>Core: 返回 canonical sourceEventId/planId/operationId 与既有状态
+        Core-->>P1: duplicate/stale ACK；不新增 Plan/Auth/Operation/Outbox/额度
+        Core-->>P2: duplicate/stale ACK；不新增 Plan/Auth/Operation/Outbox/额度
+    else 新事件与新意图均通过准入
+        DB-->>Core: 唯一 canonical sourceEventId + planId；后续 operation 仍走同一事务准入
+    end
+
     %% @anchor DUPLICATE_AND_QUOTA_ATOMICITY
     %% @anchor ATOMIC_QUOTA_RESERVATION
     %% @anchor ATOMIC_SLOT_RESERVATION
     par 同一逻辑动作或同一配额桶的并发准入 A
-        Core->>DB: TX guard + dedupe + subject revision + quota + optional slot + Authorization + Operation + AuditIntent + OutboxJob
+        Core->>DB: TX guard + dedupe + subject revision + quota + optional slot + PolicyEvaluationRecord<br/>+ Authorization + Operation + AuditIntent + OutboxJob；真实外发四对象冻结同一 receipt 三元组
     and 同一逻辑动作或同一时段的并发准入 B
-        Core->>DB: TX guard + dedupe + subject revision + quota + optional slot + Authorization + Operation + AuditIntent + OutboxJob
+        Core->>DB: TX guard + dedupe + subject revision + quota + optional slot + PolicyEvaluationRecord<br/>+ Authorization + Operation + AuditIntent + OutboxJob；真实外发四对象冻结同一 receipt 三元组
     end
     alt 相同逻辑动作已存在
         DB-->>Core: 只返回 canonical operation；第二事务不重复计数、不创建 OutboxJob
@@ -570,36 +712,40 @@ sequenceDiagram
         Core->>Queue: 停止发现、评分和新投递；冻结未投递候选集
         Note over Core,Worker: 已有 Application 的只读监听、分类、对账和已授权沟通继续
     else STOP_OUTBOUND
-        Core->>DB: controlGate=STOP_OUTBOUND
+        Core->>DB: 单 TX 写 controlGate=STOP_OUTBOUND + 新 recoveryEpoch<br/>全部已登记外发 capability.recoveryRequired=true
         Core->>DB: 失效所有未开始的外发授权
         Core->>Queue: 停止全部新 mutation；读、审计和对账继续
     else KILL_SWITCH
-        Core->>DB: controlGate=KILLED + 提升 fencing epoch
+        Core->>DB: 单 TX 写 controlGate=KILL_SWITCH + 提升 fencing epoch + 新 recoveryEpoch<br/>全部已登记外发 capability.recoveryRequired=true
         Core->>DB: 失效所有未开始外发授权并冻结高风险调度器
         Core->>Queue: 最高优先级停止全部业务 mutation lease；读、审计和对账继续
         Core->>DB: 内部 Audit 与产品 Inbox 写入停止事实
         Core->>Safety: kill fencing epoch + 固定模板/targetHash；禁止任意正文或收件人
-        Safety->>DB: CAS 创建不可变 SafetySignalActionPlan + 窄化 Authorization<br/>SafetySignalOperation + AuditIntent + 专用 Outbox；key = workspace + killEpoch
-        alt 本 epoch 首次创建成功
+        Safety->>DB: 读取停止告警 capability 的当前 7 天 Shadow receipt<br/>核对 capability、watchdog binding、endpoint/account/credential lineage、criteria 与 coverage epoch
+        Safety->>DB: CAS 仅在 receipt 完整有效时创建不可变 SafetySignalActionPlan + PolicyEvaluationRecord<br/>窄化 Authorization + SafetySignalOperation + AuditIntent + 专用 Outbox；Plan/Evaluation/Auth/Operation 全部冻结<br/>同一 watchdogBinding ID/hash 与 receipt ID/hash/coverage epoch；key = workspace + killEpoch
+        alt receipt 缺失、失效或与当前绑定不一致
+            DB-->>Safety: fail closed
+            Safety->>DB: 只保留内部 Audit/产品 Inbox 停止事实；零 SafetySignal Plan/Auth/Operation/Outbox
+        else 本 epoch 首次创建成功
             DB-->>Safety: committed safety signal
             DB-->>SafetyOutbox: 专用 safety outbox job 可领取
             SafetyOutbox->>DB: claim(operationId, killEpoch, fencing token)
             SafetyOutbox->>SafetyQueue: enqueue(safetySignalOperationId)
             SafetyQueue->>SafetyExecutor: lease(safetySignalOperationId, fencing token)
-            SafetyExecutor->>DB: 复核 kind、固定 endpoint/收件人/模板、targetHash、epoch 与 token
+            SafetyExecutor->>DB: 复核 Plan/Evaluation/Auth/Operation 中同一 watchdogBinding ID/hash<br/>及 Shadow receipt ID/hash/coverage epoch；逐项核对当前 connector/version/manifest、endpoint、<br/>account/credential binding/lineage/criteria，再复核 kind、固定收件人/模板、targetHash、epoch、expiry 与 token
             alt 任一绑定失效、过期或不一致
-                SafetyExecutor->>DB: SafetySignalOperation CANCELLED + audit；零外部调用
+                SafetyExecutor->>DB: SafetySignalOperation=CANCELLED；已进入 EXECUTING 的 Plan=CANCELLED<br/>追加 audit；零外部调用
             else 绑定当前且完整
                 SafetyExecutor->>Alert: send fixed stop alert(idempotencyKey, preset recipient)
                 alt 明确接受或送达
                     Alert-->>SafetyExecutor: stable signal ID / delivery evidence
-                    SafetyExecutor->>DB: SafetySignalOperation SUCCEEDED + audit
+                    SafetyExecutor->>DB: SafetySignalOperation=SUCCEEDED；Plan=SUCCEEDED + audit
                 else 明确未发送
                     Alert-->>SafetyExecutor: confirmed no send
-                    SafetyExecutor->>DB: FAILED_CONFIRMED + audit；业务仍保持 KILLED
+                    SafetyExecutor->>DB: SafetySignalOperation=FAILED_CONFIRMED；Plan=FAILED + audit<br/>业务仍保持 KILL_SWITCH
                 else 结果未知
                     Alert-->>SafetyExecutor: timeout or ambiguous
-                    SafetyExecutor->>DB: OUTCOME_UNKNOWN；只按 signal ID 对账，不走普通通知重发
+                    SafetyExecutor->>DB: SafetySignalOperation=OUTCOME_UNKNOWN；Plan 保持 EXECUTING<br/>只按 signal ID 对账，不走普通通知重发
                 end
             end
         else 同一 workspace + killEpoch 已存在
@@ -629,10 +775,37 @@ sequenceDiagram
         User->>Web: 恢复
         Web->>Core: re-enable request
         alt 从 PAUSE_NEW 恢复
-            Core->>DB: 重新校验冻结候选与积压；按仍有效 capability 原模式恢复
-        else 从 STOP_OUTBOUND 或 KILL_SWITCH 恢复
-            Core->>DB: 先对账；旧 Plan/授权永久失效；用户逐 capability 创建新授权并先恢复 L2
-            Core->>DB: 健康检查与明确确认后，重新满足门槛的 capability 才可进入 L3
+            Core->>DB: 重新校验冻结候选与积压；未变化且仍有效的 capability 按原模式恢复<br/>binding/criteria 变化的外发 capability 回 PRE_L2_SHADOW；失效旧 Plan 不复活
+        else 从 KILL_SWITCH 恢复
+            Core->>DB: 完成事故检查与初步对账后，仅 CAS controlGate=KILL_SWITCH → STOP_OUTBOUND<br/>全部业务外发仍拒绝；旧 Plan/Auth 永久失效
+            Core->>DB: 逐 capability 比较 connector/version/account、credential lineage、<br/>Shadow criteria/coverage epoch 与原有效 receipt
+            alt binding/criteria 已变化或 receipt 缺失/失效
+                Core->>DB: 仅生成 SHADOW_ONLY 评估/coverage；连续 7 天零外发并取得新 receipt
+                Core->>DB: 用户基于新 receipt 创建新授权，首个 live 模式为 L2
+            else binding 与 receipt 仍精确有效
+                Core->>DB: 用户逐 capability 创建新授权并先恢复 L2
+            end
+            Core->>DB: 仅为通过当前 L2 guard 的 capability CAS 清除匹配 recoveryEpoch；<br/>可 CAS STOP_OUTBOUND → RUNNING，其他 recoveryRequired=true 的 capability 仍失败关闭
+            Core->>DB: 真实样本、健康检查与明确确认后，重新满足门槛的 capability 才可进入 L3
+        else 从 STOP_OUTBOUND 降为 PAUSE_NEW
+            Core->>DB: 先完成全部未终态 operation 对账并使旧 Plan/Auth 永久失效；<br/>单 TX CAS controlGate=STOP_OUTBOUND → PAUSE_NEW，保留全部 capability.recoveryEpoch/barrier
+            Core->>DB: 逐 capability 比较 connector/version/account、credential lineage、<br/>Shadow criteria/coverage epoch 与原有效 receipt
+            alt binding/criteria 已变化或 receipt 缺失/失效
+                Core->>DB: 该 capability 保持 recoveryRequired=true 并进入 PRE_L2_SHADOW；<br/>取得新 receipt 且用户发布新 L2 授权前不得执行已有申请外发
+            else binding 与 receipt 仍精确有效
+                Core->>DB: 用户为该 capability 创建新 L2 授权；只 CAS 清除匹配 recoveryEpoch
+            end
+            Core->>DB: PAUSE_NEW 持续禁止新发现/新投递；其他未清 barrier 的 capability 继续失败关闭
+        else 从 STOP_OUTBOUND 恢复为 RUNNING
+            Core->>DB: 先对账；旧 Plan/授权永久失效；逐 capability 比较 connector/version/account<br/>credential lineage、Shadow criteria/coverage epoch 与原有效 receipt
+            alt binding/criteria 已变化或 receipt 缺失/失效
+                Core->>DB: 进入新的 PRE_L2_SHADOW；连续 7 天零外发并取得新 receipt
+                Core->>DB: 用户基于新 receipt 创建新授权，首个 live 模式为 L2
+            else binding 与 receipt 仍精确有效
+                Core->>DB: 用户逐 capability 创建新授权并先恢复 L2
+            end
+            Core->>DB: 仅为通过当前 L2 guard 的 capability CAS 清除匹配 recoveryEpoch；<br/>可 CAS STOP_OUTBOUND → RUNNING，其他 recoveryRequired=true 的 capability 仍失败关闭
+            Core->>DB: 真实样本、健康检查与明确确认后，重新满足门槛的 capability 才可进入 L3
         end
         Core-->>Web: 展示恢复后的每项 capability 与未恢复原因
     end
@@ -702,6 +875,10 @@ sequenceDiagram
                 alt 无法唯一关联
                     Worker->>DB: CAS 当前 claim 创建关联 Exception
                 else 唯一关联
+                    Worker->>DB: 读取 Application origin Campaign、当前唯一 CALIBRATING/ACTIVE Campaign<br/>及显式 CampaignApplicationTakeoverRecord，构造 BusinessCampaignExecutionBindingV01
+                    break origin 已为 LISTENING/ENDED/ARCHIVED 且无当前有效 takeover，或无唯一活跃 Campaign
+                        Worker->>DB: 只落盘入站事实并创建“需在当前 Campaign 显式接管”的 Exception<br/>标记本轮处理完成；零 AI planner、Plan、Authorization、Operation、Outbox 与回复
+                    end
                     %% @anchor MESSAGE_CURRENT_REVISION_GATE
                     Worker->>DB: CAS 校验 canonicalRevision = thread.currentRevision<br/>且 claimToken/fencingEpoch 当前、无更新的 confirmed Message
                     alt 已出现更高 revision、claim 过期或乱序完成
@@ -726,34 +903,35 @@ sequenceDiagram
                             Core->>DB: CAS 整条消息进入 Exception
                         else 普通问题且答案有 Evidence 和预授权
                             Note over Core,Policy: AnswerPreauthorization 空集合表示全部禁止
-                            Core->>DB: CAS 保存绑定 canonicalMessageId/revision 的回复草稿与不可变 send_reply ActionPlan
-                            Core->>Policy: evaluate(plan)
+                            Core->>DB: 单 TX CAS canonicalMessageId/revision、claimToken 与当前 active Campaign ID/revision/takeover；<br/>仅成功时保存回复草稿及绑定 BusinessCampaignExecutionBindingV01/hash 的不可变 send_reply ActionPlan
+                            Note over Core,DB: 任一 CAS 失败只保留入站事实并创建需接管/重新规划 Exception；零 Plan/Auth/Operation/Outbox
+                            Core->>Policy: evaluate(plan, current reply binding, preL2ShadowReceipt,<br/>BusinessCampaignExecutionBindingV01)
                             alt deny
                                 Policy-->>Core: deny
                                 Core->>DB: CAS 记录拒绝；零 Authorization 与 outbound
                             else allow
                                 Policy-->>Core: policy authorization candidate
-                                Core->>DB: TX CAS thread.currentRevision + Plan/Policy/account/payload/expiry<br/>Authorization + Operation + Reservation + AuditIntent + OutboxJob
+                                Core->>DB: TX CAS thread.currentRevision + active Campaign ID/revision/takeover + Plan/Policy/account/payload/expiry<br/>PolicyEvaluationRecord + Authorization + Operation + Reservation + AuditIntent + OutboxJob<br/>Plan/Evaluation/Auth/Operation 冻结同一回复 receipt ID/hash/coverage epoch 与 businessCampaignBindingHash
                             else require approval
                                 Policy-->>Core: require approval
                                 Core-->>User: 展示完整收件人、thread、问题、答案、证据、payload hash 与期限
                                 User->>Core: 批准当前 canonicalRevision 与 hash
-                                Core->>DB: CAS 复核消息/thread revision、Plan、Policy、账户、答案和期限
+                                Core->>DB: CAS 复核消息/thread revision、Plan、Policy、账户、答案、期限<br/>及 active Campaign ID/revision/takeover/businessCampaignBindingHash
                                 alt 任一绑定变化
                                     DB-->>Core: reject stale approval
                                     Core->>DB: 旧 Plan INVALIDATED；新建预览，零 OutboxJob
                                 else 全部仍精确一致
                                     DB-->>Core: current
-                                    Core->>DB: TX Authorization + Operation + Reservation + AuditIntent + OutboxJob
+                                    Core->>DB: TX 再 guard active Campaign ID/revision/takeover + PolicyEvaluationRecord<br/>+ Authorization + Operation + Reservation + AuditIntent + OutboxJob；Plan/Evaluation/Auth/Operation<br/>冻结同一回复 receipt ID/hash/coverage epoch 与 businessCampaignBindingHash
                                 end
                             end
                             opt reply Operation 已 durable 提交
                                 Outbox->>Executor: dispatch(replyOperationId, canonicalRevision)
                                 %% @anchor MESSAGE_REPLY_REVISION_RECHECK
-                                Executor->>DB: 执行前 CAS 复核 thread.currentRevision、claim lineage<br/>Plan/Auth/Policy/account/connector+version/payload/expiry/control
+                                Executor->>DB: 执行前 CAS 复核 Plan/Evaluation/Auth/Operation 的同一 receipt ID/hash/coverage epoch<br/>与当前回复 capability/connector/version/account/credential lineage/criteria 一致；再复核同一<br/>active Campaign ID/revision/takeover/businessCampaignBindingHash、thread.currentRevision、claim lineage、Policy/payload/expiry/control
                                 alt 任一绑定变化或已有更新消息
                                     DB-->>Executor: stale / not executable
-                                    Executor->>DB: Operation CANCELLED、Plan INVALIDATED；零 Mail 调用
+                                    Executor->>DB: Operation CANCELLED、已进入 EXECUTING 的 Plan CANCELLED<br/>记录 INVALIDATED 原因；零 Mail 调用
                                 else 全部当前
                                     DB-->>Executor: executable
                                     Executor->>Mail: send reply with original idempotencyKey
@@ -782,7 +960,10 @@ sequenceDiagram
     participant Executor
     participant Reply as Reply Connector
 
-    Scheduler->>DB: 查询 followUp enabled、dueAt 与 sentCount
+    Scheduler->>DB: 查询 followUp enabled、dueAt、sentCount、Application origin Campaign、<br/>当前唯一 CALIBRATING/ACTIVE Campaign 与有效 takeover binding
+    break origin 已为 LISTENING/ENDED/ARCHIVED 且无当前有效 takeover，或无唯一活跃 Campaign
+        Scheduler->>DB: 只保留被动监听并创建“需显式接管”的 Exception<br/>零刷新、Plan、Authorization、Operation、Outbox 与跟进外呼
+    end
     alt 默认关闭或 sentCount 已为 1
         %% @anchor FOLLOWUP_ONCE
         DB-->>Scheduler: 自动跟进 no-op；Application 与 Thread 保持被动监听
@@ -794,34 +975,35 @@ sequenceDiagram
         alt 任一停止条件、bot/自动回复、模板回环或频率/次数达到上限
             Core->>DB: 记录 stopReason，不发送
         else 仍可跟进
-            Core->>DB: 保存不可变 follow_up ActionPlan
-            Core->>Policy: Evidence、预授权、限额与期限校验
-            alt deny 或 preview only
+            Core->>DB: 单 TX CAS 最新 thread、stop signals、sentCount=0 与当前 active Campaign ID/revision/takeover；<br/>仅成功时保存绑定 BusinessCampaignExecutionBindingV01/hash 的不可变 follow_up ActionPlan
+            Note over Core,DB: 任一 CAS 失败只保留被动监听/Exception；零 Plan/Auth/Operation/Outbox
+            Core->>Policy: Evidence、预授权、限额、期限、preL2ShadowReceipt<br/>与 BusinessCampaignExecutionBindingV01 校验
+            alt Shadow receipt 缺失/失效、deny 或 preview only
                 Policy-->>Core: deny or preview_only
-                Core->>DB: 记录决定；零 Authorization、Operation 与 outbound
+                Core->>DB: 记录决定；receipt 缺失/失效则回到 PRE_L2_SHADOW<br/>零 Authorization、Operation 与 outbound
             else require approval
                 Policy-->>Core: require_approval
                 Core-->>User: 展示 thread、收件人、完整 payload、证据、期限与本次唯一跟进计数
                 User->>Core: 批准当前 revision 与 payload hash
-                Core->>DB: CAS 复核最新 thread、回复/no-contact/岗位状态、Policy、期限与 sentCount=0
+                Core->>DB: CAS 复核最新 thread、回复/no-contact/岗位状态、Policy、期限、sentCount=0<br/>及 active Campaign ID/revision/takeover binding
                 alt 任一 stop signal、绑定变化或 sentCount 已使用
                     DB-->>Core: reject stale approval
                     Core->>DB: 旧 Plan INVALIDATED；零 OutboxJob
                 else 当前绑定仍完全一致
                     DB-->>Core: current
-                    Core->>DB: TX Authorization + followUpOp + Reservation + AuditIntent + OutboxJob
+                    Core->>DB: TX PolicyEvaluationRecord + Authorization + followUpOp + Reservation + AuditIntent + OutboxJob<br/>Plan/Evaluation/Auth/Operation 冻结同一跟进 receipt ID/hash/coverage epoch 与 businessCampaignBindingHash
                 end
             else allow
                 Policy-->>Core: policy authorization candidate
-                Core->>DB: TX guard 最新 thread、stop signal、payload、Policy、期限、sentCount + Authorization + followUpOp + Reservation + AuditIntent + OutboxJob
+                Core->>DB: TX guard 最新 thread、stop signal、payload、Policy、期限、sentCount<br/>+ active Campaign/takeover + PolicyEvaluationRecord + Authorization + followUpOp + Reservation + AuditIntent + OutboxJob<br/>Plan/Evaluation/Auth/Operation 冻结同一跟进 receipt ID/hash/coverage epoch 与 businessCampaignBindingHash
             end
             opt followUpOp 已原子提交
                 Outbox->>Executor: dispatch(followUpOp)
                 %% @anchor FOLLOWUP_EXECUTION_RECHECK
-                Executor->>DB: 外发前 CAS 复核 Plan/Auth、最新 thread revision、无新回复/拒绝/no-contact<br/>bot/模板/频率 signals、sentCount=0、Policy/control、account、connector+version、expiry 与 payloadHash
+                Executor->>DB: 外发前 CAS 复核 Plan/Evaluation/Auth/Operation 的同一 receipt ID/hash/coverage epoch<br/>与当前跟进 capability/connector/version/account/credential lineage/criteria 一致；再复核同一 active Campaign<br/>ID/revision/takeover/businessCampaignBindingHash、最新 thread revision、无新回复/拒绝/no-contact、<br/>bot/模板/频率 signals、sentCount=0、Policy/control、expiry 与 payloadHash
                 alt 任一 stop signal/绑定变化、到期、撤权、KILL 或上限已使用
                     DB-->>Executor: not executable
-                    Executor->>DB: followUpOp CANCELLED；Plan INVALIDATED/EXPIRED/CANCELLED<br/>释放 reservation；记录精确 stopReason
+                    Executor->>DB: followUpOp CANCELLED；已进入 EXECUTING 的 Plan CANCELLED<br/>释放 reservation；记录 INVALIDATED/EXPIRED/CONTROL_CLOSED 精确 stopReason
                     Note over Executor,Reply: 零 Reply 调用；仍被动监听
                 else 全部当前
                     DB-->>Executor: executable + fencing token
@@ -849,6 +1031,7 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
+    %% @anchor INTERVIEW_DUAL_CONNECTOR_GUARD_CHAIN
     participant Inbox as Inbox Connector
     participant Worker
     participant Core as Interview Coordinator
@@ -864,53 +1047,66 @@ sequenceDiagram
     Inbox->>Worker: 唯一关联的面试邀请原文
     Worker->>Core: 提取候选 slot、时区、时长和未解决问题
     Core->>Core: 只接受唯一 UTC instant + IANA timezone
-    Core->>Cal: checkAvailability(providerAccountId, readCalendarIds, exact slot)
-    Cal-->>Core: 同一账户 busy 并集、唯一 writeCalendarId、connector+version<br/>checkedAt snapshot + provider availabilityGuardToken/etag 能力
-    Core->>DB: CAS 创建短期 InterviewSlotReservation<br/>key=workspace + calendarAccount + slotHash；尚未创建外部 Operation
-    alt 本地 slot 已被另一排期占用
-        DB-->>Core: reservation conflict
-        Core->>DB: 创建冲突 Exception；保持 Interview PROPOSED；零 Plan/Operation/Outbox
-    else 取得带 expiry 的暂存 reservation
-        DB-->>Core: temporaryReservationId + expiry
+    Core->>DB: 读取 Application origin Campaign、当前唯一 CALIBRATING/ACTIVE Campaign<br/>与显式 takeover，构造 BusinessCampaignExecutionBindingV01
+    break origin 已为 LISTENING/ENDED/ARCHIVED 且无当前有效 takeover，或无唯一活跃 Campaign
+        Core->>DB: 只保存 Interview=PROPOSED 入站事实并创建“需显式接管”的 Exception<br/>零 availability query、Plan、Authorization、Operation、Outbox、Calendar/Reply 外呼
+    end
+    Core->>DB: CAS 复核 active Campaign ID/revision/takeover/businessCampaignBindingHash，<br/>并取得 Calendar 与 Reply 的 connectorId/version、accountId、credentialBindingId/lineage、<br/>manifestDigest、termsReviewVersion、grant revision及分别绑定两角色的有效 pre-L2 Shadow receipt
+    %% @anchor INTERVIEW_DUAL_CONNECTOR_PREFLIGHT
+    alt Campaign/takeover 已变化，或 Calendar/Reply 任一绑定/receipt 缺失、过期、撤权、变化，或不属于同一 Workspace/Plan candidate
+        DB-->>Core: dual-binding preflight rejected + exact diff
+        Core->>DB: 创建单问题 Exception；零 Plan/Authorization/Operation/Outbox
+        Note over Cal,Mail: 零 Calendar 查询/写入与 Reply 调用；不得 fallback 到默认账号、凭证或 Connector 版本
+    else 两组绑定与两份 receipt 完整且同时为当前版本
+        DB-->>Core: immutable canonicalBindingSetHash + canonicalShadowReceiptSetHash + expiry
+        Core->>Cal: checkAvailability(bound calendarAccountId/readCalendarIds/exact slot,<br/>expected calendar binding + canonicalBindingSetHash + canonicalShadowReceiptSetHash)
+        Cal-->>Core: 同一账户 busy 并集、唯一 writeCalendarId、connector+version<br/>checkedAt snapshot + provider availabilityGuardToken/etag 能力
+    Core->>DB: 单 TX CAS 当前 active Campaign ID/revision/takeover/businessCampaignBindingHash、<br/>availability snapshot/token 与 slot revision；仅成功时同时创建并相互绑定 InterviewScheduleReadiness、<br/>双 operation binding/Shadow receipt set 与冻结精确 slot snapshot 的不可变 ScheduleInterviewActionPlan
+    alt Campaign/takeover 已变化、snapshot/slot 已 stale，或当前已有正式 reservation 冲突
+        DB-->>Core: atomic schedule-plan preparation rejected + exact reason
+        Core->>DB: 创建刷新/冲突/需接管 Exception；保持 Interview PROPOSED；零 reservation/Plan/Operation/Outbox
+    else 原子取得带 expiry 的 readiness 与 Plan
+        DB-->>Core: readinessId + planId + expiry；尚无 InterviewSlotReservation<br/>Plan 冻结 BusinessCampaignExecutionBindingV01/hash 与精确 slot snapshot
         %% @anchor INTERVIEW_READINESS
-        Core->>Core: 创建 InterviewScheduleReadiness 与双 operation bindings
-        Core->>DB: 保存不可变 ScheduleInterviewActionPlan
-        Core->>Policy: evaluate(plan, readiness, control, current bindings)
-        Policy->>Policy: 校验 connector+version、账户、read/write calendars、授权版本<br/>窗口、新鲜度、问题、限额、风险及 provider conditional-create 能力
+        Core->>Policy: evaluate(plan, readiness, control, current bindings, ScheduleShadowReceiptSetV01,<br/>BusinessCampaignExecutionBindingV01)
+        %% @anchor CALENDAR_CAPABILITY_BUNDLE_L3_GATE
+        Policy->>Policy: 校验 query/reconcile、幂等 conditional create、update/cancel、stable external ID<br/>Calendar+Reply connector/version/account/credential/grant、read/write calendars、授权版本<br/>两角色 pre-L2 Shadow receipts 与 canonical receipt-set hash、窗口、新鲜度、问题、限额与风险
         %% @anchor INTERVIEW_CONDITIONAL_CREATE_CAPABILITY
-        alt Provider 无 conditional create/availability token 或无法保证 free-busy 到 create 的原子前提
-            Policy-->>Core: L3 禁止；自动 Calendar mutation 不安全
-            Core->>DB: Plan CANCELLED(reason=CONDITIONAL_CREATE_UNAVAILABLE)<br/>释放 reservation；零 Operation/Outbox
-            Core-->>User: 降为 L2 用户控制的 Provider UI 步骤或人工交接；重新确认前不外发
+        alt Calendar capability bundle 任一项缺失，或 Provider 无条件创建/availability token
+            Policy-->>Core: 该 Connector 的 L3 禁止；自动 Calendar mutation 与 unknown recovery 不安全
+            Core->>DB: Plan CANCELLED(reason=CALENDAR_CAPABILITY_BUNDLE_INCOMPLETE)<br/>暂停该 scheduling L3；零 Reservation/Operation/Outbox
+            Core-->>User: 降为 L2 用户控制的 Provider UI 步骤或人工交接<br/>不自动重试/删除；若有历史 unknown，仅展示候选 externalRefs 供人工裁决
         else deny、时间不唯一、问题未解决或 Connector 无法安全执行
             Policy-->>Core: deny with reason
-            Core->>DB: Plan DENIED + Exception；释放暂存 reservation<br/>保持 Interview=PROPOSED、Application=INTERVIEW_PROPOSED；零 Operation/Outbox
+            Core->>DB: Plan DENIED + Exception；保持 Interview=PROPOSED、Application=INTERVIEW_PROPOSED；<br/>零 Reservation/Operation/Outbox
         else L2 require approval 且 Connector 支持条件创建
             Policy-->>Core: require_approval
             Core-->>User: 展示精确时段/时区、写入与 busy 日历、回复正文<br/>两个外部动作、条件创建证据、风险、payload hash、期限和当前绑定
             User->>Core: approve current hash 或 reject
             alt 用户拒绝
-                Core->>DB: Plan DENIED；释放 reservation；零 Operation/Outbox
+                Core->>DB: Plan DENIED；零 Reservation/Operation/Outbox
             else 用户批准
-                Core->>DB: CAS 复核 Plan、slot、read/write calendars、calendar/reply accountIds<br/>calendar/reply connector+versions、Policy、control、expiry、payloadHash 与 conditional-create capability
+                Core->>DB: CAS 复核 Plan、slot、read/write calendars、Calendar/Reply 各自完整 binding<br/>canonicalBindingSetHash、两角色 Shadow receipts/canonicalShadowReceiptSetHash、active Campaign<br/>ID/revision/takeover/businessCampaignBindingHash、Policy、control、expiry、payloadHash 与 conditional-create capability
                 alt 任一绑定变化、过期或急停
                     DB-->>Core: stale approval rejected
-                    Core->>DB: Plan INVALIDATED；释放 reservation；创建单问题 Exception；零 Operation/Outbox
+                    Core->>DB: Plan INVALIDATED；创建单问题 Exception；零 Reservation/Operation/Outbox
                 else 全部仍一致且 L2 Connector 可安全执行
-                    Core->>DB: TX human ActionAuthorization + 确认/绑定暂存 slot + quotas<br/>calendarOp QUEUED + replyOp QUEUED + AuditIntent + Saga OutboxJob
+                    Core->>DB: TX 再 guard active Campaign ID/revision/takeover、slot snapshot/唯一约束<br/>+ human ScheduleInterviewAuthorizationV01 + 两组授权 binding/Shadow receipt set<br/>+ businessCampaignBindingHash + 新建初始 InterviewSlotReservation + quotas<br/>+ calendarOp/replyOp QUEUED + AuditIntent + Saga OutboxJob
                 end
             end
         else L3 且精确命中 SchedulePreauthorization、完整 Calendar L3 capability bundle
             Policy-->>Core: allow by current capability grant
-            Core->>DB: TX Authorization + 确认/绑定暂存 slot + quotas<br/>calendarOp QUEUED + replyOp QUEUED + AuditIntent + OutboxJob
+            Core->>DB: TX CAS 当前 active Campaign ID/revision/takeover、slot snapshot/唯一约束<br/>+ ScheduleInterviewAuthorizationV01 + 两组授权 binding/Shadow receipt set<br/>+ businessCampaignBindingHash + 新建初始 InterviewSlotReservation + quotas<br/>+ calendarOp/replyOp QUEUED + AuditIntent + OutboxJob
         end
+        Note over Core,DB: 任一授权 TX 的 Campaign/slot/唯一 reservation CAS 或任一写入失败时事务整体回滚；<br/>Plan INVALIDATED + 单问题 Exception，零 Reservation/Authorization/Operation/Outbox
         opt L2 或 L3 的 Saga 事务已原子提交
             DB-->>Core: committed(sagaId)
             Outbox->>DB: claim saga start
             Outbox->>Executor: dispatch(sagaId)
             %% @anchor INTERVIEW_CALENDAR_CHILD_RECHECK
-            Executor->>DB: calendarOp 外发前 CAS 复核 parent Plan/Authorization、calendarAccountId<br/>calendar connector+version、read/write calendars、control、expiry、payloadHash、slot reservation
-            alt 任一 calendar child binding 变化、过期、KILL 或 reservation 丢失
+            %% @anchor INTERVIEW_DUAL_CONNECTOR_EXECUTION_GUARD
+            Executor->>DB: 任一 Calendar 调用前 CAS 同时复核 parent Plan/Authorization 的 canonicalBindingSetHash<br/>与 canonicalShadowReceiptSetHash；Calendar+Reply connectorId/version/accountId、credentialBindingId/lineage<br/>manifestDigest/terms/grant revision、各自 receipt ID/hash、active Campaign ID/revision/takeover/<br/>businessCampaignBindingHash、read/write calendars、control、expiry、payloadHash、slot reservation
+            alt Calendar 或 Reply 任一绑定/receipt/set hash 变化、撤权、跨 Workspace、过期、KILL 或 reservation 丢失
                 DB-->>Executor: not executable
                 Executor->>DB: TX calendarOp CANCELLED + replyOp CANCELLED<br/>两子项终态后 parent ActionPlanRecord CANCELLED；释放 reservation/额度
                 Executor->>DB: 创建单问题 Exception，记录精确 reason/diff<br/>过期或窗口失效必须回到新 L2 Plan 的人工确认
@@ -921,7 +1117,7 @@ sequenceDiagram
                 Executor->>Cal: 最终 free-busy(readCalendarIds, exact slot, expected connector version)
                 alt fresh、free 且返回 provider availabilityGuardToken/etag
                     Cal-->>Executor: fresh snapshot + conditional-create token
-                    Executor->>DB: 创建前再次 CAS 复核全部 calendar child bindings<br/>以及 snapshot/token 新鲜度、payloadHash 与 fencing token
+                    Executor->>DB: 创建前再次 CAS 同时复核全部 Calendar+Reply bindings、canonicalBindingSetHash<br/>两角色 Shadow receipts/canonicalShadowReceiptSetHash、active Campaign ID/revision/takeover/<br/>businessCampaignBindingHash，以及 snapshot/token 新鲜度、payloadHash 与 fencing token
                     alt 二次复核失效
                         DB-->>Executor: stale
                         Executor->>DB: TX 两个 Operation CANCELLED；两子项终态后 parent Plan CANCELLED<br/>reason=STALE_BEFORE_CONDITIONAL_CREATE；释放 reservation/额度
@@ -934,8 +1130,8 @@ sequenceDiagram
                             Cal-->>Executor: calendar externalRef + committed provider revision
                             Executor->>DB: TX calendarOp SUCCEEDED + externalRef + evidence
                             %% @anchor INTERVIEW_REPLY_CHILD_RECHECK
-                            Executor->>DB: replyOp 外发前 CAS 复核同一 parent Plan/Authorization、replyAccountId<br/>calendarAccountId、calendarOp SUCCEEDED、connector+versions、read/write calendars<br/>control、expiry、payloadHash
-                            alt 任一 reply child binding 变化、过期或 KILL
+                            Executor->>DB: replyOp 外发前 CAS 同时复核 parent Plan/Authorization 的 canonicalBindingSetHash<br/>与 canonicalShadowReceiptSetHash；Calendar+Reply connectorId/version/accountId、credentialBindingId/lineage<br/>manifestDigest/terms/grant revision、各自 receipt ID/hash、active Campaign ID/revision/takeover/<br/>businessCampaignBindingHash、read/write calendars、calendarOp SUCCEEDED、control、expiry、payloadHash 与 fencing token
+                            alt Calendar 或 Reply 任一 binding/receipt/set hash 变化、过期、撤权、跨 Workspace 或 KILL
                                 DB-->>Executor: not executable
                                 Executor->>DB: replyOp CANCELLED；parent Plan 保持 EXECUTING<br/>进入 RF-UML-SEQ-INT-02 补偿，零 Mail 调用
                             else reply child bindings 当前
@@ -948,7 +1144,8 @@ sequenceDiagram
                                     %% @anchor INTERVIEW_PARENT_PLAN_CONVERGENCE
                                     Core->>DB: 读取 calendarOp/replyOp 两项 SUCCEEDED 终态事实<br/>TX parent Plan SUCCEEDED + Saga BOTH_SUCCEEDED + Interview SCHEDULED<br/>Application milestone INTERVIEW_SCHEDULED + notification intent
                                     DB-->>Notify: durable notification intent
-                                    Notify-->>User: 核心准备包：JD/来源、摘要、匹配理由、实际材料、沟通、联系人、时间地点链接、日历状态
+                                    Notify->>DB: 产品 Inbox 写完整核心准备包入口与审计关联
+                                    Notify-->>User: 默认 Email 仅发最小面试提醒 + 经认证本地视图链接；完整准备包不进邮件正文
                                 else Reply 明确失败
                                     Mail-->>Executor: confirmed no send
                                     Executor->>DB: replyOp FAILED_CONFIRMED；parent Plan 保持 EXECUTING<br/>进入 RF-UML-SEQ-INT-02 的强制取消补偿
@@ -986,7 +1183,10 @@ sequenceDiagram
             end
         end
     end
+    end
 ```
+
+`INTERVIEW_DUAL_CONNECTOR_GUARD_CHAIN` 覆盖三道不可省略的门：第一次 Calendar 查询前、Calendar mutation 前、Reply mutation 前。三道门都以同一 `canonicalBindingSetHash` 与 `canonicalShadowReceiptSetHash` 为父级事实，并逐项复核 Reply/Calendar 两个具名 child 的 connector/version/account、credential binding/lineage、manifest/terms/grant、payload 与各自 pre-L2 Shadow receipt。任一道失败都在对应外部调用前停止；第一次门失败必须保证 Calendar 与 Reply 两侧调用都为 0，Calendar 已成功后 Reply 门失败则只能进入有授权的取消补偿。
 
 ## RF-UML-SEQ-INT-02 约面部分成功、未知与补偿
 
@@ -1024,11 +1224,11 @@ sequenceDiagram
         Core->>DB: 先把 replyOp 收敛 CANCELLED，再 TX parent Plan FAILED<br/>Saga SAFE_TO_REPLAN；保持 Interview PROPOSED；释放 slot/额度
     else calendar SUCCEEDED 且 reply QUEUED、尚未派发
         %% @anchor INTERVIEW_RECOVERY_REPLY_RECHECK
-        Core->>Policy: execution-time recheck 原 parent Plan/Authorization、calendar/reply accountIds<br/>reply/calendar connector+versions、read/write calendars、control、expiry 与 payloadHash
+        Core->>Policy: execution-time recheck 原 parent Plan/Authorization 的 canonicalBindingSetHash<br/>与 canonicalShadowReceiptSetHash；Calendar+Reply connectorId/version/accountId、credentialBindingId/lineage<br/>manifestDigest/terms/grant revision、各自 receipt ID/hash、active Campaign ID/revision/takeover/<br/>businessCampaignBindingHash、read/write calendars、control、expiry 与 payloadHash
         alt 现有 replyOp 仍获准且全部绑定当前
             Policy-->>Core: executable
             Outbox->>Executor: dispatch(existing replyOp；不是重试或新 operation)
-            Executor->>DB: CAS 再验相同绑定、calendarOp SUCCEEDED 与 fencing token
+            Executor->>DB: CAS 再验两角色完整 binding/receipt、父 binding-set/receipt-set hash、<br/>active Campaign ID/revision/takeover/businessCampaignBindingHash、calendarOp SUCCEEDED、<br/>control/expiry/payloadHash 与 fencing token
             DB-->>Executor: executable
             Executor->>Mail: 发送招聘确认
             alt Reply 明确成功
@@ -1065,14 +1265,14 @@ sequenceDiagram
         end
         opt reply 明确失败、被当前控制取消或对账证明未发送
             Note over Core,DB: 原 calendarOp 永久保持 SUCCEEDED
-            Core->>DB: 创建新的 cancel_calendar_event ActionPlan，绑定 compensatesOperationId
-            Core->>Policy: 评估预先要求的补偿授权
+            Core->>DB: 创建新的 cancel_calendar_event ActionPlan，冻结 originalSagaId、parentSchedulePlanId/hash、<br/>originalScheduleAuthorizationId/hash、compensatesOperationId 与原 businessCampaignBindingHash<br/>上述 Campaign hash 仅作审计，不要求当前 active Campaign/takeover
+            Core->>Policy: 评估预先要求的补偿授权与父 ScheduleShadowReceiptSetV01 中的 Calendar receipt<br/>该 receipt 必须仍绑定当前 Calendar child，并已覆盖 create/cancel bundle
             alt 补偿授权当前、未过期且 KILL 未阻止执行
                 Policy-->>Core: executable
-                Core->>DB: TX 新 Authorization + compensationOp QUEUED + AuditIntent + OutboxJob
+                Core->>DB: TX 新 PolicyEvaluationRecord + Authorization + compensationOp QUEUED + AuditIntent + OutboxJob<br/>compensation Plan/Evaluation/Auth/Operation 逐层复制 originalSagaId、parent Schedule Plan/Auth ID+hash、<br/>compensatesOperationId、父 receipt-set 中 Calendar receipt ID/hash/coverage epoch<br/>及 originalBusinessCampaignBindingHash（auditOnly，不要求当前 Campaign/takeover）
                 Outbox->>Executor: dispatch(compensationOp)
                 %% @anchor INTERVIEW_COMPENSATION_CHILD_RECHECK
-                Executor->>DB: 补偿外发前 CAS 复核 compensation Plan/Auth、原 calendarOp/eventRef<br/>calendarAccountId、calendar connector+version、read/write calendars、control<br/>expiry、payloadHash 与 fencing token
+                Executor->>DB: 补偿外发前 CAS 复核 compensation Plan/Evaluation/Auth/Operation 的 originalSagaId、<br/>parent Schedule Plan/Auth ID+hash 与原 immutable ledger 精确一致；再复核 receipt ID/hash/coverage epoch<br/>与父 receipt-set 的 Calendar receipt 及当前 calendar binding 一致，以及原 calendarOp/eventRef、<br/>compensatesOperationId、原 businessCampaignBindingHash、calendarAccountId、connector+version、<br/>read/write calendars、control、expiry、payloadHash 与 fencing token；不以当前 Campaign/takeover 代替原补偿因果
                 alt 任一绑定变化、过期或 KILL
                     DB-->>Executor: not executable
                     Core->>DB: compensationOp CANCELLED + compensation Plan CANCELLED<br/>读取原 calendar/reply 终态后 parent schedule Plan FAILED<br/>Saga MANUAL_HANDOFF + SEV-1 Exception；零 Cal 调用
@@ -1191,7 +1391,7 @@ sequenceDiagram
             Core->>DB: 重读当前 Interview、事件、账户、etag、Policy 与 control
             Core->>Core: 构造新的不可变 ActionPlan 与 payload hash
             Core->>DB: 保存 Plan 与 planning audit
-            Core->>Policy: evaluate(plan, current bindings, user decision)
+            Core->>Policy: evaluate(plan, current bindings, user decision, preL2ShadowReceipt)
             alt deny
                 Policy-->>Core: deny
                 Core->>DB: 记录原因；零 Authorization 与 outbound
@@ -1204,19 +1404,19 @@ sequenceDiagram
                     DB-->>Core: reject stale approval
                     Core->>DB: 旧 Plan INVALIDATED；零 OutboxJob
                 else 全部仍一致
-                    Core->>DB: TX ActionAuthorization + Reservation + ExternalOperation + AuditIntent + OutboxJob
+                    Core->>DB: TX PolicyEvaluationRecord + ActionAuthorization + Reservation + ExternalOperation + AuditIntent + OutboxJob<br/>Plan/Evaluation/Auth/Operation 冻结同一当前 receipt ID/hash/coverage epoch
                 end
             else allow
                 Policy-->>Core: policy authorization candidate
-                Core->>DB: TX guard + ActionAuthorization + Reservation + ExternalOperation + AuditIntent + OutboxJob
+                Core->>DB: TX guard + PolicyEvaluationRecord + ActionAuthorization + Reservation + ExternalOperation<br/>+ AuditIntent + OutboxJob；Plan/Evaluation/Auth/Operation 冻结同一当前 receipt ID/hash/coverage epoch
             end
             opt 新 Operation 已原子提交
                 Outbox->>Executor: dispatch(operationId)
                 %% @anchor INTERVIEW_CHANGE_EXECUTION_RECHECK
-                Executor->>DB: 外发前 CAS 复核 Plan/Auth、Interview revision、account、connector+version<br/>etag/provider revision、Policy/control、expiry、payloadHash 与 operation fencing token
+                Executor->>DB: 外发前 CAS 复核 Plan/Evaluation/Auth/Operation 的同一 receipt ID/hash/coverage epoch<br/>与当前 capability/connector/version/account/credential lineage/criteria 一致；再复核 Interview revision<br/>etag/provider revision、Policy/control、expiry、payloadHash 与 operation fencing token
                 alt 任一绑定变化、过期、撤权或 KILL
                     DB-->>Executor: not executable
-                    Executor->>DB: Operation CANCELLED；Plan INVALIDATED/EXPIRED/CANCELLED<br/>释放 reservation；保存精确 diff，零 Connector mutation
+                    Executor->>DB: Operation CANCELLED；已进入 EXECUTING 的 Plan CANCELLED<br/>释放 reservation；保存 INVALIDATED/EXPIRED/CONTROL_CLOSED 精确 diff，零 Connector mutation
                 else 全部当前
                     DB-->>Executor: executable
                     Executor->>Connector: execute current Plan with original idempotency key and If-Match
@@ -1270,17 +1470,17 @@ sequenceDiagram
             Notify->>DB: TX 创建新的摘要 Notification PENDING + 成员引用<br/>原成员转 COMPLETE_INBOX_ONLY 并记录 aggregatedInto
             Notify->>DB: 摘要 Notification PENDING → INBOX_PERSISTED
             Notify->>DB: 创建不可变 notification_primary ActionPlan，绑定摘要 Notification
-            Notify->>Policy: evaluate(digest plan, accepted email grant, control, current recipient)
+            Notify->>Policy: evaluate(digest plan, accepted email grant, control, current recipient, notification preL2ShadowReceipt)
             alt grant 当前且允许
                 Policy-->>Notify: policy authorization candidate
-                Notify->>DB: TX ActionAuthorization + digest NotificationOperation QUEUED + AuditIntent + OutboxJob
+                Notify->>DB: TX PolicyEvaluationRecord + ActionAuthorization + digest NotificationOperation QUEUED<br/>+ AuditIntent + OutboxJob；Plan/Evaluation/Auth/Operation 冻结同一通知 receipt ID/hash/coverage epoch
                 Notify->>DB: 摘要 Notification SENDING
                 Outbox->>Executor: dispatch(digestOperationId)
                 %% @anchor NOTIFICATION_EXECUTION_RECHECK
-                Executor->>DB: 外发前 CAS 复核 digest Plan/Auth、Notification revision、severity<br/>channel account/recipient、connector+version、grant/control、expiry、payloadHash、budget 与 fencing token
+                Executor->>DB: 外发前 CAS 复核 digest Plan/Evaluation/Auth/Operation 的同一 receipt ID/hash/coverage epoch<br/>与当前通知 capability/connector/version/account/credential lineage/criteria 一致；再复核 Notification revision<br/>severity、recipient、grant/control、expiry、payloadHash、budget 与 fencing token
                 alt 任一绑定变化、过期、撤权、KILL 或预算已不可用
                     DB-->>Executor: not executable
-                    Executor->>DB: digest operation CANCELLED；Plan INVALIDATED/EXPIRED/CANCELLED<br/>摘要 Notification SENDING → UNDELIVERED，记录精确原因；零 Primary 调用
+                    Executor->>DB: digest operation CANCELLED；已进入 EXECUTING 的 Plan CANCELLED<br/>摘要 Notification SENDING → UNDELIVERED，记录 INVALIDATED/EXPIRED/CONTROL_CLOSED 原因；零 Primary 调用
                 else 全部当前
                     DB-->>Executor: executable
                     Executor->>Primary: send daily digest(original idempotencyKey)
@@ -1320,19 +1520,19 @@ sequenceDiagram
     else SEV-0/SEV-1
         Notify->>DB: 系统安全规则要求立即处理并绕过 quiet hours
         Notify->>DB: 创建不可变 notification_primary ActionPlan，绑定事件、渠道、收件人、payload hash 与期限
-        Notify->>Policy: evaluate(plan, accepted channel grant, control, severity)
+        Notify->>Policy: evaluate(plan, accepted channel grant, control, severity, notification preL2ShadowReceipt)
         alt deny、grant 失效或只允许 preview
             Policy-->>Notify: not executable
             Notify->>DB: 零 ExternalOperation；Notification COMPLETE_INBOX_ONLY 并记录原因
         else allow
             Policy-->>Notify: policy authorization candidate
-            Notify->>DB: TX ActionAuthorization + primary NotificationOperation QUEUED + AuditIntent + OutboxJob
+            Notify->>DB: TX PolicyEvaluationRecord + ActionAuthorization + primary NotificationOperation QUEUED<br/>+ AuditIntent + OutboxJob；Plan/Evaluation/Auth/Operation 冻结同一通知 receipt ID/hash/coverage epoch
             Notify->>DB: Notification SENDING
             Outbox->>Executor: dispatch(primaryOperationId)
-            Executor->>DB: 外发前 CAS 复核 primary Plan/Auth、Notification revision、severity<br/>channel account/recipient、connector+version、grant/control、expiry、payloadHash、budget 与 fencing token
+            Executor->>DB: 外发前 CAS 复核 primary Plan/Evaluation/Auth/Operation 的同一 receipt ID/hash/coverage epoch<br/>与当前通知 capability/connector/version/account/credential lineage/criteria 一致；再复核 Notification revision<br/>severity、recipient、grant/control、expiry、payloadHash、budget 与 fencing token
             alt 任一绑定变化、过期、撤权、KILL 或预算已不可用
                 DB-->>Executor: not executable
-                Executor->>DB: primary operation CANCELLED；Plan INVALIDATED/EXPIRED/CANCELLED<br/>Notification SENDING → UNDELIVERED，记录精确原因；零 Primary 调用
+                Executor->>DB: primary operation CANCELLED；已进入 EXECUTING 的 Plan CANCELLED<br/>Notification SENDING → UNDELIVERED，记录 INVALIDATED/EXPIRED/CONTROL_CLOSED 原因；零 Primary 调用
             else 全部当前
                 DB-->>Executor: executable
                 Executor->>Primary: send(notificationId, original idempotencyKey)
@@ -1370,19 +1570,19 @@ sequenceDiagram
         end
         opt SEV-0/SEV-1 且 Primary 已收敛为 UNDELIVERED，并已配置 v0.1 可选 Webhook 或 P1 必需备用渠道
             Notify->>DB: 创建独立 notification_fallback ActionPlan，绑定原通知与不同渠道
-            Notify->>Policy: evaluate(fallback plan, accepted fallback grant, control, severity)
+            Notify->>Policy: evaluate(fallback plan, accepted fallback grant, control, severity, fallback-channel preL2ShadowReceipt)
             alt deny、渠道未验证或无 grant
                 Policy-->>Notify: not executable
                 Notify->>DB: Notification INBOX_ESCALATED；零 fallback Operation
             else allow
                 Policy-->>Notify: policy authorization candidate
-                Notify->>DB: TX 新 ActionAuthorization + fallback NotificationOperation QUEUED + AuditIntent + OutboxJob
+                Notify->>DB: TX 新 PolicyEvaluationRecord + ActionAuthorization + fallback NotificationOperation QUEUED<br/>+ AuditIntent + OutboxJob；Plan/Evaluation/Auth/Operation 冻结 fallback receipt ID/hash/coverage epoch
                 Notify->>DB: Notification FALLBACK_DECISION → SECONDARY_SENDING
                 Outbox->>Executor: dispatch(fallbackOperationId)
-                Executor->>DB: 外发前 CAS 复核 fallback Plan/Auth、原 Notification/primary 失败事实<br/>不同 channel/account/recipient、connector+version、grant/control、expiry、payloadHash 与 fencing token
+                Executor->>DB: 外发前 CAS 复核 fallback Plan/Evaluation/Auth/Operation 的同一 receipt ID/hash/coverage epoch<br/>与当前 fallback capability/connector/version/account/credential lineage/criteria 一致；再复核原 Notification/primary<br/>失败事实、不同 channel/recipient、grant/control、expiry、payloadHash 与 fencing token
                 alt 任一绑定变化、过期、撤权或 KILL
                     DB-->>Executor: not executable
-                    Executor->>DB: fallback operation CANCELLED；fallback Plan INVALIDATED/EXPIRED/CANCELLED<br/>Notification INBOX_ESCALATED；零 Fallback 调用
+                    Executor->>DB: fallback operation CANCELLED；已进入 EXECUTING 的 fallback Plan CANCELLED<br/>记录 INVALIDATED/EXPIRED/CONTROL_CLOSED 原因；Notification INBOX_ESCALATED；零 Fallback 调用
                 else 全部当前
                     DB-->>Executor: executable
                     Executor->>Fallback: send(notificationId, original fallback idempotencyKey)
@@ -1537,6 +1737,7 @@ sequenceDiagram
     participant Core
     participant Worker
     participant Parser as Import、OCR and Parser Workers
+    participant Temp as Task-scoped Temp Store
     participant Policy
     participant Outbox
     participant Cleanup as Revocation-only Cleanup Executor
@@ -1577,31 +1778,93 @@ sequenceDiagram
         Core-->>Web: 返回脱敏报告；不得把已删除正文/标识符恢复为占位副本
     end
 
+    %% @anchor TEMP_ARTIFACT_FULL_TASK_LIFECYCLE
+    opt 任一简历、附件或图片的上传、解析、OCR、转换、embedding 或草稿任务
+        Core->>DB: 先 TX 创建 taskId + TempArtifact manifest<br/>workspaceId、artifactId/type、owner、encrypted path/keyRef、createdAt、cleanupDeadline
+        DB-->>Temp: 仅为该 manifest 开放 task-scoped encrypted staging
+        Core->>Parser: dispatch(taskId, workspaceId, manifest generation, fencing token)
+        Parser->>Temp: 每个 source/temp copy、OCR page、thumbnail、converted file<br/>partial output、embedding/cache 在写入前登记 artifactId；禁止未登记路径或共享目录
+        alt 任务成功且用户/流程明确采用部分输出
+            Parser->>DB: 单 TX 保存已采用的结构化结果；需要保留的原件复制为新的受管加密对象<br/>提交 adopted artifact IDs 与最终 fencing token
+            Parser->>Temp: 删除全部 source temp、OCR/page image、thumbnail、转换件<br/>partial output、embedding/cache、未采用草稿及 task key
+            Temp-->>DB: cleanup evidence + zero-readable-artifact assertion
+        else 用户取消、解析失败、超时、进程崩溃或 fencing 失效
+            Core->>Parser: fence/停止 task；任何迟到结果禁止 commit
+            Core->>Temp: 按 manifest 幂等删除该 task 的全部 artifact 与 task key；不依赖原 Parser 存活
+            Temp-->>DB: cleanup evidence；任务安全失败/取消
+        end
+        opt 重启发现未终态 task、过期 manifest 或 cleanup 未完成
+            Worker->>DB: claim cleanup-only lease；不得恢复原解析或外发
+            Worker->>Temp: 按 workspaceId+taskId+manifest generation 幂等清扫并验证零可读副本
+            alt 清扫验证失败
+                Worker->>DB: 保持 cleanup due + 数据维护 Exception；有界重试，禁止伪报完成
+            else 清扫验证通过
+                Worker->>DB: terminal cleanup receipt；删除 manifest 中的敏感 path/keyRef
+            end
+        end
+    end
+
     %% @anchor ONBOARDING_ABANDON_CLEANUP
     opt 用户放弃未完成的 onboarding
         User->>Web: 明确放弃并确认清理范围
         Web->>Core: abandonOnboarding(workspaceId, expected checkpoint)
+        %% @anchor ONBOARDING_ABANDON_DELETION_BINDING
+        Core->>DB: 首个 TX 创建 DeletionRequest genesis：不可复用 deletionRequestId、固定 drain/reconciliation deadline、<br/>finalExportStatus=NOT_REQUESTED、冻结 account/在途 scope；Workspace=DELETING、Kill Switch=ON、<br/>mutation gate=CLOSED、提升 fencing epoch；DeletionControl=INACTIVE
+        DB-->>Core: committed deletionRequestId + deadline
+        Note over Core,Cleanup: 崩溃只从同一 DeletionRequest current head 恢复；撤权控制面此时尚未开放
         Core->>Worker: 关闭该 Workspace task gate、提升 fencing epoch；取消未开始 background jobs
         Core->>Parser: 停止并 drain import/parser/OCR/embedding/background jobs
         Parser-->>Core: 已终止且临时文件句柄释放；在途结果禁止 commit
-        Core->>DB: Workspace=ABANDONING；删除 temp upload、OCR、parsed text<br/>embedding/cache 与尚未 adopted 的 draft/evidence
+        Core->>DB: CAS 断言零 active parser/task/业务 Plan/Auth/Operation/Outbox，<br/>冻结集合全部 SETTLED/RESIDUALIZED；提交 preDeleteDrainBarrier
+        Core->>DB: CAS 同一 deletionRequestId/deadline/frozen targets、drain barrier<br/>与 finalExportStatus=NOT_REQUESTED 后，DeletionControl=REVOCATION_ONLY
+        Core->>DB: 仅清理由已停止 parser 证明不被任何 ledger/binding 引用的临时产物；<br/>撤权完成前保留全部 target、receipt、Plan/Auth/Operation 与对账事实
         loop onboarding 期间已建立的每个 Connector account
-            Core->>Policy: 评估固定 account/official revoke endpoint、REVOCATION_ONLY、payloadHash 与期限
-            Policy-->>Core: exact revoke candidate；否则仅记录 residual 且零外部调用
-            Core->>DB: 仅对 candidate 以 TX 创建短期 Plan/Auth/Operation/Outbox
-            Outbox->>Cleanup: dispatch onboarding revocation
-            Cleanup->>DB: 外发前复核 abandon confirmation、account/credentialRef、connector+version<br/>payloadHash、original expiry、fencing 与 REVOCATION_ONLY
-            alt 官方 revoke 可用且全部绑定当前
-                Cleanup->>Connectors: official revoke(original idempotencyKey)
-                Connectors-->>Cleanup: revoked、confirmed failure 或 unknown
-                Cleanup->>DB: 限期按证据收敛 SUCCEEDED/FAILED_CONFIRMED/MANUAL_REVIEW<br/>unknown 仅只读对账，原 Auth/expiry 不延长且绝不盲重试
-            else 不支持、过期或绑定变化
-                Cleanup->>DB: 取消 revoke Operation；记录 provider official revoke URL 与 external residual
+            Core->>Policy: 只读识别该撤权 capability 的有效 7 天 Shadow receipt、固定 account targetHash<br/>officialRevokeEndpoint、connector conformance、REVOCATION_ONLY、schema/key/ledger 与原 deadline
+            alt Connector 明确不支持官方撤权
+                Policy-->>Core: UNSUPPORTED + reason
+                Core->>DB: 零 Plan/Auth/Operation/Outbox；写 residualType=UNSUPPORTED、externalOutcome=null<br/>绑定 deletionRequestId、targetHash、officialRevokeEndpoint、deadline、reason
+            else target、凭证或安全 preflight 不满足且未创建 Plan
+                Policy-->>Core: NOT_ATTEMPTED + reason
+                Core->>DB: 零 Plan/Auth/Operation/Outbox；写 residualType=NOT_ATTEMPTED、externalOutcome=null<br/>绑定 deletionRequestId、targetHash、officialRevokeEndpoint、deadline、reason
+            else 可构造精确撤权计划
+                Policy-->>Core: exact revoke candidate
+                Core->>DB: TX 创建绑定 deletionRequestId/targetHash/officialRevokeEndpoint/deadline<br/>及同一 Shadow receipt ID/hash/coverage epoch 的短期 Plan/PolicyEvaluationRecord/Auth/Operation<br/>AuditIntent/Outbox 与原始幂等键；任一 receipt 绑定字段无法冻结则整笔回滚
+                Outbox->>Cleanup: dispatch onboarding revocation
+                Cleanup->>DB: 外发前 CAS 复核 Plan/Evaluation/Auth/Operation 的同一 Shadow receipt ID/hash/coverage epoch<br/>及当前 capability、connector/version/account/credential lineage/criteria，再复核 deletionRequestId<br/>Workspace=DELETING、official endpoint/conformance、schema/key/ledger、payloadHash、expiry/deadline<br/>fencing 与 REVOCATION_ONLY
+                alt Connector 在调用前明确变为不支持
+                    Cleanup->>DB: Operation=CANCELLED；Plan=CANCELLED<br/>写 residualType=UNSUPPORTED、externalOutcome=null<br/>绑定 deletionRequestId、targetHash、officialRevokeEndpoint、deadline、reason；零 Connector 调用
+                else 其他绑定变化、过期或 preflight 失败且证明请求未发
+                    Cleanup->>DB: Operation=CANCELLED；已进入 EXECUTING 的 Plan=CANCELLED<br/>reason=INVALIDATED/EXPIRED/PREFLIGHT_FAILED；写 residualType=NOT_ATTEMPTED、externalOutcome=null<br/>绑定 deletionRequestId、targetHash、officialRevokeEndpoint、deadline、reason；零 Connector 调用
+                else 全部绑定当前
+                    Cleanup->>Connectors: official revoke(original idempotencyKey)
+                    Connectors-->>Cleanup: revoked、confirmed failure 或 unknown
+                    alt revoked
+                        Cleanup->>DB: Operation=SUCCEEDED；Plan=SUCCEEDED
+                    else confirmed failure
+                        Cleanup->>DB: Operation=FAILED_CONFIRMED；Plan=FAILED<br/>写 residualType=FAILED_CONFIRMED、externalOutcome=FAILED_CONFIRMED<br/>绑定 deletionRequestId、targetHash、officialRevokeEndpoint、deadline、reason
+                    else unknown
+                        Cleanup->>DB: Operation=OUTCOME_UNKNOWN → RECONCILING；Plan 保持 EXECUTING<br/>仅按原幂等键只读对账，Authorization/deadline 不延长且绝不盲重试
+                        alt 原 deadline 前唯一证实已撤销
+                            Cleanup->>DB: Operation=SUCCEEDED；Plan=SUCCEEDED
+                        else 原 deadline 前唯一证实未撤销
+                            Cleanup->>DB: Operation=FAILED_CONFIRMED；Plan=FAILED<br/>写 residualType=FAILED_CONFIRMED、externalOutcome=FAILED_CONFIRMED<br/>绑定 deletionRequestId、targetHash、officialRevokeEndpoint、deadline、reason
+                        else 原固定 deadline 到达仍 UNKNOWN
+                            Cleanup->>DB: 单 TX 写 residualType=UNKNOWN、externalOutcome=UNKNOWN、最后证据<br/>并绑定 deletionRequestId、targetHash、officialRevokeEndpoint、deadline、reason<br/>Operation=RESIDUAL_RECORDED；Plan=CLOSED_WITH_EXTERNAL_RESIDUAL；关闭 Outbox/lease
+                        end
+                    end
+                end
             end
         end
         Core->>Vault: 删除所有 onboarding credential/session/token 与临时 key
-        Core->>DB: 失效其余 Plan/Auth/Outbox/schedule；断言零 active task/token/authorization<br/>仅保留不可反推个人的清理结果与 external residual
-        Core-->>Web: 清理完成或逐账户官方撤销指引；本地 onboarding 数据已不可恢复
+        Core->>DB: 幂等清除 temp upload、OCR、parsed text、embedding/cache、未采用 draft/evidence<br/>及其他本地私有数据；失效其余 Plan/Auth/Outbox/schedule
+        Core->>DB: 断言零 active task/token/authorization/operation/outbox<br/>仅保留不可反推个人的清理结果与 external residual manifest
+        alt 存在 UNKNOWN、FAILED_CONFIRMED、UNSUPPORTED 或 NOT_ATTEMPTED residual
+            Core->>DB: Workspace=DELETED_WITH_EXTERNAL_RESIDUALS；DeletionControl=CLOSED
+            Core-->>Web: 本地 onboarding 数据已不可恢复；展示逐账户官方撤销入口与残留结果
+        else 无 external residual
+            Core->>DB: Workspace=DELETED；DeletionControl=CLOSED
+            Core-->>Web: 清理完成；本地 onboarding 数据已不可恢复
+        end
     end
 
     User->>Web: 请求导出或永久删除 Workspace
@@ -1615,50 +1878,103 @@ sequenceDiagram
         Core-->>Web: 加密导出 + 范围报告
     else 永久删除
         %% @anchor WORKSPACE_DELETE_COMPLETE
-        Core->>DB: 先设置 Workspace Kill Switch=ON、mutation gate=CLOSED<br/>提升 fencing epoch，禁止新 Plan/Auth/Operation/Outbox
+        Core->>DB: 用户确认后的首个 TX 生成不可复用 deletionRequestId、固定且不可延长的 drain/reconciliation deadline、<br/>finalExportRequested 与 preDeleteDrainId；Workspace=DELETING、Kill Switch=ON、mutation gate=CLOSED，<br/>提升 fencing epoch，冻结全部撤权目标和 PREPARED/EXECUTING/OUTCOME_UNKNOWN 集；DeletionControl=INACTIVE
+        Note over Core,DB: 任何后续崩溃均从同一 deletionRequestId/DELETING journal 恢复；不得出现只有 Kill/drain、没有 durable 删除身份的窗口
         Core->>Worker: 停止 background/scheduler 与业务 worker，取消未开始任务并 drain
         Core->>Parser: fence 并停止 parser/OCR/import jobs；在途结果禁止 commit
         Worker-->>Core: 未开始任务已停；仅真实不明的在途进入对账
         Parser-->>Core: parser/OCR/import 已停止且临时句柄释放
-        opt 用户在删除确认中选择最终导出
-            Core->>DB: 在 gate CLOSED 下创建最终一致性只读快照
-            DB-->>Core: export dataset + category/hash manifest
-            Core->>Core: 移除 token、cookie、密钥与可复用 session
-            Core-->>Web: 下载加密最终导出；导出完成/失败均不重开 mutation gate
+        loop 仅在固定 drain cutoff 前按原幂等键有界对账
+            Core->>Worker: reconcile frozen nonterminal operation；禁止创建新业务 Plan 或盲重试
+            Worker->>DB: 写入已证明的 success/confirmed failure/cancelled，或保持 unknown
         end
-        Core->>DB: Workspace=DELETING；删除控制面进入 REVOCATION_ONLY
+        alt 冻结集合全部达到可证明终态
+            Core->>DB: 单 TX 写 preDeleteDrainBarrier=SETTLED + result digest
+        else cutoff 到达仍有未知结果
+            Core->>DB: 单 TX 写 preDeleteDrainBarrier=RESIDUALIZED + 不可变 unknown inventory<br/>关闭其 Outbox/lease；后续只保留不可反推个人的最小结果摘要
+        end
+        opt finalExportRequested=true
+            loop 每次仅由用户显式发起的首次尝试或重试
+                Core->>DB: 仅在 preDeleteDrainBarrier 已提交后，于 gate CLOSED 下创建最终一致性只读快照
+                DB-->>Core: export dataset + category/hash manifest，或明确失败
+                alt 导出校验并交付成功
+                    Core->>Core: 移除 token、cookie、密钥与可复用 session
+                    Core->>DB: finalExportStatus=SUCCEEDED + evidence digest
+                    Core-->>Web: 下载加密最终导出；mutation gate 保持 CLOSED
+                else 导出失败
+                    Core->>DB: finalExportStatus=FAILED；DeletionRequest=EXPORT_BLOCKED
+                    Core-->>Web: 展示失败；只能重试或另行明确“放弃导出并继续删除”
+                end
+            end
+        end
+        alt finalExportStatus 为 NOT_REQUESTED 或 SUCCEEDED
+            DB-->>Core: 可以继续
+        else 用户已看到失败并另行明确放弃导出
+            Core->>DB: 只追加 finalExportStatus=WAIVED_AFTER_FAILURE + confirmation evidence
+        else finalExportStatus=PENDING/FAILED 且无 waiver
+            Core-->>Web: 保持 Workspace=DELETING、DeletionRequest=EXPORT_BLOCKED、gate CLOSED
+            break 最终导出前置未满足；不得进入撤权或本地清除
+                Note over Core,Cleanup: 后台任务不得替用户跳过最终导出
+            end
+        end
+        Core->>DB: CAS 同一 deletionRequestId、deadline、drain barrier、frozen targets，<br/>以及 finalExportStatus=NOT_REQUESTED/SUCCEEDED/WAIVED_AFTER_FAILURE；<br/>业务 mutation 仍 CLOSED，仅把删除控制面切换为 REVOCATION_ONLY
         Note over Core,Cleanup: 该窄门只接受本次删除绑定的 credential_revocation，任何业务 capability 都不能使用
         loop 每个仍有外部授权的 Connector account
+            Note over Core,DB: 冻结目标同时分配非敏感 connectorProviderId + provider 内 targetOrdinal；<br/>删除后只以“Provider · 账户序号”区分 residual，不保存/重建账号值
             %% @anchor CREDENTIAL_REVOCATION_PROTOCOL
-            Core->>DB: 创建 credential_revocation ActionPlan，绑定删除确认、账户与期限
-            Core->>Policy: 复核删除命令、固定目标账户、REVOCATION_ONLY 与 payload hash
-            alt deny、删除期限已过、控制面关闭或目标绑定不一致
-                Policy-->>Core: deny with reason
-                Core->>DB: 零 Authorization、Operation、Outbox；记录 residual authorization
-            else executable
-                Policy-->>Core: revocation safety authorization candidate
-                Core->>DB: TX Authorization + revocationOp + AuditIntent + OutboxJob
-                Outbox->>Cleanup: dispatch(revocationOp)
-                %% @anchor REVOCATION_EXECUTION_RECHECK
-                Cleanup->>DB: 外发前 CAS 复核删除确认、Workspace=DELETING/REVOCATION_ONLY<br/>Plan/Auth、account/credentialRef、connector+version、expiry、payloadHash 与 fencing token
-                alt 任一绑定变化、过期或删除控制面已关闭
-                    DB-->>Cleanup: not executable
-                    Cleanup->>DB: revocationOp CANCELLED；Plan INVALIDATED/EXPIRED/CANCELLED<br/>记录 external residual；零 Connector 调用
-                else 全部当前
-                    DB-->>Cleanup: executable
-                    Cleanup->>Connectors: revoke(account, original idempotencyKey)
-                    alt 明确撤销成功
-                        Connectors-->>Cleanup: confirmed revoked
-                        Cleanup->>DB: revocationOp SUCCEEDED + evidence；revocation Plan SUCCEEDED
-                    else 明确失败
-                        Connectors-->>Cleanup: confirmed failure
-                        Cleanup->>DB: revocationOp FAILED_CONFIRMED + residual report；Plan FAILED
-                    else 超时或结果未知
-                        Connectors-->>Cleanup: unknown
-                        Cleanup->>DB: revocationOp OUTCOME_UNKNOWN；Plan 保持 EXECUTING
-                        Cleanup->>DB: revocationOp OUTCOME_UNKNOWN → RECONCILING
-                        Cleanup->>Connectors: 限时只读 reconcile；禁止盲目重复 revoke
-                        Cleanup->>DB: 按证据收敛 SUCCEEDED/FAILED_CONFIRMED/MANUAL_REVIEW<br/>或记录 external residual
+            Core->>Policy: 只读识别该撤权 capability 的有效 7 天 Shadow receipt、固定 account targetHash<br/>officialRevokeEndpoint、connector conformance、schema/key/ledger、REVOCATION_ONLY 与原 deadline
+            alt Connector 明确不支持官方撤权
+                Policy-->>Core: UNSUPPORTED + reason
+                Core->>DB: 零 Plan/Auth/Operation/Outbox；写 residualType=UNSUPPORTED、externalOutcome=null<br/>绑定 deletionRequestId、targetHash、officialRevokeEndpoint、deadline、reason
+            else 目标、凭证或安全 preflight 不满足且未创建 Plan
+                Policy-->>Core: NOT_ATTEMPTED + reason
+                Core->>DB: 零 Plan/Auth/Operation/Outbox；写 residualType=NOT_ATTEMPTED、externalOutcome=null<br/>绑定 deletionRequestId、targetHash、officialRevokeEndpoint、deadline、reason
+            else 可构造精确撤权计划
+                Policy-->>Core: exact revoke candidate
+                Core->>DB: 创建 immutable credential_revocation Plan，绑定 deletionRequestId、删除确认<br/>targetHash、officialRevokeEndpoint、账户、payload hash、原 deadline<br/>及该 capability 的 Shadow receipt ID/hash/coverage epoch
+                Core->>Policy: 复核精确 Plan、固定目标账户、REVOCATION_ONLY、当前 conformance<br/>及 receipt 与 capability/connector/version/account/credential lineage/criteria 的当前绑定
+                alt Policy deny、删除期限已过或控制面关闭
+                    Policy-->>Core: deny with reason
+                    Core->>DB: Plan=DENIED/EXPIRED/INVALIDATED；零 Authorization/Operation/Outbox<br/>写 residualType=NOT_ATTEMPTED、externalOutcome=null 并绑定同一组字段与 reason
+                else executable
+                    Policy-->>Core: revocation authorization candidate
+                    Core->>DB: TX PolicyEvaluationRecord + Authorization + revocationOp + AuditIntent + OutboxJob<br/>全部复制同一 Shadow receipt ID/hash/coverage epoch；任一差异整笔回滚
+                    Outbox->>Cleanup: dispatch(revocationOp)
+                    %% @anchor REVOCATION_EXECUTION_RECHECK
+                    Cleanup->>DB: 外发前 CAS 复核 Plan/Evaluation/Auth/revocationOp 的同一 Shadow receipt ID/hash/coverage epoch<br/>及当前 capability/connector/version/account/credential lineage/criteria；再复核删除确认<br/>Workspace=DELETING/REVOCATION_ONLY、official endpoint/conformance、schema/key/ledger<br/>expiry、deadline、payloadHash 与 fencing token
+                    alt Connector 在调用前明确变为不支持
+                        DB-->>Cleanup: unsupported before send
+                        Cleanup->>DB: revocationOp=CANCELLED；Plan=CANCELLED<br/>写 residualType=UNSUPPORTED、externalOutcome=null 并绑定同一组字段与 reason；零 Connector 调用
+                    else 其他绑定变化、过期或控制面关闭且证明请求未发
+                        DB-->>Cleanup: not executable
+                        Cleanup->>DB: revocationOp=CANCELLED；已进入 EXECUTING 的 Plan=CANCELLED<br/>reason=INVALIDATED/EXPIRED/CONTROL_CLOSED；写 residualType=NOT_ATTEMPTED、externalOutcome=null<br/>并绑定同一组字段与 reason；零 Connector 调用
+                    else 全部当前
+                        DB-->>Cleanup: executable
+                        Cleanup->>Connectors: revoke(account, original idempotencyKey)
+                        alt 明确撤销成功
+                            Connectors-->>Cleanup: confirmed revoked
+                            Cleanup->>DB: revocationOp=SUCCEEDED + evidence；Plan=SUCCEEDED
+                        else 明确失败
+                            Connectors-->>Cleanup: confirmed failure
+                            Cleanup->>DB: revocationOp=FAILED_CONFIRMED；Plan=FAILED<br/>写 residualType=FAILED_CONFIRMED、externalOutcome=FAILED_CONFIRMED<br/>绑定 deletionRequestId、targetHash、officialRevokeEndpoint、deadline、reason
+                        else 超时或结果未知
+                            Connectors-->>Cleanup: unknown
+                            Cleanup->>DB: revocationOp=OUTCOME_UNKNOWN；Plan 保持 EXECUTING
+                            Cleanup->>DB: revocationOp OUTCOME_UNKNOWN → RECONCILING
+                            loop 仅在原 reconciliation deadline 前有界只读对账
+                                Cleanup->>Connectors: reconcile original idempotencyKey/fingerprint；禁止盲目重复 revoke
+                                Connectors-->>Cleanup: revoked、proven not revoked 或仍 unknown
+                            end
+                            alt 唯一证实已撤销
+                                Cleanup->>DB: revocationOp=SUCCEEDED + evidence；Plan=SUCCEEDED
+                            else 唯一证实未撤销
+                                Cleanup->>DB: revocationOp=FAILED_CONFIRMED；Plan=FAILED<br/>写 residualType=FAILED_CONFIRMED、externalOutcome=FAILED_CONFIRMED<br/>绑定 deletionRequestId、targetHash、officialRevokeEndpoint、deadline、reason
+                            else 到达原固定 deadline 仍无法唯一裁决
+                                %% @anchor DELETION_UNKNOWN_RESIDUAL_TERMINALIZATION
+                                Cleanup->>DB: 单 TX 写 residualType=UNKNOWN、externalOutcome=UNKNOWN、最后证据<br/>并绑定 deletionRequestId、targetHash、officialRevokeEndpoint、deadline、reason<br/>revocationOp=RESIDUAL_RECORDED；Plan=CLOSED_WITH_EXTERNAL_RESIDUAL；关闭 Outbox/lease
+                                Note over Cleanup,DB: 只有 deadline 到达仍 UNKNOWN 才使用这两个本地终态；绝不改写为成功、明确失败或未执行
+                            end
+                        end
                     end
                 end
             end
@@ -1675,7 +1991,7 @@ sequenceDiagram
             Core->>DB: 仅保留限时、不可反推个人的最小安全摘要
             alt 存在外部撤权残留
                 Core->>DB: Workspace DELETED_WITH_EXTERNAL_RESIDUALS
-                Core-->>Web: 本地数据已删；展示残留账户、证据与到期复查
+                Core-->>Web: 本地数据已删；按 Provider + 账户序号展示残留、证据与到期复查
             else 无外部残留
                 Core->>DB: Workspace DELETED
                 Core-->>Web: 删除完成及不可逆事实
@@ -1708,7 +2024,7 @@ sequenceDiagram
     %% @anchor WITHDRAW_NEW_ACTION_PLAN
     Core->>DB: 创建新的 withdraw_application ActionPlan
     Note over Core,DB: 不修改、删除或复用原 submit Plan 与 Operation
-    Core->>Policy: evaluate(withdraw plan, current account, control, policy)
+    Core->>Policy: evaluate(withdraw plan, current account, control, policy, withdrawal preL2ShadowReceipt)
     alt 平台不支持或没有可证明路径
         Policy-->>Core: manual handoff
         Core-->>Web: 生成操作指引或联系模板；Application 不假装已撤回
@@ -1716,13 +2032,13 @@ sequenceDiagram
         Policy-->>Core: require approval
         Core-->>User: 展示收件人、影响、不可逆性和载荷
         User->>Core: 批准当前 hash
-        Core->>DB: TX CAS Application/Plan/account/connector/Policy/payload/expiry<br/>Authorization + withdrawOp QUEUED + AuditIntent + OutboxJob
+        Core->>DB: TX CAS Application/Plan/account/connector/Policy/payload/expiry<br/>PolicyEvaluationRecord + Authorization + withdrawOp QUEUED + AuditIntent + OutboxJob<br/>Plan/Evaluation/Auth/Operation 冻结同一撤回 receipt ID/hash/coverage epoch
         Outbox->>Executor: dispatch(withdrawOp)
         %% @anchor WITHDRAW_EXECUTION_RECHECK
-        Executor->>DB: 外发前 CAS 复核 Plan/Auth、Application revision/status、account<br/>connector+version、Policy/control、expiry、payloadHash 与 fencing token
+        Executor->>DB: 外发前 CAS 复核 Plan/Evaluation/Auth/Operation 的同一 receipt ID/hash/coverage epoch<br/>与当前撤回 capability/connector/version/account/credential lineage/criteria 一致；再复核<br/>Application revision/status、Policy/control、expiry、payloadHash 与 fencing token
         alt 任一绑定变化、到期、撤权或 KILL
             DB-->>Executor: not executable
-            Executor->>DB: withdrawOp CANCELLED；Plan INVALIDATED/EXPIRED/CANCELLED<br/>记录原因；零 Connector 调用
+            Executor->>DB: withdrawOp CANCELLED；已进入 EXECUTING 的 Plan CANCELLED<br/>记录 INVALIDATED/EXPIRED/CONTROL_CLOSED 原因；零 Connector 调用
         else 全部当前
             DB-->>Executor: executable
             Executor->>Connector: executeWithdraw(original idempotencyKey)
@@ -1743,6 +2059,7 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
+    %% @anchor MIGRATION_CHECKSUM_ZERO_MUTATION
     actor Operator as 部署者
     participant API
     participant Queue
@@ -1752,6 +2069,26 @@ sequenceDiagram
     participant Backup
     participant Stage as Isolated Staging DB
     participant New as 新 Worker
+
+    Operator->>Migrator: 启动 binary / 请求 migration preflight
+    Migrator->>DB: 以 immutable/read-only/no-create 模式读取 schemaVersion、migration ledger<br/>live file/data hash；禁止 WAL、journal、PRAGMA 或 user_version 写入
+    DB-->>Migrator: read-only schema/ledger snapshot + before hash
+    Migrator->>Migrator: 把完整 migration bytes 装入只读、content-addressed execution package<br/>用 binary 内签名 manifest 校验 ID/顺序/source-target/checksum；校验已执行 ledger checksum
+    alt live schemaVersion 高于当前 binary 最大 readableSchemaVersion
+        break future-schema preflight 失败，序列在零写入处终止
+            %% @anchor FUTURE_SCHEMA_READ_ONLY_REJECTION
+            Migrator-->>Operator: 拒绝启动 API/Worker/Migrator 写路径；报告兼容 binary 与恢复指引
+            Note over Migrator,DB: DB 始终只读且未获取 mutation lease；文件/data hash 与 ledger 零变化<br/>禁止自动降级、改 schemaVersion、创建 migration run 或启动旧 Worker
+        end
+    else migration 文件缺失/乱序，或任一已执行/待执行 checksum 不匹配
+        break chain/checksum preflight 失败，序列在零写入处终止
+            Migrator-->>Operator: 拒绝启动读写服务并指出精确 migration ID、expected/actual checksum
+            Note over Migrator,DB: 校验发生在创建 run/step ledger 或任何 DB mutation 之前<br/>零 schema/data/ledger/WAL 变化；不得跳过、改写 ledger 或猜测修复
+        end
+    else schema 受支持且整个 migration chain/checksum 有效
+        Migrator-->>API: 签发只读 chainPreflightReceipt，绑定 observed initial DB hash、schemaVersion<br/>migration ledger revision/digest、manifest digest、executionPackageDigest 与 immutable package identity；该回执不授权写入
+    end
+    Note over API,Migrator: 下述 rolling/migration 路径必须持有当前 chainPreflightReceipt；拒绝分支在此终止
 
     %% @anchor ROLLING_PROTOCOL_COMPATIBILITY
     Operator->>API: 提交 rolling deployment 的 component/binary/protocol 版本集合
@@ -1776,10 +2113,69 @@ sequenceDiagram
     API->>Old: drain
     Old->>DB: 释放 lease 或把不明结果写入 OUTCOME_UNKNOWN
     API->>DB: 提升 fencing epoch
-    Operator->>Migrator: 执行 migration
-    Migrator->>DB: TX 创建 migration run ledger<br/>source/target schema、binary version、migration checksums、before data hash
+    API->>DB: 获取独占 migration write fence；阻断 API、Worker、Safety/cleanup<br/>与其他控制面的一切 DB 写入，保持 mutation gate CLOSED
+    Migrator->>DB: 在独占 fence 内以 immutable/read-only/no-create 模式重新读取<br/>当前 schema/ledger revision、完整 post-drain DB hash、gate revision 与 fencing epoch
+    DB-->>Migrator: postDrainBeforeHash + exact revisions/checksums + zero active write lease assertion
+    Migrator->>Migrator: 在 fence 内重跑完整只读 preflight：当前 schemaVersion 必须仍受支持且与 receipt 相容<br/>已执行 ledger revision/digest/checksum 必须与 receipt 一致；按冻结 bytes 重验全部 applied/pending chain<br/>的 ID、顺序、source-target、checksum、manifest 与 immutable package identity/executionPackageDigest
+    alt schema/ledger 与 receipt 不相容，任一 checksum/chain/package 校验失败，或仍有 active write lease
+        Migrator->>DB: 证明 postDrainBeforeHash 未被本次流程改变；发布 durable abort handoff<br/>释放/转交 migration fence、提升 fencing epoch；mutation gate 保持 CLOSED
+        Migrator-->>Operator: 拒绝 migration；以 abort handoff 启动原兼容版本
+        Operator->>Old: startup reconcile(abort handoff, new fencing token)
+        Old->>DB: 对账全部非终态 operation，并复核 schema/ledger/hash/health
+        alt 原兼容版本对账与健康检查全部通过
+            Old->>DB: 单 TX 消费 abort handoff、释放 startup lease 并重开 mutation gate
+        else 任一结果未知或不健康
+            Old->>DB: 保持 mutation gate CLOSED；转交隔离恢复流程
+        end
+        Note over Migrator,DB: 零 migration token/run/step、schema/data 写入；只允许可审计的控制面 handoff<br/>不得把异常 post-drain 状态签进 token；该 migration 路径在此终止
+    else fence 内完整 preflight 通过
+        Migrator->>Backup: 从同一独占 fence 下的只读一致性快照创建变更前加密安全备份<br/>绑定 postDrainBeforeHash、schemaVersion、ledger revision/digest、gate/fencing revisions<br/>executionPackageDigest 与独占 fence owner
+        Backup->>Backup: 校验 artifact checksum、AEAD、schema/ledger metadata<br/>并在隔离环境恢复后运行完整 invariants/hash 比对
+        alt 安全备份创建、校验或隔离恢复任一失败/不一致
+            break backup gate 失败，禁止落入 token/首写路径
+                Backup-->>Migrator: invalid or unprovable backup
+                Migrator->>DB: 在独占 fence 内证明 postDrainBeforeHash 未变；发布 durable abort handoff<br/>释放/转交 migration fence、提升 fencing epoch；mutation gate 保持 CLOSED
+                Migrator-->>Operator: 拒绝 migration；启动原兼容版本执行 startup reconcile
+                Operator->>Old: 以 abort handoff + 新 fencing token 启动原兼容版本
+                Old->>DB: 对账全部非终态 operation，并复核 schema/ledger/hash/health
+                alt 原兼容版本对账与健康检查全部通过
+                    Old->>DB: 单 TX 消费 abort handoff、释放 startup lease 并重开 mutation gate
+                else 任一结果未知或不健康
+                    Old->>DB: 保持 mutation gate CLOSED；转交隔离恢复流程
+                end
+                Note over Migrator,DB: 零 migration token/run/step、schema/data 写入；只有可审计的控制面 abort handoff
+            end
+        else 变更前安全备份可验证
+            Backup-->>Migrator: safetyBackupId + immutable artifact digest + restore receipt
+            Migrator->>Migrator: 签发单次 migrationStartToken，绑定 postDrainBeforeHash、schema/ledger/gate/fence revisions<br/>全部 ledger/chain checksums、executionPackageDigest、safetyBackupId/digest 与独占 migration fence owner
+        end
+    end
+    Operator->>Migrator: 使用 migrationStartToken 执行 migration
+    Migrator->>Migrator: 在任何 DB handle 切换为可写前原子消费 migrationStartToken<br/>再次哈希实际将执行的只读 bytes，并核对 immutable package identity/executionPackageDigest
+    alt token 已使用/过期，独占 fence 丢失，revision 变化<br/>或 package identity/任一实际 byte/hash 与 token 不同
+        break token/owner/bytes 失败，禁止创建 migration run 或进入 step loop
+            Migrator->>API: 进入统一 ABORT_BEFORE_FIRST_WRITE；报告失败原因与 observed fence owner
+            API->>DB: mutation gate 保持 CLOSED；核验当前独占 fence owner 与 postDrainBeforeHash
+            alt 原 Migrator 仍持有 fence且 DB hash 未变
+                API->>DB: 发布 durable abort handoff，释放/转交 fence并提升 fencing epoch
+            else fence 已丢失或 owner/hash 无法证明
+                API->>DB: 原 Migrator 禁止释放；由当前 owner 或隔离恢复流程取得 durable handoff<br/>提升 epoch 前绝不启动普通 writer
+            end
+            API-->>Operator: 仅在得到有效 abort/recovery handoff 后启动原兼容版本
+            Operator->>Old: startup reconcile(handoff, new fencing token)
+            Old->>DB: 对账全部非终态 operation，并复核 schema/ledger/hash/health
+            alt 对账、handoff 与健康检查全部通过
+                Old->>DB: 单 TX 消费 handoff、释放 startup lease并重开 mutation gate
+            else 任一结果未知或不健康
+                Old->>DB: 保持 mutation gate CLOSED；继续隔离恢复
+            end
+            Note over Migrator,DB: 零 migration run/step、schema/data 写入
+        end
+    else token、post-drain DB hash/revisions 与实际执行的 immutable bytes 完全相同
+        Migrator->>DB: 在同一独占 fence 下以首个写事务 CAS 复核 postDrainBeforeHash<br/>schema/ledger/gate/fencing revisions、fence owner 与 safetyBackupId/digest；随后才创建 migration run ledger<br/>source/target schema、binary version、executionPackageDigest、migration checksums、before data hash<br/>及已验证的变更前 safety backup ID/digest
+    end
     loop 每个 migration step
-        Migrator->>DB: 校验顺序/checksum/前置版本，TX 标记 step PREPARED
+        Migrator->>DB: 从已冻结 execution package 读取下一 step；复核顺序/前置版本<br/>TX 标记 step PREPARED（不得重新打开或读取可变 migration 文件）
         Migrator->>DB: 在原子事务应用 step；提交 step COMMITTED + after hash
         %% @anchor MIGRATION_RESTART_DETERMINISM
         opt 在 PREPARED、DDL 或 commit 边界崩溃后重启
@@ -1790,31 +2186,55 @@ sequenceDiagram
                 DB-->>Migrator: 数据库已原子回滚
                 Migrator->>DB: 以同一 migration ID/checksum 重跑该 step
             else 出现部分 DDL、ledger/checksum 缺失或状态无法证明
-                DB-->>Migrator: inconsistent
-                Migrator-->>API: 保持 mutation gate CLOSED；禁止猜测续跑或推进 schema version
-                Migrator-->>Operator: 要求从 last-known-good 备份恢复/人工修复
+                break restart 状态无法证明，转恢复且不继续后续 step/invariant
+                    DB-->>Migrator: inconsistent
+                    Migrator->>DB: run=FAILED；migrationState=RESTORE_REQUIRED；保持 fence/gate CLOSED
+                    Migrator-->>Operator: 从本次 token 绑定的已验证变更前 safety backup 恢复/人工修复
+                end
             end
         end
     end
     %% @anchor MIGRATION_DATA_PRESERVATION
     Migrator->>DB: 对 source 与 migrated snapshot 精确比较 row count、关系/外键、domain state<br/>canonical payload/content hash、externalRef、authorization/expiry 与 operation/idempotency 引用
-    Note over Migrator,DB: 任一缺失、扩大授权、状态漂移或 hash/ref 不一致即原子回滚/标记 FAILED<br/>保持 mutation gate CLOSED；不得推进 schema version 或启用新 Worker
-    Migrator->>DB: 全部 step 与上述 preservation invariant 通过后<br/>最终 TX 才推进 schema version 与 run SUCCEEDED
+    alt 任一缺失、扩大授权、状态漂移或 hash/ref 不一致
+        Migrator->>DB: run=FAILED；migrationState=RESTORE_REQUIRED；保持独占 fence 与 mutation gate CLOSED<br/>不得声称跨已提交 step 原子回滚，不得推进 schema version 或启用新 Worker
+        Migrator->>Backup: 读取本次 start token 绑定的 safetyBackupId/digest/restore receipt
+        Backup-->>Stage: 在隔离 staging 恢复变更前快照并验证 AEAD/checksum/schema/ledger/invariants
+        alt staging 恢复可验证且与 postDrainBeforeHash/receipt 精确一致
+            Stage-->>DB: 在原独占 fence 下原子替换为已验证变更前快照；复核 live hash/schema/ledger
+            Migrator->>API: 发布 durable recovery handoff，提升 fencing epoch；gate 继续 CLOSED
+            API-->>Operator: 以 handoff 启动原兼容版本完成 operation 对账与健康检查
+        else 恢复或一致性无法证明
+            Migrator-->>Operator: 保持 RESTORE_REQUIRED、fence/gate CLOSED；进入隔离人工恢复
+        end
+        break preservation failure 路径终止；不得落入 SUCCEEDED 或新 Worker
+            Note over Migrator,New: 已提交 step 只能由绑定安全备份恢复，不存在跨 step 的事务回滚
+        end
+    else preservation invariant 全部通过
+        Migrator->>DB: 记录 run=DATA_STEPS_VERIFIED + preservation digest；<br/>不得推进公开 schema version、标记 SUCCEEDED、释放 fence 或启动新 Worker
+    end
 
     %% @anchor BACKUP_SCHEMA_ATOMIC_COMPATIBILITY
     opt 本次升级或恢复输入为历史备份
         Migrator->>Backup: 只读校验 checksum、加密、schema version 与 migration lineage
         alt backup schema 高于当前 binary 支持版本
             Backup-->>Migrator: newer schema
-            Migrator-->>Operator: 拒绝；报告所需兼容版本
-            Note over Migrator,DB: 不打开/迁移/覆盖 live；live 文件与数据 hash 保持原样
+            Migrator->>DB: run=FAILED；migrationState=RESTORE_REQUIRED；保持 fence/gate CLOSED<br/>拒绝 promote 历史备份并报告所需兼容版本
+            Migrator-->>Operator: 从本次 token 绑定的 safety backup 进入隔离恢复；不得启动新 Worker
+            break newer backup schema 路径终止，不得进入 policy migration 或 SUCCEEDED
+                Note over Migrator,DB: 恢复后才可证明 live 回到 postDrainBeforeHash；不能把拒绝误写成 migration success
+            end
         else backup schema 较旧且位于受支持迁移矩阵
             Backup-->>Stage: 复制到隔离 staging；live 仍不变
             Migrator->>Stage: 按同一 ledger/checksum 逐步原子迁移并校验全部 invariant
             alt staging migration 与最终 hash 全部通过
-                Stage-->>DB: gate CLOSED 下原子文件替换/事务性 promote<br/>旧 live 保留为可回滚 last-known-good，直至 commit 成功
+                Stage-->>DB: 标记 HISTORICAL_BACKUP_STAGE_VERIFIED + staged digest；<br/>最终交接 TX 前不 promote、不释放 fence、不标记 SUCCEEDED
             else 任一步失败或版本不受支持
-                Migrator-->>Operator: 丢弃 staging candidate；live 不变且 gate 保持 CLOSED
+                Migrator->>DB: run=FAILED；migrationState=RESTORE_REQUIRED；保持 fence/gate CLOSED
+                Migrator-->>Operator: 丢弃 staging candidate；从 start-token safety backup 进入隔离恢复
+                break historical backup staging failure 路径终止，不得进入 policy migration 或 SUCCEEDED
+                    Note over Migrator,DB: 新 Worker 禁止启动；旧 live/安全备份的最终状态必须由 recovery handoff 证明
+                end
             end
         end
     end
@@ -1823,25 +2243,32 @@ sequenceDiagram
     Migrator->>DB: 读取旧 AutomationPolicy/config schema、原 effective policy 与显式 provenance
     Migrator->>Migrator: 确定性映射到 staged config；逐字段比较 action level/kind、account<br/>connector、recipient、time window、quota/limit 与 capability scope
     alt 字段不可确定映射、缺失，或新 effective policy 不是旧权限的子集/等集
-        Migrator->>DB: 禁用相关 automation/capability；失效未外发旧 Plan/Auth<br/>未知默认值取 deny/更窄值，绝不扩大等级、账号、时窗或限额
+        Migrator->>DB: 单 step TX 保存 versioned disabled policy + source mapping/diff hash，<br/>禁用相关 automation/capability；失效未外发旧 Plan/Auth；run=POLICY_STEP_COMMITTED<br/>未知默认值取 deny/更窄值，绝不扩大等级、账号、时窗或限额
         Migrator-->>Operator: 展示 config diff；要求显式重新配置/授权
     else 新 effective policy 是旧权限的子集或等集
-        Migrator->>DB: 保存 versioned effective policy + source mapping + diff hash
+        Migrator->>DB: 单 step TX 保存 versioned effective policy + source mapping + diff hash；<br/>run=POLICY_STEP_COMMITTED
     end
 
-    alt schema、数据、migration ledger 与 effective policy 完整
-        Migrator-->>Operator: success
+    alt 全部 data step、preservation、适用 historical-backup stage、policy step、schema 与 ledger 完整
+        Migrator->>DB: 独占 migration fence 内只读复核 source/target schema、全部 step/preservation/policy digest、<br/>适用 staged backup digest、fence owner/revision 与最终 invariant；普通 writer 仍不可进入
+        Migrator->>DB: 唯一最终 TX 推进公开 schema version、标记 run=SUCCEEDED，<br/>按适用路径 promote 已验证 staged file，释放/转交 migration fence、提升 fencing epoch，<br/>写入 handoff receipt；mutation gate 继续 CLOSED
+        Migrator-->>Operator: migration success；可启动兼容版本做恢复对账
         Operator->>New: 启动兼容版本
-        New->>DB: reconcile 非终态 operation
-        New->>DB: health、schema、connector compatibility 检查
+        New->>DB: 以 handoff receipt + 新 fencing token 取得 startup reconciliation lease
+        New->>DB: reconcile 全部非终态 operation
+        New->>DB: health、schema、ledger、effective policy、connector compatibility 检查
         alt Connector 权限、账户、payload 语义或授权绑定发生变化
-            DB-->>API: 失效受影响 Plan 与授权；要求重新授权
-        else 绑定仍兼容
-            DB-->>API: 重开 mutation gate；原有效 capability 可继续
+            New->>DB: 失效受影响且未外发的 Plan/授权；禁用对应 capability<br/>完成 unknown 对账，其他作用域保持最小权限
+            New->>DB: 同一 startup 完成 TX 释放 reconciliation lease 并重开 mutation gate<br/>仅未受影响 capability 可继续；受影响外发 capability 的旧 receipt 失效并进入新 PRE_L2_SHADOW
+            New->>DB: 连续 7 天零外发取得当前 binding 的新 receipt 后，用户才可创建首个 L2 授权<br/>L3 仍须重新满足真实样本、健康检查与显式确认门槛
+        else 绑定仍兼容且全部对账/健康检查通过
+            New->>DB: 同一 startup 完成 TX 释放 reconciliation lease 并重开 mutation gate<br/>原有效 capability 可继续
         end
     else 中断、future schema 或校验失败
-        Migrator-->>Operator: fail without overwriting last-known-good
-        API->>DB: mutation gate 保持关闭
+        Migrator->>DB: run=FAILED；migrationState=RESTORE_REQUIRED；mutation gate/fence 保持 CLOSED
+        Migrator-->>Operator: 从 start-token safety backup 隔离恢复；不得把部分 step 当作成功
+        API->>DB: 不推进公开 schema version、不生成 success handoff、不启动普通 writer/Worker
+        Note over API,DB: 独占 migration fence 只能按 durable owner/lease 规则转交给隔离恢复流程<br/>转交会提升 fencing epoch，绝不因超时直接开放 mutation gate
     end
 ```
 
@@ -1920,8 +2347,11 @@ sequenceDiagram
                     New-->>User: 仅显示字段级修复指引，不显示 secret
                 else execution preflight 通过
                     Secrets-->>New: scoped opaque ref
-                    New->>New: 创建新 Plan 与 Authorization，先恢复该 capability 到 L2
-                    New->>New: 健康检查和明确确认后，重新满足门槛的 capability 才能进入 L3
+                    New->>New: 建立新的 connector/account/credential binding 与 lineage<br/>使所有不匹配该绑定的旧 Shadow receipt 失效
+                    New->>New: 该外发 capability 进入 PRE_L2_SHADOW；零真实 Plan/Auth/Operation/outbound
+                    New->>New: 连续 7 天 coverage、绑定与零严重错误门通过后签发新 receipt
+                    New->>New: 用户基于新 receipt 创建新 Plan/Authorization，才恢复该 capability 到 L2
+                    New->>New: 再满足真实 L2/异常样本、健康检查和明确确认后才可进入 L3
                 end
             end
         end
@@ -1932,6 +2362,7 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
+    %% @anchor OSS_003_PLUGIN_TRUST_AND_RUNTIME_ENFORCEMENT
     actor Operator as 用户或维护者
     participant Registry
     participant Package as Extension Package
@@ -1941,6 +2372,9 @@ sequenceDiagram
     participant Gateway as AI Gateway
     participant AI as AI Provider
     participant Guard as AI Response Guard
+    participant RuntimeGuard as Connector Runtime Guard
+    participant Sandbox as Per-plugin × Workspace Sandbox
+    participant Target as Allowed External Target
 
     %% @anchor PLUGIN_PERMISSION_DIFF
     Operator->>Registry: 安装或升级扩展
@@ -1987,6 +2421,26 @@ sequenceDiagram
             end
         end
     end
+    opt 每一次 Connector/plugin 运行时调用（安装通过也不能跳过）
+        Core->>RuntimeGuard: typed request + workspaceId + operationId + action/subject revision<br/>pinned connector/version/package digest + account/credential binding + requested method/capability/targets
+        RuntimeGuard->>DB: 读取当前签名 manifest、conformance evidence、用户 grant<br/>officialScopes、精确 Plan/Auth/Operation binding 与 Workspace sandbox generation
+        RuntimeGuard->>RuntimeGuard: 计算 method/capability/target/file/secret/schema 的最小交集<br/>校验 package digest、版本、账户、credential lineage 与 workspace 全部相等
+        alt 未受信/被篡改、版本或 digest 漂移、未知 method/schema/result，或请求超出任一权限交集
+            %% @anchor PLUGIN_RUNTIME_PERMISSION_ENFORCEMENT
+            RuntimeGuard->>Sandbox: 在 syscall/HTTP/secret/file 边界前 deny + terminate/quarantine invocation
+            Note over Sandbox,Target: 零未授权网络、文件、secret、跨 Workspace 读取或外部 mutation；不得 fallback generic execute
+            RuntimeGuard->>DB: 追加去敏安全审计并暂停该 plugin capability<br/>当前 operation 仅在证明请求边界未跨越时 FAILED_CONFIRMED，否则 OUTCOME_UNKNOWN 待 Core 对账
+            RuntimeGuard-->>Core: invalid/quarantined；插件自报 workspace/internal IDs、risk/policy/auth/quota/success 全部丢弃
+            Core->>Core: 零由该越权结果产生的新 Plan/Authorization/Operation 或领域状态迁移
+        else 精确权限交集非空且全部运行时绑定当前
+            RuntimeGuard->>Sandbox: 启动绑定 plugin × workspace 的最小文件/网络/secret allowlist 与一次性调用 token
+            Sandbox->>Target: 仅发送 schema 允许的目标、method 与最小 payload
+            Target-->>Sandbox: typed result + actual target/account/externalRef
+            Sandbox-->>RuntimeGuard: result + syscall/egress evidence
+            RuntimeGuard->>RuntimeGuard: 再验响应 schema、actual target/account、externalRef 与调用 token
+            RuntimeGuard-->>Core: 仅返回经过净化的 typed result；Core 独立提交合法状态迁移
+        end
+    end
     opt TLS host、redirect URI、数据地域或 AI fallback Provider 变化
         Registry->>DB: 视为权限与信任边界变化；停止受影响 capability
         Registry-->>Operator: 展示 host、地域、预算、隐私与数据用途差异并重新同意
@@ -2018,6 +2472,8 @@ sequenceDiagram
         end
     end
 ```
+
+`OSS_003_PLUGIN_TRUST_AND_RUNTIME_ENFORCEMENT` 是安装、加载与每次运行的联合门：安装/升级先验证来源、签名、checksum、manifest、条款与 conformance，失败时不注册 live capability；加载和每次调用再验证精确 package digest、版本、Workspace、账号、credential lineage，以及 method/network/file/secret 权限交集，并在 syscall/HTTP/file/secret 边界前阻断越权。任何阶段都不能因为上一阶段曾通过而跳过当前验证，失败均为零未授权读取与零外部 mutation。
 
 安装或升级时，“兼容”不代表可以把旧 Plan 静默交给新实现：旧 Plan 绑定的精确版本只有在该版本仍以隔离方式可用、签名与 conformance 证据有效时才可继续；否则未外发 Plan/Authorization 失效，已开始的 Operation 只按证据取消或对账。平台条款、官方授权范围、runtime、capability、permission、账户范围、执行或 reconcile 语义任一改变，都暂停受影响 capability 并要求重新确认。
 
@@ -2114,6 +2570,7 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
+    %% @anchor RES_005_CRITICAL_DEPENDENCIES_FAIL_CLOSED
     participant Gate as Fail-closed Startup Gate
     participant Queue as Durable Queue Store
     participant Worker
@@ -2139,6 +2596,19 @@ sequenceDiagram
         Queue-->>Recovery: verified
         DB-->>Recovery: verified canonical ledger/index generation
         Recovery->>Gate: 仅允许带后续逐操作 guard 的 Worker claim
+        %% @anchor OPERATION_LEDGER_UNAVAILABLE_FAIL_CLOSED
+        Worker->>DB: 每次 claim/prepare 前以只读 challenge 验证 operation ledger 当前可达<br/>可原子 CAS、generation/checksum 与启动证明一致
+        alt operation ledger 不可达、只读、写入结果未知或完整性 generation 漂移
+            DB--xWorker: unavailable/unprovable
+            Worker->>Gate: 立即关闭全部依赖该 ledger 的 mutation claim/dispatch
+            Gate->>Queue: 不发新 lease；保留 durable job，不推断“尚未执行”
+            Worker->>Worker: 丢弃已取短期 secret handle；禁止明文缓存
+            Note over Worker,Remote: 零新 Plan/Auth/Operation/Outbox/Remote 调用；既有不明 operation 待 ledger 恢复后只读对账
+            Recovery->>Recovery: 用独立健康面记录故障；无法安全审计时不向损坏 ledger 伪写成功
+        else ledger 当前可达、可原子写且 generation/checksum 一致
+            DB-->>Worker: 短期 ledgerHealthToken，绑定 generation 与 claim deadline
+        end
+        Note over Worker,DB: 下述 prepare 事务必须 CAS 消费当前 ledgerHealthToken；失败分支不得进入
         %% @anchor RESOURCE_FAIL_CLOSED
         %% @anchor PREPARE_STORAGE_FAILURE
         %% @anchor DB_BACKPRESSURE
@@ -2186,6 +2656,8 @@ sequenceDiagram
     end
 ```
 
+`RES_005_CRITICAL_DEPENDENCIES_FAIL_CLOSED` 覆盖 scheduler 收到 mutation job 后的三项共同前置：operation ledger 必须当前可达、完整且可原子 CAS；Vault 必须能按精确绑定提供短期 secret handle；持久 Audit checkpoint 必须可写。三者任一不可用或结果不可证明，当前 job 都在 Remote 调用前失败关闭；不得把 secret 降级到明文缓存，不得凭损坏/缺失 ledger 推断“尚未执行”，也不得执行无法持久审计的动作。
+
 ## RF-UML-SEQ-OFF-01 Worker 或 Runner 离线后的补拉恢复
 
 ```mermaid
@@ -2206,18 +2678,23 @@ sequenceDiagram
 
     %% @anchor OFFLINE_CATCHUP
     Worker->>Safety: 在线时每 60 秒提交最小 health snapshot<br/>pseudonymous instance、sequence、hasPendingWork；无 PII
-    Safety->>DB: CAS 创建固定 SafetySignalActionPlan + 窄化授权<br/>heartbeat Operation + AuditIntent + 专用 Outbox；key = instance + heartbeat slot
-    DB-->>SafetyOutbox: committed heartbeat outbox
-    SafetyOutbox->>DB: claim 并复核 slot、binding 与 fencing token
-    SafetyOutbox->>SafetyQueue: enqueue(heartbeatOperationId)
-    SafetyQueue->>SafetyExecutor: lease(heartbeatOperationId, fencing token)
-    SafetyExecutor->>DB: 执行前复核固定 schema、endpoint、targetHash、expiry 与 kind
-    alt 绑定当前且完整
-        SafetyExecutor->>Watchdog: publish fixed heartbeat(idempotencyKey)
-        Watchdog-->>SafetyExecutor: accepted、confirmed failure 或 unknown + signal ID
-        SafetyExecutor->>DB: 按 SUCCEEDED/FAILED_CONFIRMED/OUTCOME_UNKNOWN 保存并审计；unknown 只对账
-    else 任一绑定失效或不一致
-        SafetyExecutor->>DB: heartbeat Operation CANCELLED；零 Watchdog 调用
+    Safety->>DB: 读取 heartbeat capability 的有效 7 天 Shadow receipt<br/>当前模式、Policy、固定 endpoint/targetHash、schema/key/ledger 与授权边界
+    alt receipt 与全部现行 guard 有效
+        Safety->>DB: CAS 创建固定 SafetySignalActionPlan + PolicyEvaluationRecord + 窄化授权<br/>heartbeat Operation + AuditIntent + 专用 Outbox；Plan/Evaluation/Auth/Operation 全部冻结<br/>同一 receipt ID/hash/coverage epoch；key = instance + heartbeat slot
+        DB-->>SafetyOutbox: committed heartbeat outbox
+        SafetyOutbox->>DB: claim 并复核 slot、binding 与 fencing token
+        SafetyOutbox->>SafetyQueue: enqueue(heartbeatOperationId)
+        SafetyQueue->>SafetyExecutor: lease(heartbeatOperationId, fencing token)
+        SafetyExecutor->>DB: 执行前复核 Plan/Evaluation/Auth/Operation 的同一 receipt ID/hash/coverage epoch<br/>及当前 capability/watchdog binding、固定 schema、endpoint/account/credential lineage/criteria<br/>targetHash、expiry、Policy、control 与 kind
+        alt 绑定当前且完整
+            SafetyExecutor->>Watchdog: publish fixed heartbeat(idempotencyKey)
+            Watchdog-->>SafetyExecutor: accepted、confirmed failure 或 unknown + signal ID
+            SafetyExecutor->>DB: 明确接受则 Operation/Plan=SUCCEEDED；明确未发则 Operation=FAILED_CONFIRMED/Plan=FAILED<br/>unknown 则 Operation=OUTCOME_UNKNOWN 且 Plan 保持 EXECUTING；全部审计，unknown 只对账
+        else 任一绑定失效或不一致
+            SafetyExecutor->>DB: heartbeat Operation=CANCELLED；已进入 EXECUTING 的 Plan=CANCELLED<br/>追加 audit；零 Watchdog 调用
+        end
+    else receipt 缺失/失效或任一 guard 不通过
+        Safety->>DB: 记录 suppress reason；零 Plan/Auth/Operation/Outbox 与零外部 heartbeat
     end
     par 本机仍可运行 Local Health Monitor
         Health->>Core: Worker 或 Runner 连续缺失两次心跳，达到 120 秒
@@ -2227,8 +2704,19 @@ sequenceDiagram
     and 独立 Watchdog 监控整机/Worker
         Watchdog->>Watchdog: 连续缺失两次标记 offline；独立计时
         opt 最后 heartbeat 表示有待处理任务，且离线超过 10 分钟
-            Watchdog->>Alert: 向预设收件人发送幂等离线告警
-            Alert-->>Watchdog: 记录 accepted/delivered/unknown 事实
+            Watchdog->>Watchdog: 复核停止告警 capability 的独立 7 天 Shadow receipt<br/>现行窄化授权、固定收件人、schema、expiry 与 durable ledger
+            alt receipt 与全部现行 guard 有效
+                Watchdog->>Watchdog: CAS immutable Plan/PolicyEvaluationRecord/Auth/Operation/AuditIntent/Outbox<br/>Plan/Evaluation/Auth/Operation 全部冻结同一 receipt ID/hash/coverage epoch；派发前再次复核<br/>四者等值、当前 capability/watchdog binding、endpoint/account/credential lineage/criteria 与幂等键
+                alt 创建后执行前任一 receipt/binding/guard 失效或不一致
+                    Watchdog->>Watchdog: Operation=CANCELLED；已进入 EXECUTING 的 Plan=CANCELLED<br/>追加 audit；零 Alert 调用
+                else 执行前复核仍全部当前
+                    Watchdog->>Alert: 向预设收件人发送幂等离线告警
+                    Alert-->>Watchdog: accepted、confirmed failure 或 unknown
+                    Watchdog->>Watchdog: accepted 时 Operation/Plan=SUCCEEDED；confirmed failure 时 Operation=FAILED_CONFIRMED/Plan=FAILED<br/>unknown 时 Operation=OUTCOME_UNKNOWN 且 Plan 保持 EXECUTING；unknown 只对账，不盲重发
+                end
+            else 缺少有效 receipt 或 guard 失败
+                Watchdog->>Watchdog: 创建前仅记录抑制原因；零 Plan/Evaluation/Auth/Operation/Outbox 与零外部告警
+            end
         end
     end
     opt Worker 或 Runner 恢复

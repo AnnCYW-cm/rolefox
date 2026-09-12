@@ -1,0 +1,59 @@
+{
+  "_template_notice": {
+    "status": "NOT_FROZEN",
+    "registerable": false,
+    "instructions": "Copy outside Git. Fill exactly 20 unique included_jobs for one pain-qualified participant, delete _template_notice and both underscore-prefixed entry templates, then freeze the file before replay. Compute dataset_digest as SHA-256 of the final immutable UTF-8 bytes and store the digest outside this file. Do not insert the digest into the hashed file or mutate the file after frozen_at."
+  },
+  "template_version": "pre-w1-job-dataset-freeze-v0.1",
+  "run_bindings": {
+    "run_id": null,
+    "research_protocol_digest": null,
+    "candidate_scope_manifest_id": null,
+    "candidate_scope_manifest_digest": null,
+    "ops_bundle_digest": null
+  },
+  "participant_surrogate": null,
+  "dataset_id": null,
+  "selection_policy_version": "pre-w1-recent-jobs-selection-v0.1",
+  "dedupe_policy_version": "pre-w1-job-dedupe-v0.1",
+  "source_window_started_at": null,
+  "source_window_ended_at": null,
+  "assembled_at": null,
+  "frozen_at": null,
+  "jobs_count": null,
+  "included_jobs": [],
+  "dedupe_exclusions": [],
+  "_included_job_entry_template": {
+    "sequence": null,
+    "job_surrogate": null,
+    "source_kind_code": null,
+    "canonical_url_hmac": null,
+    "external_id_hmac": null,
+    "content_sha256": null,
+    "source_artifact_id": null,
+    "source_artifact_sha256": null,
+    "controlled_store_locator_digest": null,
+    "first_seen_at": null,
+    "snapshot_captured_at": null,
+    "dedupe_key_hmac": null
+  },
+  "_dedupe_exclusion_entry_template": {
+    "candidate_job_surrogate": null,
+    "duplicate_of_job_surrogate": null,
+    "dedupe_basis": null,
+    "dedupe_key_hmac": null,
+    "excluded_at": null
+  },
+  "freeze_assertions": {
+    "participant_is_pain_qualified": null,
+    "exactly_20_unique_jobs": null,
+    "all_source_artifacts_hashed": null,
+    "all_locators_domain_separated_hmac": null,
+    "replay_not_started": null,
+    "immutable_after_frozen_at": true
+  },
+  "retention": {
+    "retention_class": "R3_DEIDENTIFIED_WORKING",
+    "delete_by": null
+  }
+}

@@ -1,0 +1,534 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:rolefox:schema:registry-checkpoint:v1",
+  "title": "RoleFox Registry Integrity Checkpoint v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "checkpoint_id",
+    "checkpoint_digest",
+    "sequence",
+    "created_at",
+    "previous",
+    "spec_manifest_digest",
+    "normative_set_digest",
+    "catalog_digest",
+    "research_protocol_digest",
+    "candidate_scope_manifest_digest",
+    "candidate_artifact_digest",
+    "verification_toolchain_digest",
+    "gate_registry_digest",
+    "gate_head_set_digest",
+    "evidence_manifest_set_digest",
+    "registry_digests",
+    "record_counts",
+    "gate_heads",
+    "evidence_manifest_refs",
+    "registry_root_digest",
+    "signature",
+    "external_anchor"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "rolefox.registry-checkpoint.v1"
+    },
+    "checkpoint_id": {
+      "type": "string",
+      "pattern": "^checkpoint_[0-9a-f]{64}$"
+    },
+    "checkpoint_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "sequence": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "previous": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/previousCheckpoint"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "spec_manifest_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "normative_set_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "catalog_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "research_protocol_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "candidate_scope_manifest_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "candidate_artifact_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "verification_toolchain_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "gate_registry_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "gate_head_set_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "evidence_manifest_set_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "registry_digests": {
+      "$ref": "#/$defs/registryDigests"
+    },
+    "record_counts": {
+      "$ref": "#/$defs/recordCounts"
+    },
+    "gate_heads": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/gateHead"
+      }
+    },
+    "evidence_manifest_refs": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/evidenceRef"
+      }
+    },
+    "registry_root_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "signature": {
+      "$ref": "#/$defs/signature"
+    },
+    "external_anchor": {
+      "$ref": "#/$defs/externalAnchor"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "sequence": {
+            "const": 1
+          }
+        },
+        "required": [
+          "sequence"
+        ]
+      },
+      "then": {
+        "properties": {
+          "previous": {
+            "type": "null"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "previous": {
+            "$ref": "#/$defs/previousCheckpoint"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "signature": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "const": "VERIFIED_TRUSTED_SIGNER"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          }
+        },
+        "required": [
+          "signature"
+        ]
+      },
+      "then": {
+        "properties": {
+          "signature": {
+            "$ref": "#/$defs/verifiedSignature"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "external_anchor": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "const": "VERIFIED_EXTERNAL_ANCHOR"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          }
+        },
+        "required": [
+          "external_anchor"
+        ]
+      },
+      "then": {
+        "properties": {
+          "external_anchor": {
+            "$ref": "#/$defs/verifiedExternalAnchor"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "nullableDigest": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/digest"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "identity": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 256,
+      "pattern": "^[^\\s]+$"
+    },
+    "recordCounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "gate_records",
+        "evidence_manifests",
+        "case_evidence_requirements",
+        "case_verification",
+        "journey_invariant_verification"
+      ],
+      "properties": {
+        "gate_records": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "evidence_manifests": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "case_evidence_requirements": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "case_verification": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "journey_invariant_verification": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "previousCheckpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "checkpoint_id",
+        "checkpoint_digest",
+        "registry_root_digest",
+        "record_counts"
+      ],
+      "properties": {
+        "checkpoint_id": {
+          "type": "string",
+          "pattern": "^checkpoint_[0-9a-f]{64}$"
+        },
+        "checkpoint_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "registry_root_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "record_counts": {
+          "$ref": "#/$defs/recordCounts"
+        }
+      }
+    },
+    "registryDigests": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "case_evidence_requirements",
+        "case_verification",
+        "journey_invariant_verification",
+        "lifecycle_state"
+      ],
+      "properties": {
+        "case_evidence_requirements": {
+          "$ref": "#/$defs/nullableDigest"
+        },
+        "case_verification": {
+          "$ref": "#/$defs/nullableDigest"
+        },
+        "journey_invariant_verification": {
+          "$ref": "#/$defs/nullableDigest"
+        },
+        "lifecycle_state": {
+          "enum": [
+            "NOT_CREATED_PRE_W1",
+            "ACTIVE_W1_PLUS"
+          ]
+        }
+      }
+    },
+    "gateHead": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "gate_id",
+        "scope_id",
+        "record_id",
+        "record_digest",
+        "result"
+      ],
+      "properties": {
+        "gate_id": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]{2,127}$"
+        },
+        "scope_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{2,127}$"
+        },
+        "record_id": {
+          "type": "string",
+          "pattern": "^gate_[0-9a-f]{64}$"
+        },
+        "record_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "result": {
+          "enum": [
+            "PASS",
+            "ACCEPTED_FALLBACK",
+            "FAIL",
+            "BLOCKED"
+          ]
+        }
+      }
+    },
+    "evidenceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evidence_id",
+        "manifest_digest",
+        "record_digest"
+      ],
+      "properties": {
+        "evidence_id": {
+          "type": "string",
+          "pattern": "^ev_[0-9a-f]{64}$"
+        },
+        "manifest_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "record_digest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "signer",
+        "signed_payload_digest",
+        "signature"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "PENDING_TRUSTED_SIGNER",
+            "VERIFIED_TRUSTED_SIGNER"
+          ]
+        },
+        "signer": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/identity"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "signed_payload_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "signature": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 8192
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "proof_digest": {
+          "$ref": "#/$defs/nullableDigest"
+        }
+      }
+    },
+    "verifiedSignature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "signer",
+        "signed_payload_digest",
+        "signature",
+        "proof_digest"
+      ],
+      "properties": {
+        "status": {
+          "const": "VERIFIED_TRUSTED_SIGNER"
+        },
+        "signer": {
+          "$ref": "#/$defs/identity"
+        },
+        "signed_payload_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "signature": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 8192
+        },
+        "proof_digest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "externalAnchor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "provider",
+        "reference",
+        "anchored_at",
+        "anchored_payload_digest"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "NOT_CONFIGURED",
+            "PENDING_EXTERNAL_ANCHOR",
+            "VERIFIED_EXTERNAL_ANCHOR"
+          ]
+        },
+        "provider": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "reference": {
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "anchored_at": {
+          "oneOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "anchored_payload_digest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "verifiedExternalAnchor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "provider",
+        "reference",
+        "anchored_at",
+        "anchored_payload_digest"
+      ],
+      "properties": {
+        "status": {
+          "const": "VERIFIED_EXTERNAL_ANCHOR"
+        },
+        "provider": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "reference": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "anchored_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "anchored_payload_digest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,393 @@
+{
+  "schema_version": "rolefox.spec-manifest.v1",
+  "manifest_version": "v0.1-bootstrap-1",
+  "canonicalization": "rolefox-canonical-digest-v1",
+  "algorithm": "sha256",
+  "normative_set_digest": "f50a4ee7f7fe20e1e108f071d2077b109c5dbbcdeb677f0ed6618a303db8a5f3",
+  "normative_file_count": 27,
+  "verification_toolchain": {
+    "algorithm": "sha256",
+    "canonicalization": "rolefox-canonical-digest-v1",
+    "digest": "588110ef58d99577c18a8540a75add06dd81714d579a17dc5137d75b3e449301",
+    "files": [
+      {
+        "path": ".github/workflows/ci.yml",
+        "bytes": 421,
+        "sha256": "884f7ff677f588d48f457c38b4c1b92fce4205369a7b06e93cdc2f4967bc5875"
+      },
+      {
+        "path": "package.json",
+        "bytes": 1727,
+        "sha256": "efb69a2a2cc65f8b96681df9aeb8cd0ce23a1ea48f618c6297a8481131123c93"
+      },
+      {
+        "path": "pnpm-lock.yaml",
+        "bytes": 203886,
+        "sha256": "660e2073a9de823a697ddc7f06adbd3e44123eaa26e8ebbc509893e434678ee0"
+      },
+      {
+        "path": "scripts/verification/append-evidence.mjs",
+        "bytes": 35718,
+        "sha256": "afddf06da0a535174d674574ef57609c6a75cd55a136b460c139da90ce2a1a63"
+      },
+      {
+        "path": "scripts/verification/append-gate.mjs",
+        "bytes": 41853,
+        "sha256": "62016a2fa8f316a9c19cc516792b4459452eaa892266faf90dfe5e203e7a1290"
+      },
+      {
+        "path": "scripts/verification/bootstrap-pre-w1.mjs",
+        "bytes": 19778,
+        "sha256": "f4911f8e202994a281b1c7855dadcb6c1ef9de4f69cc4dba6873fb5f4aec7c45"
+      },
+      {
+        "path": "scripts/verification/check-pre-w1.mjs",
+        "bytes": 97779,
+        "sha256": "a01b20cc11b4bbbc1ce2898ad53e03dbaa65564bdeda4a9e6a1ddc26aa3620f3"
+      },
+      {
+        "path": "scripts/verification/checkpoint-lib.mjs",
+        "bytes": 39711,
+        "sha256": "07ff1f5807f7f41f86c5387d2f15e3c726190eb762d9700b2a76277431b76334"
+      },
+      {
+        "path": "scripts/verification/config.mjs",
+        "bytes": 4578,
+        "sha256": "e4418659a356e680475e7b461ab84057067bf5a19c8056932caaa37f198c4cab"
+      },
+      {
+        "path": "scripts/verification/lib.mjs",
+        "bytes": 22514,
+        "sha256": "24f04c9c17bc37b23bcdad6f93574efd5cb0ce262a3855161be85786ec9e0a26"
+      },
+      {
+        "path": "scripts/verification/privacy.mjs",
+        "bytes": 2237,
+        "sha256": "589859c6149a1750dd9042727259d81dbac66dde9e396771fd8b477f16b743f2"
+      },
+      {
+        "path": "scripts/verification/schema.mjs",
+        "bytes": 1688,
+        "sha256": "be8b71d1425a5957d6ce1b40c81795458607db825ce9426c595aef9b9a78a1a7"
+      },
+      {
+        "path": "scripts/verification/write-checkpoint.mjs",
+        "bytes": 2491,
+        "sha256": "2e68497ed4f6cad8d880b1c467e23162a20789fb4079afe4d116921330045999"
+      },
+      {
+        "path": "verification/schemas/v1/candidate-scope-manifest.schema.json",
+        "bytes": 13012,
+        "sha256": "6328983747b1d7a889ffb456426efdc3a9f7c44a8f84ad39e2eb1e8f1c6ead9c"
+      },
+      {
+        "path": "verification/schemas/v1/evidence-manifest.schema.json",
+        "bytes": 19768,
+        "sha256": "930346cdf03ecdd0a926e690e442221de9cbd6b3ccbf25be42af8fe73d1f4a4f"
+      },
+      {
+        "path": "verification/schemas/v1/gate-evidence-record.schema.json",
+        "bytes": 9298,
+        "sha256": "024689c3c32f2060c5a40c3ab612c99ab1d55d2954b00d0ff28da73db0be9f41"
+      },
+      {
+        "path": "verification/schemas/v1/pre-w1-research-protocol.schema.json",
+        "bytes": 9869,
+        "sha256": "78aca74134ca1f4e88679a8b19f33c9403d2aee3a03c97d505d7f5e40d98a708"
+      },
+      {
+        "path": "verification/schemas/v1/registry-checkpoint.schema.json",
+        "bytes": 11541,
+        "sha256": "c3f449a9751f1230c961bc17d55af07978555a3b52ee91fd6797f0511733e93d"
+      },
+      {
+        "path": "verification/schemas/v1/required-release-scope-catalog.schema.json",
+        "bytes": 9420,
+        "sha256": "fcf9fa37d76e3c794534a684650b4899f2e7d6c2e2b4ffb9534347896b349629"
+      },
+      {
+        "path": "verification/schemas/v1/spec-manifest.schema.json",
+        "bytes": 6155,
+        "sha256": "9359f4b38e3de7e0609226e2c4e4eee63396d56ba885b972c69c45767891f3d4"
+      }
+    ]
+  },
+  "required_release_scope_catalog_ref": {
+    "path": "verification/required-release-scopes-v0.1.json",
+    "catalog_digest": "b7b4837a18ab6ba276bfd898d1fa3258d9a1c3db1d9885bc01fe1b47f3cb5140",
+    "authority_status": "PROPOSED"
+  },
+  "research_protocol_ref": {
+    "path": "verification/research/pre-w1-protocol-v0.1.json",
+    "protocol_digest": "172a87db0174ccf2d38739d90f13bfef9119682e99afeec4a994d044a13a1ede",
+    "authority_status": "PROPOSED"
+  },
+  "inventory": [
+    {
+      "path": "README.en.md",
+      "bytes": 7267,
+      "sha256": "1d3a21de32c61c6504f6ea6dabbbfcd110254544b095f05632c2335967937644",
+      "authority_status": "ACCEPTED",
+      "included_in_normative_set": true,
+      "status_source": "Pre-W1 normative classification declared by scripts/verification/config.mjs",
+      "approval_proof_digest": null
+    },
+    {
+      "path": "README.md",
+      "bytes": 11256,
+      "sha256": "b5a8d3ed0349f708a770961a5ceac34cda5113e83282f8d97c679bfeedfbb4fb",
+      "authority_status": "ACCEPTED",
+      "included_in_normative_set": true,
+      "status_source": "Pre-W1 normative classification declared by scripts/verification/config.mjs",
+      "approval_proof_digest": null
+    },
+    {
+      "path": "docs/adr/0001-pre-interview-autopilot.md",
+      "bytes": 2381,
+      "sha256": "d0c9bac8e4c1d27bed00658c18c8ec40921b8b940140a60abe566835627bfa28",
+      "authority_status": "ACCEPTED",
+      "included_in_normative_set": true,
+      "status_source": "Pre-W1 normative classification declared by scripts/verification/config.mjs",
+      "approval_proof_digest": null
+    },
+    {
+      "path": "docs/adr/0002-v0.1-product-decision-baseline.md",
+      "bytes": 6848,
+      "sha256": "7e55dfe9868e53c29d9f38eefde5643b493e8721bb0b42defbe9b320ac609156",
+      "authority_status": "ACCEPTED",
+      "included_in_normative_set": true,
+      "status_source": "Pre-W1 normative classification declared by scripts/verification/config.mjs",
+      "approval_proof_digest": null
+    },
+    {
+      "path": "docs/adr/0003-shadow-safety-control-exceptions.md",
+      "bytes": 3090,
+      "sha256": "261864f9485a1437e8d29f7a23aed3c4a695194525941704dd2362d4389e4f55",
+      "authority_status": "ACCEPTED",
+      "included_in_normative_set": true,
+      "status_source": "Pre-W1 normative classification declared by scripts/verification/config.mjs",
+      "approval_proof_digest": null
+    },
+    {
+      "path": "docs/adr/0004-jd-raw-retention-and-preparation-pack.md",
+      "bytes": 4026,
+      "sha256": "01477b1500aa6ce7f16e83c407165cc42f443873ab2323a343dfd1b645b4f0f1",
+      "authority_status": "ACCEPTED",
+      "included_in_normative_set": true,
+      "status_source": "Pre-W1 normative classification declared by scripts/verification/config.mjs",
+      "approval_proof_digest": null
+    },
+    {
+      "path": "docs/architecture.md",
+      "bytes": 14247,
+      "sha256": "1934bc0821dc0b426943dc8a29cbeb8692c1676af8b8fbcba7f3456dc313464c",
+      "authority_status": "ACCEPTED",
+      "included_in_normative_set": true,
+      "status_source": "Pre-W1 normative classification declared by scripts/verification/config.mjs",
+      "approval_proof_digest": null
+    },
+    {
+      "path": "docs/automation-safety.md",
+      "bytes": 8518,
+      "sha256": "db12912bdd89ba296039eb2bc0cf832b1044d8c6af649be350a5ec7fc1c66804",
+      "authority_status": "ACCEPTED",
+      "included_in_normative_set": true,
+      "status_source": "Pre-W1 normative classification declared by scripts/verification/config.mjs",
+      "approval_proof_digest": null
+    },
+    {
+      "path": "docs/open-source-strategy.md",
+      "bytes": 2415,
+      "sha256": "4d1ed05da80f0d555c3fda6eb78d64b547c994536665860d07ef3e4194c3ad52",
+      "authority_status": "ACCEPTED",
+      "included_in_normative_set": true,
+      "status_source": "Pre-W1 normative classification declared by scripts/verification/config.mjs",
+      "approval_proof_digest": null
+    },
+    {
+      "path": "docs/product-scope.md",
+      "bytes": 9427,
+      "sha256": "aeb43dfe618ec40fa7a88f4cc9cb55dbe49dc5f695e3329fbe0f72cf2580b1b8",
+      "authority_status": "ACCEPTED",
+      "included_in_normative_set": true,
+      "status_source": "Pre-W1 normative classification declared by scripts/verification/config.mjs",
+      "approval_proof_digest": null
+    },
+    {
+      "path": "docs/product/README.md",
+      "bytes": 2258,
+      "sha256": "78758906133d634c94ac1beca0de9a025910fdffcb522047d97613dcf3a6b70d",
+      "authority_status": "ACCEPTED",
+      "included_in_normative_set": true,
+      "status_source": "Pre-W1 normative classification declared by scripts/verification/config.mjs",
+      "approval_proof_digest": null
+    },
+    {
+      "path": "docs/product/delivery-plan-v0.1.md",
+      "bytes": 21298,
+      "sha256": "ce72a60adcc7360017c0b736846875de307257271ff1844e5269eb5550352000",
+      "authority_status": "ACCEPTED",
+      "included_in_normative_set": true,
+      "status_source": "Pre-W1 normative classification declared by scripts/verification/config.mjs",
+      "approval_proof_digest": null
+    },
+    {
+      "path": "docs/product/implementation-verification-v0.1.md",
+      "bytes": 52410,
+      "sha256": "389bba26239e69bbc4c925800416d9082b0900cae530b2c5a814b53821e734a1",
+      "authority_status": "ACCEPTED",
+      "included_in_normative_set": true,
+      "status_source": "Pre-W1 normative classification declared by scripts/verification/config.mjs",
+      "approval_proof_digest": null
+    },
+    {
+      "path": "docs/product/p0-case-baseline-v0.1.md",
+      "bytes": 133913,
+      "sha256": "3ee4d82dbffb47180ea6783d138adda007b3a2b08e0ac69bf34fb9ead09abb5d",
+      "authority_status": "ACCEPTED",
+      "included_in_normative_set": true,
+      "status_source": "Pre-W1 normative classification declared by scripts/verification/config.mjs",
+      "approval_proof_digest": null
+    },
+    {
+      "path": "docs/product/prd-v0.1.md",
+      "bytes": 22244,
+      "sha256": "654a1146ab70db4af3b52dfd703994816e09581f42ce98c29a36e0cb590bda86",
+      "authority_status": "ACCEPTED",
+      "included_in_normative_set": true,
+      "status_source": "Pre-W1 normative classification declared by scripts/verification/config.mjs",
+      "approval_proof_digest": null
+    },
+    {
+      "path": "docs/product/uml/01-context-use-cases.md",
+      "bytes": 16168,
+      "sha256": "5000203c7c40f8391a83c4f368484a7564c407a414f6e862bad2c70dc0bcf665",
+      "authority_status": "ACCEPTED",
+      "included_in_normative_set": true,
+      "status_source": "Pre-W1 normative classification declared by scripts/verification/config.mjs",
+      "approval_proof_digest": null
+    },
+    {
+      "path": "docs/product/uml/02-domain-model.md",
+      "bytes": 95085,
+      "sha256": "29e4e671408b98160c784a8ae4c469b34592d6257e04954e888bfab399893c4b",
+      "authority_status": "ACCEPTED",
+      "included_in_normative_set": true,
+      "status_source": "Pre-W1 normative classification declared by scripts/verification/config.mjs",
+      "approval_proof_digest": null
+    },
+    {
+      "path": "docs/product/uml/03-state-machines.md",
+      "bytes": 64249,
+      "sha256": "47f4152636b74f5f9559204293c293779058ca2ab23d78ba5d44f36b554c8b9f",
+      "authority_status": "ACCEPTED",
+      "included_in_normative_set": true,
+      "status_source": "Pre-W1 normative classification declared by scripts/verification/config.mjs",
+      "approval_proof_digest": null
+    },
+    {
+      "path": "docs/product/uml/04-activity-flows.md",
+      "bytes": 94910,
+      "sha256": "39f49809966bda6911ee5f81b695146fb1df1105efa7f834a8021c83a3a3a9e4",
+      "authority_status": "ACCEPTED",
+      "included_in_normative_set": true,
+      "status_source": "Pre-W1 normative classification declared by scripts/verification/config.mjs",
+      "approval_proof_digest": null
+    },
+    {
+      "path": "docs/product/uml/05-sequence-flows.md",
+      "bytes": 206175,
+      "sha256": "2a836cc8bfd6973d4fb866b2d312d699175bb07f28ec63e944cb771fd2af7bff",
+      "authority_status": "ACCEPTED",
+      "included_in_normative_set": true,
+      "status_source": "Pre-W1 normative classification declared by scripts/verification/config.mjs",
+      "approval_proof_digest": null
+    },
+    {
+      "path": "docs/product/uml/06-architecture-deployment-security.md",
+      "bytes": 86616,
+      "sha256": "92388b5082a1a87422c2cb69ddd898d3288b8a44459bdcf5635fb4fe1d52db0a",
+      "authority_status": "ACCEPTED",
+      "included_in_normative_set": true,
+      "status_source": "Pre-W1 normative classification declared by scripts/verification/config.mjs",
+      "approval_proof_digest": null
+    },
+    {
+      "path": "docs/product/uml/07-traceability.md",
+      "bytes": 20288,
+      "sha256": "34a07689ba6d1f91e36c9463ea265ebdd4fb4e9ac811b1c3c9003e74504e41b4",
+      "authority_status": "ACCEPTED",
+      "included_in_normative_set": true,
+      "status_source": "Pre-W1 normative classification declared by scripts/verification/config.mjs",
+      "approval_proof_digest": null
+    },
+    {
+      "path": "docs/product/uml/README.md",
+      "bytes": 13537,
+      "sha256": "5aee3b6c0dc0011a5649d940fa65e8dacf3c38f48f973d1d9e580416efb963be",
+      "authority_status": "ACCEPTED",
+      "included_in_normative_set": true,
+      "status_source": "Pre-W1 normative classification declared by scripts/verification/config.mjs",
+      "approval_proof_digest": null
+    },
+    {
+      "path": "docs/product/uml/case-to-uml-v0.1.csv",
+      "bytes": 38762,
+      "sha256": "b3087192734cef8569503a1a010477e42f51aea7eaf19da2e08475e39b002e9d",
+      "authority_status": "ACCEPTED",
+      "included_in_normative_set": true,
+      "status_source": "Pre-W1 normative classification declared by scripts/verification/config.mjs",
+      "approval_proof_digest": null
+    },
+    {
+      "path": "docs/product/user-experience-v0.1.md",
+      "bytes": 18057,
+      "sha256": "d1751769ee85cf94faf97cb266bb296f367163f4e3930722e3284775602e1ae0",
+      "authority_status": "ACCEPTED",
+      "included_in_normative_set": true,
+      "status_source": "Pre-W1 normative classification declared by scripts/verification/config.mjs",
+      "approval_proof_digest": null
+    },
+    {
+      "path": "docs/product/validation-plan-v0.1.md",
+      "bytes": 15821,
+      "sha256": "9b02c3840c795bd7bfa4395be8408dec3ca1b87980db2f00a6e7854131ae825a",
+      "authority_status": "ACCEPTED",
+      "included_in_normative_set": true,
+      "status_source": "Pre-W1 normative classification declared by scripts/verification/config.mjs",
+      "approval_proof_digest": null
+    },
+    {
+      "path": "docs/roadmap.md",
+      "bytes": 8121,
+      "sha256": "5032f1d9dbd129e7432b649802b2b718357cdfa9c7dc5930db6b4331934664d8",
+      "authority_status": "ACCEPTED",
+      "included_in_normative_set": true,
+      "status_source": "Pre-W1 normative classification declared by scripts/verification/config.mjs",
+      "approval_proof_digest": null
+    },
+    {
+      "path": "verification/required-release-scopes-v0.1.json",
+      "bytes": 9371,
+      "sha256": "f6dcaacf4030a206d3afed547d9985d866bd6f8d1f2490c03034e2cde075e2b1",
+      "authority_status": "PROPOSED",
+      "included_in_normative_set": false,
+      "status_source": "PROPOSED_PENDING_INDEPENDENT_REVIEW",
+      "approval_proof_digest": null
+    },
+    {
+      "path": "verification/research/pre-w1-protocol-v0.1.json",
+      "bytes": 2481,
+      "sha256": "5b1869c69859b2fa010a9cfea5d5b0e579d2c7e119e015955cbeb8f0c94b5e34",
+      "authority_status": "PROPOSED",
+      "included_in_normative_set": false,
+      "status_source": "DRAFT_PENDING_PRODUCT_OWNER_APPROVAL",
+      "approval_proof_digest": null
+    }
+  ],
+  "generation": {
+    "tool": "scripts/verification/bootstrap-pre-w1.mjs",
+    "deterministic_inputs": true
+  },
+  "manifest_digest": "480a16901496ebfcbae4c2f70981e26007da49cb87cee88d9ffe8876070ecf67"
+}

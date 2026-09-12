@@ -1,0 +1,897 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:rolefox:schema:evidence-manifest:v1",
+  "title": "RoleFox Evidence Manifest v1",
+  "$comment": "evidence_id and manifest_digest identify the canonical attestation payload after removing evidence_id, manifest_digest, record_digest, attestation, and any signature field. record_digest covers the final manifest including evidence_id, manifest_digest, and attestation, excluding only record_digest itself. This schema also validates pre-attestation prepare payloads, so PASS may carry a structurally empty PENDING attestation; writers and registry validators require VERIFIED before persistence.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "evidence_id",
+    "manifest_digest",
+    "record_digest",
+    "evidence_type",
+    "evidence_kind",
+    "research_scope_id",
+    "producer",
+    "attestation",
+    "run_id",
+    "started_at",
+    "completed_at",
+    "result",
+    "candidate_artifact_kind",
+    "candidate_artifact_digest",
+    "candidate_scope_manifest_ref",
+    "spec_manifest_ref",
+    "required_release_scope_catalog_ref",
+    "research_protocol_ref",
+    "deidentification",
+    "artifact_refs",
+    "subject_refs",
+    "measurements",
+    "criterion_results"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "rolefox.evidence-manifest.v1"
+    },
+    "evidence_id": {
+      "type": "string",
+      "pattern": "^ev_[0-9a-f]{64}$"
+    },
+    "manifest_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "record_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "evidence_type": {
+      "enum": [
+        "UNIT",
+        "CONTRACT",
+        "INTEGRATION",
+        "E2E",
+        "FAULT_INJECTION",
+        "CHAOS",
+        "DR",
+        "MIGRATION",
+        "SECURITY",
+        "ACCESSIBILITY",
+        "OBSERVABILITY",
+        "SUPPLY_CHAIN",
+        "UI_REVIEW",
+        "MANUAL_REVIEW",
+        "USER_RESEARCH",
+        "REAL_PROVIDER_E2E"
+      ]
+    },
+    "evidence_kind": {
+      "enum": [
+        "PAIN_INTERVIEWS",
+        "TARGET_CHANNEL_FEASIBILITY",
+        "RULES_REPLAY"
+      ]
+    },
+    "research_scope_id": {
+      "enum": [
+        "pain_interviews",
+        "target_channel_feasibility",
+        "rules_replay"
+      ]
+    },
+    "producer": {
+      "$ref": "#/$defs/producer"
+    },
+    "attestation": {
+      "$ref": "#/$defs/attestation"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 256,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]+$"
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "completed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "result": {
+      "enum": [
+        "PASS",
+        "FAIL",
+        "INCONCLUSIVE"
+      ]
+    },
+    "candidate_artifact_kind": {
+      "const": "SPEC_OR_EXPERIMENT"
+    },
+    "candidate_artifact_digest": {
+      "$ref": "#/$defs/digest"
+    },
+    "candidate_scope_manifest_ref": {
+      "$ref": "#/$defs/candidateScopeRef"
+    },
+    "spec_manifest_ref": {
+      "$ref": "#/$defs/specManifestRef"
+    },
+    "required_release_scope_catalog_ref": {
+      "$ref": "#/$defs/catalogRef"
+    },
+    "research_protocol_ref": {
+      "$ref": "#/$defs/protocolRef"
+    },
+    "deidentification": {
+      "$ref": "#/$defs/deidentification"
+    },
+    "artifact_refs": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/artifactRef"
+      }
+    },
+    "subject_refs": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/subjectRef"
+      }
+    },
+    "measurements": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "oneOf": [
+          {
+            "$ref": "#/$defs/painThresholdMeasurement"
+          },
+          {
+            "$ref": "#/$defs/channelEligibilityMeasurement"
+          },
+          {
+            "$ref": "#/$defs/rulesReplayMeasurement"
+          }
+        ]
+      }
+    },
+    "criterion_results": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/criterionResult"
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": [
+          "research_scope_id"
+        ]
+      },
+      "then": {
+        "properties": {
+          "evidence_type": {
+            "const": "USER_RESEARCH"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "evidence_kind": {
+            "const": "PAIN_INTERVIEWS"
+          }
+        },
+        "required": [
+          "evidence_kind"
+        ]
+      },
+      "then": {
+        "properties": {
+          "research_scope_id": {
+            "const": "pain_interviews"
+          },
+          "measurements": {
+            "type": "array",
+            "contains": {
+              "$ref": "#/$defs/painThresholdMeasurement"
+            },
+            "minContains": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "evidence_kind": {
+            "const": "TARGET_CHANNEL_FEASIBILITY"
+          }
+        },
+        "required": [
+          "evidence_kind"
+        ]
+      },
+      "then": {
+        "properties": {
+          "research_scope_id": {
+            "const": "target_channel_feasibility"
+          },
+          "measurements": {
+            "type": "array",
+            "contains": {
+              "$ref": "#/$defs/channelEligibilityMeasurement"
+            },
+            "minContains": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "evidence_kind": {
+            "const": "RULES_REPLAY"
+          }
+        },
+        "required": [
+          "evidence_kind"
+        ]
+      },
+      "then": {
+        "properties": {
+          "research_scope_id": {
+            "const": "rules_replay"
+          },
+          "measurements": {
+            "type": "array",
+            "contains": {
+              "$ref": "#/$defs/rulesReplayMeasurement"
+            },
+            "minContains": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "attestation": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "const": "VERIFIED"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          }
+        },
+        "required": [
+          "attestation"
+        ]
+      },
+      "then": {
+        "properties": {
+          "attestation": {
+            "$ref": "#/$defs/verifiedAttestation"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "attestation": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "const": "PENDING"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          }
+        },
+        "required": [
+          "attestation"
+        ]
+      },
+      "then": {
+        "properties": {
+          "attestation": {
+            "$ref": "#/$defs/pendingAttestation"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "result": {
+            "const": "PASS"
+          }
+        },
+        "required": [
+          "result"
+        ]
+      },
+      "then": {
+        "properties": {
+          "criterion_results": {
+            "type": "array",
+            "items": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/criterionResult"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "result": {
+                      "const": "PASS"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "digest": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "nullableDigest": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/digest"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "identity": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 256,
+      "pattern": "^[^\\s]+$"
+    },
+    "producer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "identity",
+        "identity_kind",
+        "allowlist_version"
+      ],
+      "properties": {
+        "identity": {
+          "$ref": "#/$defs/identity"
+        },
+        "identity_kind": {
+          "enum": [
+            "CI_WORKLOAD_IDENTITY",
+            "APPROVED_OPERATOR"
+          ]
+        },
+        "allowlist_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      }
+    },
+    "attestation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "attested_by",
+        "attested_at",
+        "signed_payload_digest",
+        "proof_digest"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "PENDING",
+            "VERIFIED",
+            "INVALID"
+          ]
+        },
+        "attested_by": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/identity"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "attested_at": {
+          "oneOf": [
+            {
+              "type": "string",
+              "format": "date-time"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "signed_payload_digest": {
+          "$ref": "#/$defs/nullableDigest"
+        },
+        "proof_digest": {
+          "$ref": "#/$defs/nullableDigest"
+        }
+      }
+    },
+    "verifiedAttestation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "attested_by",
+        "attested_at",
+        "signed_payload_digest",
+        "proof_digest"
+      ],
+      "properties": {
+        "status": {
+          "const": "VERIFIED"
+        },
+        "attested_by": {
+          "$ref": "#/$defs/identity"
+        },
+        "attested_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "signed_payload_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "proof_digest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "pendingAttestation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "attested_by",
+        "attested_at",
+        "signed_payload_digest",
+        "proof_digest"
+      ],
+      "properties": {
+        "status": {
+          "const": "PENDING"
+        },
+        "attested_by": {
+          "type": "null"
+        },
+        "attested_at": {
+          "type": "null"
+        },
+        "signed_payload_digest": {
+          "type": "null"
+        },
+        "proof_digest": {
+          "type": "null"
+        }
+      }
+    },
+    "candidateScopeRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidate_scope_manifest_id",
+        "manifest_digest"
+      ],
+      "properties": {
+        "candidate_scope_manifest_id": {
+          "type": "string",
+          "pattern": "^candidate_[0-9a-f]{64}$"
+        },
+        "manifest_digest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "specManifestRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "manifest_digest",
+        "normative_set_digest"
+      ],
+      "properties": {
+        "manifest_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "normative_set_digest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "catalogRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "catalog_digest"
+      ],
+      "properties": {
+        "catalog_digest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "protocolRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol_digest"
+      ],
+      "properties": {
+        "protocol_digest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "deidentification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scheme",
+        "scheme_version",
+        "mapping_location"
+      ],
+      "properties": {
+        "scheme": {
+          "enum": [
+            "RANDOM_COHORT_LOCAL_SURROGATE",
+            "DOMAIN_SEPARATED_HMAC_SURROGATE"
+          ]
+        },
+        "scheme_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "mapping_location": {
+          "const": "CONTROLLED_ARTIFACT_STORE_ONLY"
+        }
+      }
+    },
+    "artifactRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact_id",
+        "sha256",
+        "media_type",
+        "controlled_store_locator_digest"
+      ],
+      "properties": {
+        "artifact_id": {
+          "type": "string",
+          "pattern": "^artifact_[a-z0-9][a-z0-9_-]{2,127}$"
+        },
+        "sha256": {
+          "$ref": "#/$defs/digest"
+        },
+        "media_type": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 128,
+          "pattern": "^[a-z0-9.+-]+/[a-z0-9.+-]+$"
+        },
+        "controlled_store_locator_digest": {
+          "description": "Lowercase hex output of a versioned, domain-separated keyed HMAC-SHA-256 over the controlled-store locator; neither the key nor locator may enter the repository.",
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "subjectRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "subject_type",
+        "gate_id",
+        "criterion_id"
+      ],
+      "properties": {
+        "subject_type": {
+          "const": "GATE_CRITERION"
+        },
+        "gate_id": {
+          "const": "PRE_W1_PROBLEM_RULES"
+        },
+        "criterion_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{2,127}$"
+        }
+      }
+    },
+    "participantSurrogate": {
+      "type": "string",
+      "pattern": "^participant_[a-z0-9]{12,64}$"
+    },
+    "painThresholdMeasurement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "measurement_id",
+        "measurement_type",
+        "cohort_denominator",
+        "qualified_n",
+        "opportunities_per_week_minimum",
+        "repetitive_work_rank_maximum",
+        "participant_surrogates",
+        "eligibility_and_exclusion_policy_digest",
+        "calculation_version"
+      ],
+      "properties": {
+        "measurement_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{2,127}$"
+        },
+        "measurement_type": {
+          "const": "PAIN_THRESHOLD"
+        },
+        "cohort_denominator": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "qualified_n": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "opportunities_per_week_minimum": {
+          "const": 10
+        },
+        "repetitive_work_rank_maximum": {
+          "const": 3
+        },
+        "participant_surrogates": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/participantSurrogate"
+          }
+        },
+        "qualified_participant_surrogates": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/participantSurrogate"
+          }
+        },
+        "eligibility_and_exclusion_policy_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "calculation_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      }
+    },
+    "channelEligibilityMeasurement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "measurement_id",
+        "measurement_type",
+        "cohort_denominator",
+        "eligible_n",
+        "participant_surrogates",
+        "eligibility_refs",
+        "eligibility_and_exclusion_policy_digest",
+        "calculation_version"
+      ],
+      "properties": {
+        "measurement_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{2,127}$"
+        },
+        "measurement_type": {
+          "const": "CHANNEL_ELIGIBILITY"
+        },
+        "cohort_denominator": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "eligible_n": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "participant_surrogates": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/participantSurrogate"
+          }
+        },
+        "eligibility_refs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "participant_surrogate",
+              "observation_digest"
+            ],
+            "properties": {
+              "participant_surrogate": {
+                "$ref": "#/$defs/participantSurrogate"
+              },
+              "observation_digest": {
+                "$ref": "#/$defs/digest"
+              }
+            }
+          }
+        },
+        "eligibility_and_exclusion_policy_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "calculation_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      }
+    },
+    "rulesReplayMeasurement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "measurement_id",
+        "measurement_type",
+        "qualified_participant_n",
+        "jobs_per_participant",
+        "dataset_frozen",
+        "participant_dataset_refs",
+        "explicit_rejection_reasons_covered",
+        "remaining_ambiguity",
+        "calculation_version"
+      ],
+      "properties": {
+        "measurement_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{2,127}$"
+        },
+        "measurement_type": {
+          "const": "RULE_REPLAY"
+        },
+        "qualified_participant_n": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "jobs_per_participant": {
+          "const": 20
+        },
+        "dataset_frozen": {
+          "type": "boolean"
+        },
+        "participant_dataset_refs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "participant_surrogate",
+              "dataset_digest",
+              "jobs_count"
+            ],
+            "properties": {
+              "participant_surrogate": {
+                "$ref": "#/$defs/participantSurrogate"
+              },
+              "dataset_digest": {
+                "$ref": "#/$defs/digest"
+              },
+              "jobs_count": {
+                "const": 20
+              }
+            }
+          }
+        },
+        "explicit_rejection_reasons_covered": {
+          "enum": [
+            "ALL",
+            "PARTIAL",
+            "NONE",
+            "UNKNOWN"
+          ]
+        },
+        "remaining_ambiguity": {
+          "enum": [
+            "FINITE_EXCEPTION_CATEGORIES",
+            "UNBOUNDED",
+            "UNKNOWN"
+          ]
+        },
+        "calculation_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      }
+    },
+    "criterionResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "criterion_id",
+        "comparator",
+        "expected",
+        "actual_or_measurement_refs",
+        "result",
+        "calculation_version"
+      ],
+      "properties": {
+        "criterion_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{2,127}$"
+        },
+        "comparator": {
+          "enum": [
+            "EQ",
+            "GTE",
+            "LTE",
+            "ALL",
+            "FINITE_CATEGORIES",
+            "COMPOSITE"
+          ]
+        },
+        "expected": {},
+        "actual_or_measurement_refs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{2,127}$"
+          }
+        },
+        "result": {
+          "enum": [
+            "PASS",
+            "FAIL",
+            "INCONCLUSIVE"
+          ]
+        },
+        "calculation_version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      }
+    }
+  }
+}

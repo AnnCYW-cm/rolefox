@@ -10,6 +10,10 @@ RoleFox 的最终目标不是让用户更快地刷岗位、改简历和点投递
 
 当前仓库处于 **M0 / pre-alpha**。它已经建立静态产品界面、领域状态机、基础策略判断规则和扩展契约，但还没有接入真实招聘平台，也不会真实投递。现在最适合参与产品讨论、验证架构和贡献基础能力，不适合直接用于无人值守求职。
 
+Pre-W1 的验证控制面已经建立，包括绑定规范与 verifier 工具链的 Spec Manifest、Required Release Scope Catalog、不可变 authority 快照、冻结的 Candidate Scope、两层内容寻址 Evidence 的 schema/writer、只追加 Gate Registry、连续 checkpoint，以及受保护 `main` 上的 GitHub Actions OIDC + Sigstore/Rekor 信任验证。唯一产品决策权威是 `github:AnnCYW-cm`；机器签名只证明来源，不替代产品决定。实时状态以 `pnpm verification:ready` 为准；在真实访谈、规则回放、Gate 1 PASS 和可信 checkpoint 全部成立前，W1 不得启动。详见[验证登记说明](verification/README.md)。
+
+v0.1 对外发布有一项独立且不可由 Demo 替代的真实闭环门：必须连接真实邮箱与真实日历 Provider，依次验证邮件入站、完成 7 天 Shadow 后的受控 L2 回复、日历 busy 查询/对账、候选人私有 tentative event，以及招聘确认与失败补偿。是否已经达到局部 L3 不阻断 v0.1；未达到时保持 L2，但 Fake Inbox、测试日历或只做投递交接都不能替代这项发布证据。当前 M0 尚未实现或通过该门。
+
 ## 为什么做 RoleFox
 
 招聘平台解决了企业和候选人的信息连接，但候选人仍要逐个浏览、判断、打招呼、修改材料和等待回复。平台上的高频操作消耗了大量注意力，却不必然带来更多合格面试。
@@ -34,8 +38,8 @@ RoleFox 由真实求职需求发起，但核心代码、默认配置和公共测
 | 能力 | 状态 | 说明 |
 | --- | --- | --- |
 | Web 工作台 | 已实现（演示） | 使用完全虚构的跨地区、多币种岗位展示产品流程 |
-| 求职申请状态机 | 已实现（M0 基础版） | 现有字符串迁移可运行；尚未对齐 Accepted 基线中的 Interview 独立生命周期、Operation/Saga 证据与 CAS guard |
-| 自动化策略判断 | 已实现（基础版） | dry-run、急停、等级矩阵、限额与敏感问题规则已有单元测试；授权记录、异常服务和真实计数器尚未实现 |
+| 求职申请状态机 | 已实现（M0 legacy 基础版） | 仅有字符串迁移与非法迁移测试；尚未实现 Accepted 基线中的 Application/Interview 独立生命周期、Operation/Saga 证据、CAS 与恢复语义 |
+| 自动化策略判断 | 已实现（M0 legacy 基础版） | dry-run、急停、等级矩阵、敏感问题和按传入配置比较用量已有单元测试；尚无系统硬上限、原子计数/reservation、授权记录、异常服务或 L3 readiness 计算 |
 | 连接器 SDK 契约 | 已实现（基础版） | 按发现、投递、消息、回复、通知、日历拆分能力 |
 | AI Provider 契约 | 已实现（基础版） | 为结构化生成与向量能力提供厂商无关接口 |
 | Worker / Local Runner | 安全桩 | 当前只验证安全默认值，不包含后台任务、授权令牌或真实外部执行 |
@@ -51,22 +55,29 @@ RoleFox 由真实求职需求发起，但核心代码、默认配置和公共测
 | 虚构演示数据 | ✅ M0 | 静态界面示意 | 禁用 |
 | CSV / JSON 导入 | 计划 M1 | 计划 M3 | 不适用 |
 | 手动添加岗位链接 | 计划 M1 | 计划 M3 | 计划 M4 |
+| 历史 Application 导入/登记 | 计划 M1 | 关联既有岗位并参与去重 | 不产生新投递 |
 | 官方 API / 授权集成 | 按连接器推进 | 按连接器推进 | 按连接器与平台规则推进 |
 | 浏览器自动化 | 不作为默认方案 | 受策略约束 | 仅本地、明确批准且平台允许时考虑 |
 
 ## 产品安全边界
 
-默认配置是 `L2 + DRY_RUN=true`：基础策略判断只会给出 `preview_only`，不能真正投递或回复。M0 还没有实现 ActionPlan 生成、授权与异常服务或执行链路。
+默认配置是 `L2 + DRY_RUN=true`：legacy 基础策略判断只会给出 `preview_only`，不能真正投递或回复。M0 的用量判断只比较调用方传入的配置与计数，尚未实现 Accepted 基线的普通配置硬上限、原子计数/reservation、ActionPlan、授权、异常服务、L3 readiness 或执行链路。
 
 RoleFox 的目标工作模式是 **L3 Autopilot**，而不是无限制的 L4：只要岗位、材料、回答和日历时段均落在用户版本化的预授权范围内，系统就继续工作；事实缺失、回答越界、时间歧义、日历冲突或高风险承诺会进入异常队列。
 
 ```text
-Connector draft → core ActionPlan → policy decision
-                                      ├─ approval when required
-                                      └─ pre-approved L3 rule
-                                                   ↓
-                                               execution
+Connector draft → immutable ActionPlan → durable policy evaluation
+                                           ↓
+                       current 7-day pre-L2 Shadow receipt gate
+                                           ↓
+                         L2 approval or current limited L3 grant
+                                           ↓
+          atomic Authorization / Operation / AuditIntent / Outbox
+                                           ↓
+        execution-time binding + receipt recheck → external execution
 ```
+
+任何人工批准都不能跳过 Shadow。完整字段、receipt-set 复合约面和三态对账规则以 [UML 通用 mutation 时序](docs/product/uml/05-sequence-flows.md)为准。
 
 薪资区间、到岗时间和工作地点等问题只有在用户明确预授权且有事实依据时才可自动回答；超出范围立即升级。Offer 接受、法律声明和无法核实的身份或经历始终由用户决定。RoleFox 不处理验证码，不规避访问控制或平台风控，也不以“批量海投”为产品目标。完整说明见 [自动化安全](docs/automation-safety.md)。
 
@@ -103,6 +114,8 @@ v0.1 的正式安装目标是 Docker Compose 支持 macOS、Windows 和 Linux；
 pnpm check
 ```
 
+单独检查 Pre-W1 登记结构可运行 `pnpm verification:check`；只有 `pnpm verification:ready` 成功才允许进入 W1。后者当前按设计失败关闭。
+
 ## 从哪里开始
 
 - 想完整了解 v0.1 产品设计：从 [产品设计索引](docs/product/README.md) 开始
@@ -111,10 +124,12 @@ pnpm check
 - 想核对发布阻断场景：阅读 [v0.1 P0 Case 验收基线](docs/product/p0-case-baseline-v0.1.md)
 - 想评审开发前完整设计：阅读已接受的 [v0.1 UML 设计基线](docs/product/uml/README.md)
 - 想看验证假设与 10 周实施基线：阅读 [验证计划](docs/product/validation-plan-v0.1.md) 和 [交付计划](docs/product/delivery-plan-v0.1.md)
+- 想看 254 个 Case 如何绑定实现证据并关闭发布门：阅读 [实现证据与发布闭合协议](docs/product/implementation-verification-v0.1.md)
 - 想了解产品边界：阅读 [产品范围](docs/product-scope.md)
 - 想了解为何选择面试前 Autopilot：阅读 [ADR-0001](docs/adr/0001-pre-interview-autopilot.md)
-- 想查看 v0.1 已确认产品决策：阅读 [ADR-0002](docs/adr/0002-v0.1-product-decision-baseline.md)
+- 想查看 v0.1 已确认产品与治理决策：阅读 [ADR-0002](docs/adr/0002-v0.1-product-decision-baseline.md)、[ADR-0003](docs/adr/0003-shadow-safety-control-exceptions.md)、[ADR-0004](docs/adr/0004-jd-raw-retention-and-preparation-pack.md) 与 [ADR-0005](docs/adr/0005-sole-maintainer-governance.md)
 - 想了解开发顺序：阅读 [路线图](docs/roadmap.md)
+- 想查看公开项目变更：阅读 [版本变更记录](CHANGELOG.md)
 - 想贡献连接器：先阅读 [架构](docs/architecture.md) 和 [贡献指南](CONTRIBUTING.md)
 - 想了解开源与未来商业化边界：阅读 [开源策略](docs/open-source-strategy.md)
 - 发现漏洞：按 [安全政策](SECURITY.md) 私下报告
@@ -123,7 +138,7 @@ pnpm check
 
 M1–M5 描述长期能力成熟度，不会按模块全部做完后才验证闭环。v0.1 将从各阶段抽取最小能力，用一条纵向通道优先跑通“岗位 → 投递 → 沟通 → 约面”；具体周次和止损门槛见 [v0.1 交付计划](docs/product/delivery-plan-v0.1.md)。
 
-1. **M1 通用基础**：引导配置、候选人事实库、求职计划、SQLite、CSV/JSON 与手动链接导入。
+1. **M1 通用基础**：引导配置、候选人事实库、求职计划、SQLite、CSV/JSON、手动链接与历史 Application 导入/登记。
 2. **M2 可解释匹配**：硬过滤、分项评分、推荐理由、去重与反馈闭环。
 3. **M3 材料工作台**：基于证据生成简历变体与沟通草稿，并展示差异。
 4. **M4 投递 Autopilot**：委托授权、异常处理、幂等执行、本地 Runner、审计与首个合规连接器。

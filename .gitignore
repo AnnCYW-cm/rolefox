@@ -34,6 +34,8 @@ browser-profiles/
 playwright/.auth/
 cookies*.json
 sessions*.json
+verification/.append.lock
+verification/research/drafts/
 
 # Tooling and operating systems
 .DS_Store
