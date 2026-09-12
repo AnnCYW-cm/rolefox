@@ -2,7 +2,7 @@
   "_template_notice": {
     "status": "NOT_COLLECTED",
     "registerable": false,
-    "instructions": "Copy outside the repository; remove _template_notice, evidence_id, manifest_digest, and record_digest; replace every remaining null from controlled deidentified research; then use the evidence writer. Keep this cohort denominator separate from pain interviews."
+    "instructions": "Copy outside the repository and remove _template_notice, evidence_id, manifest_digest, and record_digest. Fill only fields produced by controlled deidentified research. Leave current authority refs null for the writer to bind, and keep attestation PENDING with all four trust fields null for finalize to derive from the proof bundle. Keep this cohort denominator separate from pain interviews."
   },
   "schema_version": "rolefox.evidence-manifest.v1",
   "evidence_id": null,
@@ -12,9 +12,9 @@
   "evidence_kind": "TARGET_CHANNEL_FEASIBILITY",
   "research_scope_id": "target_channel_feasibility",
   "producer": {
-    "identity": null,
+    "identity": "github:AnnCYW-cm",
     "identity_kind": "APPROVED_OPERATOR",
-    "allowlist_version": null
+    "allowlist_version": "rolefox-research-operators-v1"
   },
   "attestation": {
     "status": "PENDING",

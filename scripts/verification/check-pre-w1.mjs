@@ -38,6 +38,11 @@ import {
   normalizePublicKey,
 } from "./privacy.mjs";
 import { SCHEMA_NAMES, validateSchema } from "./schema.mjs";
+import {
+  canonicalPayloadBytes,
+  validateEvidenceProducer,
+  verifyTrustedProof,
+} from "./trust.mjs";
 
 const PRE_W1_SCOPE_ID = "pre_w1_problem_and_rules_research";
 const EVIDENCE_KINDS = new Map([
@@ -82,9 +87,167 @@ const unknownArguments = process.argv.slice(2).filter(
   (argument) => argument !== "--require-pre-w1-pass",
 );
 const readinessBlockers = new Set();
+const verifiedTrustProofs = new Map();
 
 function blocker(code) {
   readinessBlockers.add(code);
+}
+
+function verifyRecordedTrust({
+  kind,
+  document,
+  excludedFields,
+  payloadDigest,
+  proofDigest,
+  expectedDecision,
+}) {
+  const cacheKey = canonicalJson([kind, payloadDigest, proofDigest, expectedDecision]);
+  let verified = verifiedTrustProofs.get(cacheKey);
+  if (!verified) {
+    verified = verifyTrustedProof(root, {
+      kind,
+      payloadDigest,
+      payloadBytes: canonicalPayloadBytes(document, excludedFields),
+      proofDigest,
+      expectedDecision,
+    });
+    verifiedTrustProofs.set(cacheKey, verified);
+  }
+  return verified;
+}
+
+function verifyCatalogApproval(catalog) {
+  const verified = verifyRecordedTrust({
+    kind: "CATALOG_ACCEPTED",
+    document: catalog,
+    excludedFields: ["catalog_digest", "review"],
+    payloadDigest: catalog.review.signed_payload_digest,
+    proofDigest: catalog.review.approval_proof_digest,
+    expectedDecision: "ACCEPTED",
+  });
+  invariant(
+    catalog.review.reviewed_by === verified.actor &&
+      catalog.review.approver_role_version === verified.roleVersion &&
+      new Date(catalog.review.reviewed_at).toISOString() === verified.decisionAt,
+    "Catalog approval envelope does not match its verified maintainer decision.",
+  );
+}
+
+function verifyProtocolApproval(protocol) {
+  const verified = verifyRecordedTrust({
+    kind: "PROTOCOL_APPROVED",
+    document: protocol,
+    excludedFields: ["protocol_digest", "approval"],
+    payloadDigest: protocol.approval.signed_payload_digest,
+    proofDigest: protocol.approval.approval_proof_digest,
+    expectedDecision: "APPROVED",
+  });
+  invariant(
+    protocol.approval.approved_by === verified.actor &&
+      protocol.approval.approver_role_version === verified.roleVersion &&
+      new Date(protocol.approval.approved_at).toISOString() === verified.decisionAt,
+    "Protocol approval envelope does not match its verified maintainer decision.",
+  );
+}
+
+function verifyCandidateApproval(candidate) {
+  const verified = verifyRecordedTrust({
+    kind: "CANDIDATE_APPROVED",
+    document: candidate,
+    excludedFields: ["candidate_scope_manifest_id", "manifest_digest", "approval"],
+    payloadDigest: candidate.approval.signed_payload_digest,
+    proofDigest: candidate.approval.approval_proof_digest,
+    expectedDecision: "APPROVED",
+  });
+  invariant(
+    candidate.approval.approved_by === verified.actor &&
+      candidate.approval.approver_role_version === verified.roleVersion &&
+      new Date(candidate.approval.approved_at).toISOString() === verified.decisionAt,
+    `Candidate ${candidate.candidate_scope_manifest_id} approval envelope does not match its verified maintainer decision.`,
+  );
+}
+
+function verifyEvidenceAttestation(evidence) {
+  const verified = verifyRecordedTrust({
+    kind: "EVIDENCE_VERIFIED",
+    document: evidence,
+    excludedFields: [
+      "evidence_id",
+      "manifest_digest",
+      "record_digest",
+      "attestation",
+      "signature",
+    ],
+    payloadDigest: evidence.attestation.signed_payload_digest,
+    proofDigest: evidence.attestation.proof_digest,
+    expectedDecision: "VERIFIED",
+  });
+  invariant(
+    evidence.attestation.attested_by === verified.signer &&
+      new Date(evidence.attestation.attested_at).toISOString() === verified.attestedAt,
+    `Evidence ${evidence.evidence_id} attestation envelope does not match its verified workload identity and Rekor timestamp.`,
+  );
+  invariant(
+    evidence.producer.identity !== verified.signer,
+    `Evidence ${evidence.evidence_id} producer and workload attester must remain separate.`,
+  );
+}
+
+function verifyGateApproval(record) {
+  const kind = {
+    PASS: "GATE_PASS",
+    ACCEPTED_FALLBACK: "GATE_ACCEPTED_FALLBACK",
+    FAIL: "GATE_FAIL",
+  }[record.result];
+  invariant(kind, `Gate ${record.record_id} has no trusted decision kind.`);
+  const verified = verifyRecordedTrust({
+    kind,
+    document: record,
+    excludedFields: [
+      "record_id",
+      "record_digest",
+      "approval_payload_digest",
+      "approval_proof_digest",
+    ],
+    payloadDigest: record.approval_payload_digest,
+    proofDigest: record.approval_proof_digest,
+    expectedDecision: record.result,
+  });
+  invariant(
+    record.approved_by === verified.actor &&
+      record.approver_role_version === verified.roleVersion &&
+      Date.parse(verified.decisionAt) >=
+        Math.max(Date.parse(record.approved_at), Date.parse(record.decided_at)),
+    `Gate ${record.record_id} approval envelope does not match its verified maintainer decision.`,
+  );
+}
+
+function verifyCheckpointAttestation(checkpoint) {
+  const verified = verifyRecordedTrust({
+    kind: "CHECKPOINT_ROOT",
+    document: {
+      sequence: checkpoint.sequence,
+      created_at: checkpoint.created_at,
+      previous: checkpoint.previous,
+      ...checkpointState(checkpoint),
+    },
+    excludedFields: [],
+    payloadDigest: checkpoint.registry_root_digest,
+    proofDigest: checkpoint.signature.proof_digest,
+    expectedDecision: "VERIFIED",
+  });
+  invariant(
+    checkpoint.signature.signer === verified.signer &&
+      checkpoint.signature.signature === verified.signatureValue,
+    `Checkpoint ${checkpoint.checkpoint_id} signature does not match its verified Sigstore bundle.`,
+  );
+  invariant(
+    checkpoint.external_anchor.provider === verified.anchor.provider &&
+      checkpoint.external_anchor.reference === verified.anchor.reference &&
+      new Date(checkpoint.external_anchor.anchored_at).toISOString() ===
+        verified.anchor.anchoredAt,
+    `Checkpoint ${checkpoint.checkpoint_id} anchor does not match its verified Rekor entry.`,
+  );
 }
 
 function isPlainObject(value) {
@@ -278,6 +441,14 @@ function validateSnapshotArchives(catalog, protocol, manifest) {
       SCHEMA_NAMES.specManifest,
     ),
   };
+  for (const snapshot of archives.catalogs.values()) {
+    if (snapshot.status === "ACCEPTED") verifyCatalogApproval(snapshot);
+  }
+  for (const snapshot of archives.protocols.values()) {
+    if (snapshot.status === "APPROVED" && isSoleMaintainerProtocol(snapshot)) {
+      verifyProtocolApproval(snapshot);
+    }
+  }
   for (const [digest, snapshot] of archives.specs) {
     invariant(
       snapshot.verification_toolchain.digest ===
@@ -517,6 +688,7 @@ function validateCatalog() {
       review.approver_role_version,
       "catalog.review",
     );
+    verifyCatalogApproval(catalog);
   } else {
     blocker("REQUIRED_SCOPE_CATALOG_MAINTAINER_DECISION_PENDING");
   }
@@ -635,6 +807,7 @@ function validateProtocol() {
       protocol.approval.approver_role_version,
       "protocol.approval",
     );
+    verifyProtocolApproval(protocol);
   } else {
     blocker("RESEARCH_PROTOCOL_APPROVAL_PENDING");
   }
@@ -819,6 +992,17 @@ function validateCandidate(manifest, catalog, protocol, archives) {
         ]),
       `Candidate ${candidate.candidate_scope_manifest_id} approval payload digest is not reproducible.`,
     );
+    if (
+      candidate.approval?.status === "APPROVED" &&
+      isSoleMaintainerProtocol(candidateProtocol)
+    ) {
+      requireSoleMaintainerDecision(
+        candidate.approval.approved_by,
+        candidate.approval.approver_role_version,
+        `Candidate ${candidate.candidate_scope_manifest_id} approval`,
+      );
+      verifyCandidateApproval(candidate);
+    }
     assertNoSensitivePublicData(
       candidate.approval,
       `Candidate ${candidate.candidate_scope_manifest_id} approval`,
@@ -1016,6 +1200,7 @@ function validateEvidence(archives, candidates) {
       `${label}.producer.identity_kind is invalid.`,
     );
     requireString(producer.allowlist_version, `${label}.producer.allowlist_version`);
+    validateEvidenceProducer(root, producer);
     invariant(evidence.candidate_artifact_kind === "SPEC_OR_EXPERIMENT", `${label} candidate kind mismatch.`);
     invariant(evidence.candidate_artifact_digest === historicalCandidate.candidate_artifact_digest, `${label} candidate artifact digest mismatch.`);
 
@@ -1123,6 +1308,7 @@ function validateEvidence(archives, candidates) {
         attestation.attested_by !== producer.identity,
         `${label} cannot be self-attested by its producer.`,
       );
+      verifyEvidenceAttestation(evidence);
     } else {
       invariant(attestation.attested_by === null, `${label} unverified attestation cannot name an attester.`);
       invariant(attestation.attested_at === null, `${label} unverified attestation cannot have a timestamp.`);
@@ -1542,6 +1728,7 @@ function validateGateRecords(
           historicalCandidate.approval?.approver_role_version,
           `Gate ${record.record_id} candidate decision`,
         );
+        verifyGateApproval(record);
       }
       invariant(
         record.evidence_manifest_refs.length > 0,
@@ -1975,6 +2162,10 @@ function validateCheckpoints(
     const signed = checkpoint.signature.status === "VERIFIED_TRUSTED_SIGNER";
     const anchored = checkpoint.external_anchor.status === "VERIFIED_EXTERNAL_ANCHOR";
     invariant(
+      signed === anchored,
+      `Checkpoint ${checkpoint.checkpoint_id} signature and external anchor must be verified together.`,
+    );
+    invariant(
       checkpoint.signature.signed_payload_digest === checkpoint.registry_root_digest,
       `Checkpoint ${checkpoint.checkpoint_id} signature payload mismatch.`,
     );
@@ -1985,6 +2176,7 @@ function validateCheckpoints(
     if (signed) {
       requireIdentity(checkpoint.signature.signer, `checkpoint ${checkpoint.checkpoint_id}.signature.signer`);
       requireString(checkpoint.signature.signature, `checkpoint ${checkpoint.checkpoint_id}.signature.signature`);
+      requireSha256(checkpoint.signature.proof_digest, `checkpoint ${checkpoint.checkpoint_id}.signature.proof_digest`);
     } else {
       if (checkpoint.signature.signer !== null) {
         requireIdentity(checkpoint.signature.signer, `checkpoint ${checkpoint.checkpoint_id}.signature.signer`);
@@ -2001,6 +2193,7 @@ function validateCheckpoints(
           requireIsoTimestamp(checkpoint.created_at, `checkpoint ${checkpoint.checkpoint_id}.created_at`),
         `Checkpoint ${checkpoint.checkpoint_id} was anchored before creation.`,
       );
+      verifyCheckpointAttestation(checkpoint);
     } else {
       if (checkpoint.external_anchor.provider !== null) {
         requireString(checkpoint.external_anchor.provider, `checkpoint ${checkpoint.checkpoint_id}.anchor.provider`);

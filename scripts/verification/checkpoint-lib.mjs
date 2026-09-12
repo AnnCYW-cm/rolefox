@@ -3,6 +3,8 @@ import path from "node:path";
 
 import {
   PATHS,
+  SOLE_MAINTAINER_AUTHORITY,
+  TRUSTED_WORKLOAD_IDENTITY,
   TRUST_VERIFICATION_STATUS,
   VERIFICATION_TOOLCHAIN_FILES,
 } from "./config.mjs";
@@ -30,6 +32,12 @@ import {
 } from "./lib.mjs";
 import { assertNoSensitivePublicData } from "./privacy.mjs";
 import { SCHEMA_NAMES, validateSchema } from "./schema.mjs";
+import {
+  canonicalPayloadBytes,
+  importTrustedProof,
+  validateEvidenceProducer,
+  verifyTrustedProof,
+} from "./trust.mjs";
 
 const absolute = (root, relativePath) =>
   path.join(root, ...relativePath.split("/"));
@@ -188,6 +196,68 @@ export const validateHistoricalBindings = (
   assertNoSensitivePublicData(protocol.approval, `${label} protocol approval`, forbiddenFields);
   assertNoSensitivePublicData(candidate.approval, `${label} candidate approval`, forbiddenFields);
 
+  const soleMaintainerProtocol =
+    protocol.decision_authority !== undefined &&
+    canonicalDigest(protocol.decision_authority) ===
+      canonicalDigest(SOLE_MAINTAINER_AUTHORITY);
+  if (soleMaintainerProtocol) {
+    for (const contract of [
+      {
+        active: catalog.status === "ACCEPTED",
+        kind: "CATALOG_ACCEPTED",
+        document: catalog,
+        envelope: catalog.review,
+        excluded: ["catalog_digest", "review"],
+        decision: "ACCEPTED",
+        approvedBy: catalog.review?.reviewed_by,
+        approvedAt: catalog.review?.reviewed_at,
+        label: `${label} catalog approval`,
+      },
+      {
+        active: protocol.status === "APPROVED",
+        kind: "PROTOCOL_APPROVED",
+        document: protocol,
+        envelope: protocol.approval,
+        excluded: ["protocol_digest", "approval"],
+        decision: "APPROVED",
+        approvedBy: protocol.approval?.approved_by,
+        approvedAt: protocol.approval?.approved_at,
+        label: `${label} protocol approval`,
+      },
+      {
+        active: candidate.approval?.status === "APPROVED",
+        kind: "CANDIDATE_APPROVED",
+        document: candidate,
+        envelope: candidate.approval,
+        excluded: ["candidate_scope_manifest_id", "manifest_digest", "approval"],
+        decision: "APPROVED",
+        approvedBy: candidate.approval?.approved_by,
+        approvedAt: candidate.approval?.approved_at,
+        label: `${label} candidate approval`,
+      },
+    ]) {
+      if (!contract.active) continue;
+      invariant(
+        isSha256(contract.envelope?.signed_payload_digest) &&
+          isSha256(contract.envelope?.approval_proof_digest),
+        `${contract.label} proof fields are incomplete.`,
+      );
+      const verified = verifyTrustedProof(root, {
+        kind: contract.kind,
+        payloadDigest: contract.envelope.signed_payload_digest,
+        payloadBytes: canonicalPayloadBytes(contract.document, contract.excluded),
+        proofDigest: contract.envelope.approval_proof_digest,
+        expectedDecision: contract.decision,
+      });
+      invariant(
+        contract.approvedBy === verified.actor &&
+          contract.envelope.approver_role_version === verified.roleVersion &&
+          new Date(contract.approvedAt).toISOString() === verified.decisionAt,
+        `${contract.label} does not match its verified maintainer decision.`,
+      );
+    }
+  }
+
   return { specManifest, catalog, protocol, candidate };
 };
 
@@ -205,6 +275,37 @@ export const checkpointStateFromDocument = (checkpoint) => ({
   registry_digests: checkpoint.registry_digests,
   record_counts: checkpoint.record_counts,
 });
+
+const checkpointRootPayload = (checkpoint) => ({
+  sequence: checkpoint.sequence,
+  created_at: checkpoint.created_at,
+  previous: checkpoint.previous,
+  ...checkpointStateFromDocument(checkpoint),
+});
+
+const verifyCheckpointTrust = (root, checkpoint, { bundlePath } = {}) => {
+  const verified = verifyTrustedProof(root, {
+    kind: "CHECKPOINT_ROOT",
+    payloadDigest: checkpoint.registry_root_digest,
+    payloadBytes: canonicalPayloadBytes(checkpointRootPayload(checkpoint)),
+    proofDigest: checkpoint.signature?.proof_digest,
+    bundlePath,
+    expectedDecision: "VERIFIED",
+  });
+  invariant(
+    checkpoint.signature?.signer === verified.signer &&
+      checkpoint.signature?.signature === verified.signatureValue,
+    "Checkpoint signature envelope does not match the verified Sigstore bundle.",
+  );
+  invariant(
+    checkpoint.external_anchor?.provider === verified.anchor.provider &&
+      checkpoint.external_anchor?.reference === verified.anchor.reference &&
+      new Date(checkpoint.external_anchor?.anchored_at).toISOString() ===
+        verified.anchor.anchoredAt,
+    "Checkpoint external anchor does not match the verified Rekor entry.",
+  );
+  return verified;
+};
 
 const previousCheckpointReference = (checkpoint) =>
   checkpoint
@@ -323,6 +424,33 @@ export function loadCheckpointChain(root) {
         `Evidence ${evidence.evidence_id}`,
         historical.protocol.privacy?.forbidden_public_fields ?? [],
       );
+      validateEvidenceProducer(root, evidence.producer);
+      invariant(
+        evidence.attestation?.status === "VERIFIED" &&
+          evidence.attestation?.signed_payload_digest === evidence.manifest_digest &&
+          isSha256(evidence.attestation?.proof_digest),
+        `Evidence ${evidence.evidence_id} is not cryptographically attested.`,
+      );
+      const verifiedEvidence = verifyTrustedProof(root, {
+        kind: "EVIDENCE_VERIFIED",
+        payloadDigest: evidence.manifest_digest,
+        payloadBytes: canonicalPayloadBytes(evidence, [
+          "evidence_id",
+          "manifest_digest",
+          "record_digest",
+          "attestation",
+          "signature",
+        ]),
+        proofDigest: evidence.attestation.proof_digest,
+        expectedDecision: "VERIFIED",
+      });
+      invariant(
+        evidence.attestation.attested_by === verifiedEvidence.signer &&
+          new Date(evidence.attestation.attested_at).toISOString() ===
+            verifiedEvidence.attestedAt &&
+          evidence.producer.identity !== verifiedEvidence.signer,
+        `Evidence ${evidence.evidence_id} attestation envelope does not match its verified proof.`,
+      );
       return [
         evidence.evidence_id,
         {
@@ -353,6 +481,37 @@ export function loadCheckpointChain(root) {
       `Gate ${record.record_id ?? "record"}`,
       historical.protocol.privacy?.forbidden_public_fields ?? [],
     );
+    if (["PASS", "ACCEPTED_FALLBACK", "FAIL"].includes(record.result)) {
+      const kind = {
+        PASS: "GATE_PASS",
+        ACCEPTED_FALLBACK: "GATE_ACCEPTED_FALLBACK",
+        FAIL: "GATE_FAIL",
+      }[record.result];
+      invariant(
+        isSha256(record.approval_payload_digest) &&
+          isSha256(record.approval_proof_digest),
+        `Gate ${record.record_id ?? "record"} trust proof fields are incomplete.`,
+      );
+      const verifiedGate = verifyTrustedProof(root, {
+        kind,
+        payloadDigest: record.approval_payload_digest,
+        payloadBytes: canonicalPayloadBytes(record, [
+          "record_id",
+          "record_digest",
+          "approval_payload_digest",
+          "approval_proof_digest",
+        ]),
+        proofDigest: record.approval_proof_digest,
+        expectedDecision: record.result,
+      });
+      invariant(
+        record.approved_by === verifiedGate.actor &&
+          record.approver_role_version === verifiedGate.roleVersion &&
+          Date.parse(verifiedGate.decisionAt) >=
+            Math.max(Date.parse(record.approved_at), Date.parse(record.decided_at)),
+        `Gate ${record.record_id ?? "record"} decision does not match its verified maintainer proof.`,
+      );
+    }
     invariant(
       record.criteria_version === historical.protocol.protocol_version,
       `Gate ${record.record_id ?? "record"} criteria version does not match its protocol snapshot.`,
@@ -609,7 +768,8 @@ export function loadCheckpointChain(root) {
         typeof checkpoint.signature.signer === "string" &&
           checkpoint.signature.signer.length > 0 &&
           typeof checkpoint.signature.signature === "string" &&
-          checkpoint.signature.signature.length > 0,
+          checkpoint.signature.signature.length > 0 &&
+          isSha256(checkpoint.signature.proof_digest),
         `Verified checkpoint signature is incomplete at ${checkpoint.checkpoint_id}.`,
       );
     }
@@ -623,6 +783,11 @@ export function loadCheckpointChain(root) {
         checkpoint.external_anchor?.status,
       ),
       `Invalid checkpoint anchor status at ${checkpoint.checkpoint_id}.`,
+    );
+    invariant(
+      (checkpoint.signature.status === "VERIFIED_TRUSTED_SIGNER") ===
+        (checkpoint.external_anchor.status === "VERIFIED_EXTERNAL_ANCHOR"),
+      `Checkpoint signature and external anchor must be verified together at ${checkpoint.checkpoint_id}.`,
     );
     if (checkpoint.external_anchor.status === "VERIFIED_EXTERNAL_ANCHOR") {
       invariant(
@@ -639,6 +804,11 @@ export function loadCheckpointChain(root) {
           Date.parse(checkpoint.created_at),
         `Checkpoint was anchored before creation at ${checkpoint.checkpoint_id}.`,
       );
+      invariant(
+        checkpoint.signature.status === "VERIFIED_TRUSTED_SIGNER",
+        `Checkpoint anchor cannot be verified without its matching signature at ${checkpoint.checkpoint_id}.`,
+      );
+      verifyCheckpointTrust(root, checkpoint);
     }
   });
   return checkpoints;
@@ -806,6 +976,7 @@ export function createCurrentCheckpoint(
     createdAt = new Date().toISOString(),
     persist = true,
     trustRequest,
+    trustVerifier = verifyCheckpointTrust,
   } = {},
 ) {
   const checkpoints = loadCheckpointChain(root);
@@ -891,7 +1062,8 @@ export function createCurrentCheckpoint(
       typeof normalizedSignature.signer === "string" &&
         normalizedSignature.signer.length > 0 &&
         typeof normalizedSignature.signature === "string" &&
-        normalizedSignature.signature.length > 0,
+        normalizedSignature.signature.length > 0 &&
+        isSha256(normalizedSignature.proof_digest),
       "Verified checkpoint signature is incomplete.",
     );
   }
@@ -923,6 +1095,23 @@ export function createCurrentCheckpoint(
       Date.parse(normalizedExternalAnchor.anchored_at) >= Date.parse(createdAt),
       "Checkpoint external anchor cannot predate checkpoint creation.",
     );
+  }
+  invariant(
+    (normalizedSignature.status === "VERIFIED_TRUSTED_SIGNER") ===
+      (normalizedExternalAnchor.status === "VERIFIED_EXTERNAL_ANCHOR"),
+    "Checkpoint signature and external anchor must be verified together.",
+  );
+
+  if (normalizedSignature.status === "VERIFIED_TRUSTED_SIGNER") {
+    trustVerifier(root, {
+      sequence,
+      created_at: createdAt,
+      previous,
+      ...state,
+      registry_root_digest: registryRootDigest,
+      signature: normalizedSignature,
+      external_anchor: normalizedExternalAnchor,
+    });
   }
 
   const checkpoint = addressDocument(
@@ -969,7 +1158,13 @@ export function createCheckpointTrustRequest(
   return checkpointTrustRequestFromDocument(checkpoint);
 }
 
-export function finalizeCheckpointTrustEnvelope(root, trustEnvelope) {
+export function finalizeCheckpointTrustEnvelope(
+  root,
+  trustEnvelope,
+  dependencyOverrides = {},
+) {
+  const verify = dependencyOverrides.verifyTrustedProof ?? verifyTrustedProof;
+  const importProof = dependencyOverrides.importTrustedProof ?? importTrustedProof;
   invariant(
     trustEnvelope && typeof trustEnvelope === "object" && !Array.isArray(trustEnvelope),
     "Checkpoint trust envelope must be an object.",
@@ -984,13 +1179,75 @@ export function finalizeCheckpointTrustEnvelope(root, trustEnvelope) {
     trustEnvelope.prepare_request,
     "Checkpoint trust envelope must include the original prepare_request.",
   );
+  invariant(
+    typeof trustEnvelope.proof_bundle_path === "string" &&
+      trustEnvelope.proof_bundle_path.length > 0,
+    "Checkpoint trust envelope must include proof_bundle_path.",
+  );
+  invariant(
+    trustEnvelope.signature === undefined && trustEnvelope.external_anchor === undefined,
+    "Checkpoint trust envelope cannot supply self-asserted signature or anchor fields.",
+  );
+
+  const { checkpoint: preparedCheckpoint } = createCurrentCheckpoint(root, {
+    force: true,
+    createdAt: trustEnvelope.prepare_request.created_at,
+    persist: false,
+    trustRequest: trustEnvelope.prepare_request,
+  });
+  const verified = verify(root, {
+    kind: "CHECKPOINT_ROOT",
+    payloadDigest: preparedCheckpoint.registry_root_digest,
+    payloadBytes: canonicalPayloadBytes(checkpointRootPayload(preparedCheckpoint)),
+    bundlePath: trustEnvelope.proof_bundle_path,
+    expectedDecision: "VERIFIED",
+  });
+  invariant(
+    verified?.decision === "VERIFIED" &&
+      verified.actor === SOLE_MAINTAINER_AUTHORITY.identity &&
+      verified.roleVersion === SOLE_MAINTAINER_AUTHORITY.role_version &&
+      verified.signer === TRUSTED_WORKLOAD_IDENTITY &&
+      typeof verified.signatureValue === "string" &&
+      verified.signatureValue.length >= 16 &&
+      isSha256(verified.proofDigest) &&
+      typeof verified.anchor?.provider === "string" &&
+      verified.anchor.provider.length > 0 &&
+      typeof verified.anchor.reference === "string" &&
+      verified.anchor.reference.length > 0 &&
+      typeof verified.anchor.anchoredAt === "string" &&
+      Number.isFinite(Date.parse(verified.anchor.anchoredAt)),
+    "Checkpoint trust verifier returned an incomplete or unauthorized result.",
+  );
+  const imported = importProof(
+    root,
+    trustEnvelope.proof_bundle_path,
+    verified.proofDigest,
+  );
+  invariant(
+    imported?.proofDigest === verified.proofDigest,
+    "Imported checkpoint trust proof does not match the verified bundle.",
+  );
 
   return createCurrentCheckpoint(root, {
     force: true,
-    signature: trustEnvelope.signature,
-    externalAnchor: trustEnvelope.external_anchor,
+    signature: {
+      status: "VERIFIED_TRUSTED_SIGNER",
+      signer: verified.signer,
+      signed_payload_digest: preparedCheckpoint.registry_root_digest,
+      signature: verified.signatureValue,
+      proof_digest: verified.proofDigest,
+    },
+    externalAnchor: {
+      status: "VERIFIED_EXTERNAL_ANCHOR",
+      provider: verified.anchor.provider,
+      reference: verified.anchor.reference,
+      anchored_at: verified.anchor.anchoredAt,
+      anchored_payload_digest: preparedCheckpoint.registry_root_digest,
+    },
     createdAt: trustEnvelope.prepare_request.created_at,
     persist: true,
     trustRequest: trustEnvelope.prepare_request,
+    trustVerifier:
+      dependencyOverrides.verifyCheckpointTrust ?? verifyCheckpointTrust,
   });
 }

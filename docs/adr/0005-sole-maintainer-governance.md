@@ -31,7 +31,7 @@ RoleFox v0.1 采用 `SOLE_MAINTAINER` 治理模型：
 - 治理与独立开发者现实一致，唯一维护者可以在证据充分时作出继续、收窄或停止决定。
 - 项目主动放弃人员层面的职责分离，因此必须公开保留这一限制；机器签名只能证明来源和完整性，不能消除维护者的选择偏差。
 - verifier 必须按历史 Protocol 分派治理语义：旧 Protocol 继续验证不同身份批准，新 `SOLE_MAINTAINER` Protocol 只接受固定维护者身份和角色版本。
-- 当前 Catalog、Protocol、Candidate 仍保持 pending，Gate 仍保持 `BLOCKED_NOT_STARTED`。本 ADR 只接受治理模型，不自动伪造任何正式签名或研究 Evidence。
+- 本 ADR 获接受时，Catalog、Protocol、Candidate 仍为 pending，Gate 为 `BLOCKED_NOT_STARTED`。本 ADR 只接受治理模型，不自动伪造任何正式签名或研究 Evidence；此后的实时状态必须由登记链与 `pnpm verification:ready` 推导。
 
 ## 变更控制
 

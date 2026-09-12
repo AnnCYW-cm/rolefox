@@ -1,0 +1,42 @@
+map_version,evidence_kind,research_scope_id,target_field,controlled_source,aggregation_rule
+pre-w1-evidence-map-v0.1,ALL,ALL,_template_notice,official-template-copy,Delete from the controlled copy before prepare and never edit the repository baseline
+pre-w1-evidence-map-v0.1,ALL,ALL,schema_version|evidence_type|evidence_kind|research_scope_id|candidate_artifact_kind|subject_refs,official-template,Preserve frozen template constants exactly
+pre-w1-evidence-map-v0.1,ALL,ALL,evidence_id|manifest_digest|record_digest,evidence-writer,Remove before prepare and let the writer generate them
+pre-w1-evidence-map-v0.1,ALL,ALL,producer.identity,current-operator-allowlist,Use the stable identity of the operator who produced the aggregate
+pre-w1-evidence-map-v0.1,ALL,ALL,producer.identity_kind|producer.allowlist_version,current-operator-allowlist,Preserve APPROVED_OPERATOR and bind the current versioned allowlist
+pre-w1-evidence-map-v0.1,ALL,ALL,attestation,evidence-prepare-and-finalize,Leave PENDING for prepare then attach only a verifier-accepted detached attestation; it is not a Gate decision
+pre-w1-evidence-map-v0.1,ALL,ALL,run_id,research-run-freeze,Use the single frozen run_id
+pre-w1-evidence-map-v0.1,ALL,ALL,started_at,cohort-log-or-replay-index,Use the earliest valid included session or replay started_at after every required approval
+pre-w1-evidence-map-v0.1,ALL,ALL,completed_at,aggregation-run,Use a timestamp after all source artifacts are frozen and before attestation
+pre-w1-evidence-map-v0.1,ALL,ALL,candidate_artifact_digest,current-approved-candidate,Use the digest of the exact frozen SPEC_OR_EXPERIMENT artifact
+pre-w1-evidence-map-v0.1,ALL,ALL,candidate_scope_manifest_ref.candidate_scope_manifest_id|candidate_scope_manifest_ref.manifest_digest,current-approved-candidate,Copy the exact immutable Candidate ID and digest bound in the run freeze
+pre-w1-evidence-map-v0.1,ALL,ALL,spec_manifest_ref.manifest_digest|spec_manifest_ref.normative_set_digest,current-approved-spec-manifest,Copy the exact current Spec manifest and normative set digests
+pre-w1-evidence-map-v0.1,ALL,ALL,required_release_scope_catalog_ref.catalog_digest,current-approved-catalog,Copy the exact accepted Catalog digest bound in the run freeze
+pre-w1-evidence-map-v0.1,ALL,ALL,research_protocol_ref.protocol_digest,current-approved-protocol,Copy the exact approved protocol digest bound in the run freeze
+pre-w1-evidence-map-v0.1,ALL,ALL,deidentification.scheme|deidentification.mapping_location,official-template,Preserve RANDOM_COHORT_LOCAL_SURROGATE and CONTROLLED_ARTIFACT_STORE_ONLY
+pre-w1-evidence-map-v0.1,ALL,ALL,deidentification.scheme_version,research-run-freeze,Use pre-w1-random-cohort-surrogate-v0.1
+pre-w1-evidence-map-v0.1,ALL,ALL,artifact_refs,controlled-artifact-index,Map every frozen support bundle to artifact_id sha256 media_type and controlled-store-locator HMAC
+pre-w1-evidence-map-v0.1,ALL,ALL,measurements[0].calculation_version,research-run-freeze,Use pre-w1-coding-v0.1
+pre-w1-evidence-map-v0.1,ALL,ALL,criterion_results[*].calculation_version,research-run-freeze,Use pre-w1-coding-v0.1
+pre-w1-evidence-map-v0.1,ALL,ALL,criterion_results[*].result,derived-measurements,Calculate every criterion as PASS FAIL or INCONCLUSIVE without manual override
+pre-w1-evidence-map-v0.1,ALL,ALL,result,criterion-results,Set PASS only if every required criterion passes; otherwise preserve FAIL or INCONCLUSIVE
+pre-w1-evidence-map-v0.1,PAIN_INTERVIEWS,pain_interviews,measurements[0].cohort_denominator,cohort-log,Count every valid pain denominator row including non-qualified completions
+pre-w1-evidence-map-v0.1,PAIN_INTERVIEWS,pain_interviews,measurements[0].participant_surrogates,cohort-log,List exactly the pain denominator surrogates with no duplicates
+pre-w1-evidence-map-v0.1,PAIN_INTERVIEWS,pain_interviews,measurements[0].qualified_n,participant-observations,Count observations satisfying both frozen pain thresholds
+pre-w1-evidence-map-v0.1,PAIN_INTERVIEWS,pain_interviews,measurements[0].qualified_participant_surrogates,participant-observations,List exactly the qualified subset of denominator surrogates
+pre-w1-evidence-map-v0.1,PAIN_INTERVIEWS,pain_interviews,measurements[0].eligibility_and_exclusion_policy_digest,research-run-freeze,Use the rolefox-sha256-lines-v1 digest of the frozen protocol recruitment and coding policy inputs
+pre-w1-evidence-map-v0.1,PAIN_INTERVIEWS,pain_interviews,measurements[0].opportunities_per_week_minimum|measurements[0].repetitive_work_rank_maximum,official-template,Preserve constants 10 and 3 exactly
+pre-w1-evidence-map-v0.1,PAIN_INTERVIEWS,pain_interviews,criterion_results,derived-measurement,PASS only when denominator is 6..8 and qualified_n is at least 5
+pre-w1-evidence-map-v0.1,TARGET_CHANNEL_FEASIBILITY,target_channel_feasibility,measurements[0].cohort_denominator,cohort-log,Count every consented completed target-channel denominator row independently from pain
+pre-w1-evidence-map-v0.1,TARGET_CHANNEL_FEASIBILITY,target_channel_feasibility,measurements[0].participant_surrogates,cohort-log,List exactly the target-channel denominator surrogates with no cross-cohort IDs
+pre-w1-evidence-map-v0.1,TARGET_CHANNEL_FEASIBILITY,target_channel_feasibility,measurements[0].eligible_n,participant-observations,Count only observations where all five eligibility fields are YES
+pre-w1-evidence-map-v0.1,TARGET_CHANNEL_FEASIBILITY,target_channel_feasibility,measurements[0].eligibility_refs,participant-observations,List each eligible surrogate with SHA-256 of its frozen deidentified observation bytes
+pre-w1-evidence-map-v0.1,TARGET_CHANNEL_FEASIBILITY,target_channel_feasibility,measurements[0].eligibility_and_exclusion_policy_digest,research-run-freeze,Use the rolefox-sha256-lines-v1 digest of the frozen protocol recruitment and coding policy inputs
+pre-w1-evidence-map-v0.1,TARGET_CHANNEL_FEASIBILITY,target_channel_feasibility,criterion_results,derived-measurement,PASS only when eligible_n is at least 5
+pre-w1-evidence-map-v0.1,RULES_REPLAY,rules_replay,measurements[0].qualified_participant_n,replay-index,Count unique replay participants and require each in pain qualified surrogates
+pre-w1-evidence-map-v0.1,RULES_REPLAY,rules_replay,measurements[0].jobs_per_participant,job-dataset-freeze,Constant 20 and verify every frozen manifest has exactly 20 unique jobs
+pre-w1-evidence-map-v0.1,RULES_REPLAY,rules_replay,measurements[0].dataset_frozen,job-dataset-freeze,TRUE only when every dataset digest was frozen before replay_started_at and stayed unchanged
+pre-w1-evidence-map-v0.1,RULES_REPLAY,rules_replay,measurements[0].participant_dataset_refs,job-dataset-freeze,List participant_surrogate plus frozen manifest SHA-256 as dataset_digest plus jobs_count 20
+pre-w1-evidence-map-v0.1,RULES_REPLAY,rules_replay,measurements[0].explicit_rejection_reasons_covered,participant-observations.job_decisions,Use ALL PARTIAL NONE or UNKNOWN exactly as coding rubric defines
+pre-w1-evidence-map-v0.1,RULES_REPLAY,rules_replay,measurements[0].remaining_ambiguity,participant-observations.job_decisions,Use FINITE_EXCEPTION_CATEGORIES UNBOUNDED or UNKNOWN exactly as coding rubric defines
+pre-w1-evidence-map-v0.1,RULES_REPLAY,rules_replay,criterion_results,derived-measurement,PASS only with at least 5 pain-qualified participants and every frozen threshold coverage and ambiguity condition met

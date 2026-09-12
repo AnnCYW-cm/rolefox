@@ -30,6 +30,12 @@ import {
 } from "./lib.mjs";
 import { assertNoSensitivePublicData } from "./privacy.mjs";
 import { SCHEMA_NAMES, validateSchema } from "./schema.mjs";
+import {
+  canonicalPayloadBytes,
+  importTrustedProof,
+  validateEvidenceProducer,
+  verifyTrustedProof,
+} from "./trust.mjs";
 
 const EVIDENCE_KINDS = new Map([
   ["PAIN_INTERVIEWS", "pain_interviews"],
@@ -306,6 +312,7 @@ function validateEvidenceBody(evidence, protocol) {
     "producer.identity_kind is invalid.",
   );
   requireString(evidence.producer.allowlist_version, "producer.allowlist_version");
+  validateEvidenceProducer(root, evidence.producer);
 
   const subjectRefs = requireArray(evidence.subject_refs, "subject_refs");
   invariant(subjectRefs.length > 0, "subject_refs must not be empty.");
@@ -639,11 +646,30 @@ function validateMeasurement(evidence, protocol) {
   }
 }
 
-function validateFormalAttestation(evidence) {
+function validatePendingAttestation(evidence) {
+  const attestation = requireObject(evidence.attestation, "attestation");
   invariant(
-    TRUST_VERIFICATION_STATUS === "IMPLEMENTED",
-    "Cannot finalize Evidence while cryptographic trust verification is not implemented.",
+    canonicalDigest(Object.keys(attestation).sort()) === canonicalDigest(ATTESTATION_KEYS),
+    `attestation must contain exactly: ${ATTESTATION_KEYS.join(", ")}.`,
   );
+  invariant(
+    attestation.status === "PENDING",
+    "Prepared Evidence attestation.status must be PENDING.",
+  );
+  for (const field of [
+    "attested_by",
+    "attested_at",
+    "signed_payload_digest",
+    "proof_digest",
+  ]) {
+    invariant(
+      attestation[field] === null,
+      `Prepared Evidence attestation.${field} must be null.`,
+    );
+  }
+}
+
+function validateFormalAttestation(evidence, preverified) {
   const attestation = requireObject(evidence.attestation, "attestation");
   invariant(
     canonicalDigest(Object.keys(attestation).sort()) === canonicalDigest(ATTESTATION_KEYS),
@@ -666,6 +692,30 @@ function validateFormalAttestation(evidence) {
     attestedAt >= Date.parse(evidence.completed_at),
     "Evidence attestation predates evidence completion.",
   );
+  invariant(
+    TRUST_VERIFICATION_STATUS === "IMPLEMENTED",
+    "Cannot finalize Evidence while cryptographic trust verification is not implemented.",
+  );
+  const verified = preverified ?? verifyTrustedProof(root, {
+    kind: "EVIDENCE_VERIFIED",
+    payloadDigest: evidence.manifest_digest,
+    payloadBytes: canonicalPayloadBytes(evidence, [
+      "evidence_id",
+      "manifest_digest",
+      "record_digest",
+      "attestation",
+      "signature",
+    ]),
+    proofDigest: attestation.proof_digest,
+    expectedDecision: "VERIFIED",
+  });
+  invariant(
+    attestation.attested_by === verified.signer &&
+      new Date(attestation.attested_at).toISOString() === verified.attestedAt &&
+      evidence.producer.identity !== verified.signer,
+    "Evidence attestation does not match the verified workload signer and Rekor timestamp.",
+  );
+  return verified;
 }
 
 function requireCollectionApprovals(context) {
@@ -740,6 +790,30 @@ function requireCollectionApprovals(context) {
       contract.envelope?.approval_proof_digest,
       `${contract.label}.approval_proof_digest`,
     );
+    const kind = {
+      "catalog.review": "CATALOG_ACCEPTED",
+      "protocol.approval": "PROTOCOL_APPROVED",
+      "candidate.approval": "CANDIDATE_APPROVED",
+    }[contract.label];
+    const expectedDecision = kind === "CATALOG_ACCEPTED" ? "ACCEPTED" : "APPROVED";
+    const verified = verifyTrustedProof(root, {
+      kind,
+      payloadDigest: contract.envelope.signed_payload_digest,
+      payloadBytes: canonicalPayloadBytes(contract.document, [
+        ...contract.omittedFields,
+        contract.envelopeField,
+      ]),
+      proofDigest: contract.envelope.approval_proof_digest,
+      expectedDecision,
+    });
+    const approvedBy = contract.envelope.reviewed_by ?? contract.envelope.approved_by;
+    const approvedAt = contract.envelope.reviewed_at ?? contract.envelope.approved_at;
+    invariant(
+      approvedBy === verified.actor &&
+        contract.envelope.approver_role_version === verified.roleVersion &&
+        new Date(approvedAt).toISOString() === verified.decisionAt,
+      `${contract.label} does not match its cryptographically verified maintainer decision.`,
+    );
   }
   invariant(
     context.candidate.collection_guard === "APPROVED_FOR_PROTOCOL_BOUND_COLLECTION",
@@ -751,8 +825,18 @@ function requireCollectionApprovals(context) {
   );
 }
 
+function assertEvidenceContextUnchanged(expectedDigest, phase) {
+  const current = readCurrentContext();
+  requireCollectionApprovals(current);
+  invariant(
+    canonicalDigest(current) === expectedDigest,
+    `STALE_VERIFICATION_STATE: Evidence approval context changed ${phase}.`,
+  );
+}
+
 function parseArguments(argv) {
   let inputValue;
+  let proofBundlePath;
   let prepare = false;
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
@@ -764,12 +848,23 @@ function parseArguments(argv) {
       inputValue = argv[index + 1];
       invariant(inputValue !== undefined, "--input requires a JSON file, '-' for stdin, or inline JSON.");
       index += 1;
+    } else if (argument === "--proof-bundle") {
+      invariant(proofBundlePath === undefined, "--proof-bundle may only be supplied once.");
+      proofBundlePath = argv[index + 1];
+      invariant(proofBundlePath !== undefined, "--proof-bundle requires a file path.");
+      index += 1;
     } else {
       throw new Error(`Unknown argument: ${argument}`);
     }
   }
-  invariant(inputValue !== undefined, "Usage: append-evidence.mjs --input <json-file|inline-json|-> [--prepare]");
-  return { inputValue, prepare };
+  invariant(inputValue !== undefined, "Usage: append-evidence.mjs --input <json-file|inline-json|-> [--prepare | --proof-bundle <bundle.json>]");
+  invariant(
+    prepare ? proofBundlePath === undefined : typeof proofBundlePath === "string",
+    prepare
+      ? "--prepare cannot be combined with --proof-bundle."
+      : "Evidence finalization requires --proof-bundle.",
+  );
+  return { inputValue, prepare, proofBundlePath };
 }
 
 function readInput(inputValue) {
@@ -819,12 +914,13 @@ function main() {
   assertSafeRepositoryStorage(root, Object.values(PATHS));
   const argv = process.argv.slice(2);
   if (argv[0] === "--") argv.shift();
-  const { inputValue, prepare } = parseArguments(argv);
+  const { inputValue, prepare, proofBundlePath } = parseArguments(argv);
   const input = readInput(inputValue);
 
   if (prepare) {
     const context = readCurrentContext();
     const evidence = prepareEvidence(input, context);
+    validatePendingAttestation(evidence);
     requireCollectionApprovals(context);
     process.stdout.write(`${JSON.stringify({
       schema_version: "rolefox.evidence-attestation-request.v1",
@@ -838,8 +934,41 @@ function main() {
   withVerificationLock(root, "append-evidence", () => {
     const context = readCurrentContext();
     requireCollectionApprovals(context);
-    const evidence = prepareEvidence(input, context);
-    validateFormalAttestation(evidence);
+    const contextDigest = canonicalDigest(context);
+    const preparedEvidence = prepareEvidence(input, context);
+    validatePendingAttestation(preparedEvidence);
+    const verified = verifyTrustedProof(root, {
+      kind: "EVIDENCE_VERIFIED",
+      payloadDigest: preparedEvidence.manifest_digest,
+      payloadBytes: canonicalPayloadBytes(preparedEvidence, [
+        "evidence_id",
+        "manifest_digest",
+        "record_digest",
+        "attestation",
+        "signature",
+      ]),
+      bundlePath: proofBundlePath,
+      expectedDecision: "VERIFIED",
+    });
+    invariant(
+      Date.parse(verified.attestedAt) >= Date.parse(preparedEvidence.completed_at),
+      "Evidence trust proof predates evidence completion.",
+    );
+    const evidence = addressEvidenceDocument({
+      ...preparedEvidence,
+      attestation: {
+        status: "VERIFIED",
+        attested_by: verified.signer,
+        attested_at: verified.attestedAt,
+        signed_payload_digest: preparedEvidence.manifest_digest,
+        proof_digest: verified.proofDigest,
+      },
+    });
+    validateFormalAttestation(evidence, verified);
+    assertEvidenceContextUnchanged(contextDigest, "during trust verification");
+    importTrustedProof(root, proofBundlePath, verified.proofDigest);
+
+    assertEvidenceContextUnchanged(contextDigest, "during trust proof import");
 
     const filePath = path.join(
       absolute(PATHS.evidenceDirectory),

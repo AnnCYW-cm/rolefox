@@ -1,0 +1,67 @@
+name: Verification trust attestation
+
+on:
+  workflow_dispatch:
+    inputs:
+      kind:
+        description: Exact RoleFox decision or attestation kind
+        required: true
+        type: choice
+        options:
+          - CATALOG_ACCEPTED
+          - PROTOCOL_APPROVED
+          - CANDIDATE_APPROVED
+          - EVIDENCE_VERIFIED
+          - GATE_PASS
+          - GATE_ACCEPTED_FALLBACK
+          - GATE_FAIL
+          - CHECKPOINT_ROOT
+      payload_digest:
+        description: SHA-256 of the canonical target payload bytes
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  attest:
+    runs-on: ubuntu-24.04
+    environment: verification-trust
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    env:
+      ROLEFOX_RUNNER_ENVIRONMENT: ${{ runner.environment }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+      - id: request
+        name: Validate protected context and create predicate
+        env:
+          ROLEFOX_KIND: ${{ inputs.kind }}
+          ROLEFOX_PAYLOAD_DIGEST: ${{ inputs.payload_digest }}
+          ROLEFOX_OUTPUT_DIRECTORY: ${{ runner.temp }}
+        run: >-
+          node scripts/verification/create-trust-request.mjs
+          --kind "$ROLEFOX_KIND"
+          --payload-digest "$ROLEFOX_PAYLOAD_DIGEST"
+          --output-directory "$ROLEFOX_OUTPUT_DIRECTORY"
+      - id: attest
+        name: Sign canonical payload digest
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
+        with:
+          subject-name: ${{ steps.request.outputs.subject_name }}
+          subject-digest: sha256:${{ steps.request.outputs.payload_digest }}
+          predicate-type: https://rolefox.dev/attestations/verification/v1
+          predicate-path: ${{ steps.request.outputs.predicate_path }}
+      - name: Upload raw Sigstore bundle
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ${{ steps.request.outputs.artifact_name }}
+          path: ${{ steps.attest.outputs.bundle-path }}
+          if-no-files-found: error
+          retention-days: 90

@@ -34,6 +34,12 @@ import {
 } from "./lib.mjs";
 import { assertNoSensitivePublicData } from "./privacy.mjs";
 import { SCHEMA_NAMES, validateSchema } from "./schema.mjs";
+import {
+  canonicalPayloadBytes,
+  importTrustedProof,
+  validateEvidenceProducer,
+  verifyTrustedProof,
+} from "./trust.mjs";
 
 const PRE_W1_SCOPE_ID = "pre_w1_problem_and_rules_research";
 const EVIDENCE_KINDS = new Map([
@@ -296,6 +302,29 @@ function loadEvidence() {
   return evidenceById;
 }
 
+function gateMutationStateDigest(context, records, evidenceById) {
+  return canonicalDigest({
+    current_context: context,
+    gate_registry_prefix: records,
+    evidence_manifests: [...evidenceById.entries()].map(
+      ([evidenceId, document]) => ({ evidence_id: evidenceId, document }),
+    ),
+  });
+}
+
+function assertGateMutationStateUnchanged(expectedDigest, phase) {
+  const context = readCurrentContext();
+  const registryPath = absolute(PATHS.gateRegistry);
+  const records = parseJsonLines(registryPath);
+  invariant(records.length > 0, "Gate registry must remain bootstrapped while finalizing a decision.");
+  validateGateChains(records);
+  const evidenceById = loadEvidence();
+  invariant(
+    gateMutationStateDigest(context, records, evidenceById) === expectedDigest,
+    `STALE_VERIFICATION_STATE: Gate inputs changed ${phase}.`,
+  );
+}
+
 function normalizeEvidenceReferences(input, evidenceById, context) {
   const references = requireArray(input ?? [], "evidence_manifest_refs");
   const normalized = [];
@@ -356,8 +385,28 @@ function validateAttestation(evidence) {
     `Evidence ${evidence.evidence_id} producer.identity_kind is invalid.`,
   );
   requireString(producer.allowlist_version, `Evidence ${evidence.evidence_id} producer.allowlist_version`);
+  validateEvidenceProducer(root, producer);
   invariant(attestation.attested_by !== producer.identity, `Evidence ${evidence.evidence_id} is self-attested.`);
   invariant(attestedAt >= requireIsoTimestamp(evidence.completed_at, `Evidence ${evidence.evidence_id} completed_at`), `Evidence ${evidence.evidence_id} was attested before completion.`);
+  const verified = verifyTrustedProof(root, {
+    kind: "EVIDENCE_VERIFIED",
+    payloadDigest: evidence.manifest_digest,
+    payloadBytes: canonicalPayloadBytes(evidence, [
+      "evidence_id",
+      "manifest_digest",
+      "record_digest",
+      "attestation",
+      "signature",
+    ]),
+    proofDigest: attestation.proof_digest,
+    expectedDecision: "VERIFIED",
+  });
+  invariant(
+    attestation.attested_by === verified.signer &&
+      new Date(attestation.attested_at).toISOString() === verified.attestedAt &&
+      producer.identity !== verified.signer,
+    `Evidence ${evidence.evidence_id} attestation does not match its verified workload signer and Rekor timestamp.`,
+  );
 }
 
 function validatePassEvidenceBasics(evidence) {
@@ -639,6 +688,52 @@ function requireDecisionAuthorities(context) {
     context.candidate.approval.approver_role_version,
     "candidate.approval",
   );
+  for (const contract of [
+    {
+      kind: "CATALOG_ACCEPTED",
+      document: context.catalog,
+      envelope: context.catalog.review,
+      excluded: ["catalog_digest", "review"],
+      decision: "ACCEPTED",
+      approvedBy: context.catalog.review.reviewed_by,
+      approvedAt: context.catalog.review.reviewed_at,
+      label: "catalog.review",
+    },
+    {
+      kind: "PROTOCOL_APPROVED",
+      document: context.protocol,
+      envelope: context.protocol.approval,
+      excluded: ["protocol_digest", "approval"],
+      decision: "APPROVED",
+      approvedBy: context.protocol.approval.approved_by,
+      approvedAt: context.protocol.approval.approved_at,
+      label: "protocol.approval",
+    },
+    {
+      kind: "CANDIDATE_APPROVED",
+      document: context.candidate,
+      envelope: context.candidate.approval,
+      excluded: ["candidate_scope_manifest_id", "manifest_digest", "approval"],
+      decision: "APPROVED",
+      approvedBy: context.candidate.approval.approved_by,
+      approvedAt: context.candidate.approval.approved_at,
+      label: "candidate.approval",
+    },
+  ]) {
+    const verified = verifyTrustedProof(root, {
+      kind: contract.kind,
+      payloadDigest: contract.envelope.signed_payload_digest,
+      payloadBytes: canonicalPayloadBytes(contract.document, contract.excluded),
+      proofDigest: contract.envelope.approval_proof_digest,
+      expectedDecision: contract.decision,
+    });
+    invariant(
+      contract.approvedBy === verified.actor &&
+        contract.envelope.approver_role_version === verified.roleVersion &&
+        new Date(contract.approvedAt).toISOString() === verified.decisionAt,
+      `${contract.label} does not match its verified maintainer decision.`,
+    );
+  }
   invariant(
     context.candidate.collection_guard === "APPROVED_FOR_PROTOCOL_BOUND_COLLECTION",
     "Candidate collection guard is not approved and protocol-bound.",
@@ -860,6 +955,7 @@ function bindDecision(input, context, previous, evidenceById, { prepare = false 
 
 function parseArguments(argv) {
   let inputValue;
+  let proofBundlePath;
   let prepare = false;
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
@@ -871,15 +967,21 @@ function parseArguments(argv) {
       inputValue = argv[index + 1];
       invariant(inputValue !== undefined, "--input requires a JSON file, '-' for stdin, or inline JSON.");
       index += 1;
+    } else if (argument === "--proof-bundle") {
+      invariant(proofBundlePath === undefined, "--proof-bundle may only be supplied once.");
+      proofBundlePath = argv[index + 1];
+      invariant(proofBundlePath !== undefined, "--proof-bundle requires a file path.");
+      index += 1;
     } else {
       throw new Error(`Unknown argument: ${argument}`);
     }
   }
   invariant(
     inputValue !== undefined,
-    "Usage: append-gate.mjs --input <json-file|inline-json|-> [--prepare]",
+    "Usage: append-gate.mjs --input <json-file|inline-json|-> [--prepare | --proof-bundle <bundle.json>]",
   );
-  return { inputValue, prepare };
+  invariant(!prepare || proofBundlePath === undefined, "--prepare cannot be combined with --proof-bundle.");
+  return { inputValue, prepare, proofBundlePath };
 }
 
 function readInput(inputValue) {
@@ -896,7 +998,7 @@ function main() {
   assertSafeRepositoryStorage(root, Object.values(PATHS));
   const argv = process.argv.slice(2);
   if (argv[0] === "--") argv.shift();
-  const { inputValue, prepare } = parseArguments(argv);
+  const { inputValue, prepare, proofBundlePath } = parseArguments(argv);
   const input = readInput(inputValue);
 
   withVerificationLock(root, prepare ? "prepare-gate" : "append-gate", () => {
@@ -914,11 +1016,14 @@ function main() {
       record_digest: currentHead.record_digest,
     };
     const evidenceById = loadEvidence();
+    const mutationStateDigest = gateMutationStateDigest(context, records, evidenceById);
     invariant(
       !prepare || ["PASS", "FAIL"].includes(input.result),
       "--prepare is only defined for a PASS or FAIL decision.",
     );
-    const record = bindDecision(input, context, previous, evidenceById, { prepare });
+    let record = bindDecision(input, context, previous, evidenceById, {
+      prepare: prepare || ["PASS", "FAIL"].includes(input.result),
+    });
     if (prepare) {
       const preparedDecision = structuredClone(record);
       delete preparedDecision.record_id;
@@ -935,6 +1040,58 @@ function main() {
       invariant(
         TRUST_VERIFICATION_STATUS === "IMPLEMENTED",
         `Cannot append ${record.result} while cryptographic trust verification is not implemented.`,
+      );
+      invariant(
+        typeof proofBundlePath === "string" && proofBundlePath.length > 0,
+        `Appending ${record.result} requires --proof-bundle.`,
+      );
+      const kind = record.result === "PASS" ? "GATE_PASS" : "GATE_FAIL";
+      const verified = verifyTrustedProof(root, {
+        kind,
+        payloadDigest: record.approval_payload_digest,
+        payloadBytes: canonicalPayloadBytes(record, [
+          "record_id",
+          "record_digest",
+          "approval_payload_digest",
+          "approval_proof_digest",
+        ]),
+        bundlePath: proofBundlePath,
+        expectedDecision: record.result,
+      });
+      invariant(
+        record.approved_by === verified.actor &&
+          record.approver_role_version === verified.roleVersion,
+        "Gate decision identity or role does not match the verified maintainer proof.",
+      );
+      invariant(
+        Date.parse(verified.decisionAt) >=
+          Math.max(Date.parse(record.approved_at), Date.parse(record.decided_at)),
+        "Gate proof decision time predates the prepared Gate decision.",
+      );
+      const finalizedDecision = structuredClone(record);
+      delete finalizedDecision.record_id;
+      delete finalizedDecision.record_digest;
+      finalizedDecision.approval_proof_digest = verified.proofDigest;
+      record = bindDecision(
+        finalizedDecision,
+        context,
+        previous,
+        evidenceById,
+        { prepare: false },
+      );
+      assertGateMutationStateUnchanged(
+        mutationStateDigest,
+        "during trust verification",
+      );
+      importTrustedProof(root, proofBundlePath, verified.proofDigest);
+      assertGateMutationStateUnchanged(
+        mutationStateDigest,
+        "during trust proof import",
+      );
+    } else {
+      invariant(
+        proofBundlePath === undefined,
+        "BLOCKED Gate records cannot attach a trust proof bundle.",
       );
     }
     validateSchema(root, SCHEMA_NAMES.gate, record, "Gate Evidence Record");

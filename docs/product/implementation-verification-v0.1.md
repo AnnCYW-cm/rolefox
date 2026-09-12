@@ -3,7 +3,7 @@
 - 状态：Accepted Product and Release Verification Baseline
 - 版本：v0.1
 - 更新日期：2026-09-11
-- 当前实现状态：Pre-W1 最小控制面已建立绑定规范与 verifier 工具链的 Spec Manifest、Scope/Protocol 不可变快照、Candidate Manifest、两层内容寻址 Evidence、Gate writer/validator 与 Registry Checkpoint，但 catalog/protocol/candidate 审批、可信 proof verifier、外部锚点和真实 Gate 1 证据尚未完成，当前为 `BLOCKED_NOT_STARTED`；W1 的 BUILD/Runtime Binding、Case/Journey/Invariant registries 与完整 `release:check` 尚未建立，因此 254 个 Case 均保持 `NOT_VERIFIED`，v0.1 发布门关闭
+- 当前实现状态：Pre-W1 控制面已建立绑定规范与 verifier 工具链的 Spec Manifest、Scope/Protocol 不可变快照、Candidate Manifest、两层内容寻址 Evidence、Gate writer/validator、Registry Checkpoint，以及受保护 `main` 的 GitHub Actions OIDC + Sigstore/Rekor proof verifier；Catalog/Protocol/Candidate、Evidence、Gate 与 checkpoint 的实时可信状态由 `pnpm verification:ready` 从登记链推导，不在本说明中手工宣称。W1 的 BUILD/Runtime Binding、Case/Journey/Invariant registries 与完整 `release:check` 尚未建立，因此 254 个 Case 均保持 `NOT_VERIFIED`，v0.1 发布门关闭
 
 ## 1. 目的
 

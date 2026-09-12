@@ -59,22 +59,29 @@ export const SOLE_MAINTAINER_AUTHORITY = Object.freeze({
   trusted_signer_policy: "GITHUB_ACTIONS_OIDC_PROTECTED_MAIN",
 });
 
+export const TRUSTED_WORKLOAD_IDENTITY =
+  "github-actions:AnnCYW-cm/rolefox/.github/workflows/verification-attest.yml@refs/heads/main";
+
 // This closed file set defines the verifier whose semantics are bound into the
 // Spec Manifest, Candidate artifact, Gate records, and registry checkpoints.
 // Generated registry data and tests are intentionally excluded.
 export const VERIFICATION_TOOLCHAIN_FILES = [
   ".github/workflows/ci.yml",
+  ".github/workflows/verification-attest.yml",
   "package.json",
   "pnpm-lock.yaml",
   "scripts/verification/append-evidence.mjs",
   "scripts/verification/append-gate.mjs",
+  "scripts/verification/approve-foundation.mjs",
   "scripts/verification/bootstrap-pre-w1.mjs",
   "scripts/verification/check-pre-w1.mjs",
   "scripts/verification/checkpoint-lib.mjs",
   "scripts/verification/config.mjs",
+  "scripts/verification/create-trust-request.mjs",
   "scripts/verification/lib.mjs",
   "scripts/verification/privacy.mjs",
   "scripts/verification/schema.mjs",
+  "scripts/verification/trust.mjs",
   "scripts/verification/write-checkpoint.mjs",
   "verification/schemas/v1/candidate-scope-manifest.schema.json",
   "verification/schemas/v1/evidence-manifest.schema.json",
@@ -83,6 +90,8 @@ export const VERIFICATION_TOOLCHAIN_FILES = [
   "verification/schemas/v1/registry-checkpoint.schema.json",
   "verification/schemas/v1/required-release-scope-catalog.schema.json",
   "verification/schemas/v1/spec-manifest.schema.json",
+  "verification/schemas/v1/trust-policy.schema.json",
+  "verification/trust/policy-v1.json",
 ];
 
 export const EVIDENCE_TYPES = [
@@ -131,7 +140,7 @@ export const GATE_IDS = {
 // This may be changed to IMPLEMENTED only after the checker verifies signatures,
 // signer/producer allowlists, CI provenance, and external anchors against trusted
 // roots. Proof-shaped strings and status labels are not trust verification.
-export const TRUST_VERIFICATION_STATUS = "NOT_IMPLEMENTED";
+export const TRUST_VERIFICATION_STATUS = "IMPLEMENTED";
 
 export const PATHS = {
   catalog: "verification/required-release-scopes-v0.1.json",
@@ -145,4 +154,6 @@ export const PATHS = {
   protocolSnapshotDirectory: "verification/research/protocols",
   specManifest: "verification/spec-manifest-v0.1.json",
   specManifestSnapshotDirectory: "verification/spec-manifests",
+  trustPolicy: "verification/trust/policy-v1.json",
+  trustProofDirectory: "verification/trust-proofs",
 };

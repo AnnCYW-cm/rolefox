@@ -17,7 +17,11 @@ import {
   finalizeCheckpointTrustEnvelope,
   loadCheckpointChain,
 } from "../checkpoint-lib.mjs";
-import { VERIFICATION_TOOLCHAIN_FILES } from "../config.mjs";
+import {
+  SOLE_MAINTAINER_AUTHORITY,
+  TRUSTED_WORKLOAD_IDENTITY,
+  VERIFICATION_TOOLCHAIN_FILES,
+} from "../config.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
@@ -131,23 +135,35 @@ test("checkpoint prepare freezes the timestamp and finalized root", (t) => {
   assert.equal(request.created_at, createdAt);
   assert.notEqual(request.registry_root_digest, laterRequest.registry_root_digest);
 
-  const { checkpoint } = finalizeCheckpointTrustEnvelope(temporaryRoot, {
-    schema_version: "rolefox.checkpoint-trust-envelope.v1",
-    prepare_request: request,
-    signature: {
-      status: "PENDING_TRUSTED_SIGNER",
-      signer: null,
-      signed_payload_digest: request.registry_root_digest,
-      signature: null,
+  const proofDigest = "d".repeat(64);
+  const { checkpoint } = finalizeCheckpointTrustEnvelope(
+    temporaryRoot,
+    {
+      schema_version: "rolefox.checkpoint-trust-envelope.v1",
+      prepare_request: request,
+      proof_bundle_path: "/controlled/checkpoint-bundle.json",
     },
-    external_anchor: {
-      status: "PENDING_EXTERNAL_ANCHOR",
-      provider: null,
-      reference: null,
-      anchored_at: null,
-      anchored_payload_digest: request.registry_root_digest,
+    {
+      verifyTrustedProof: () => ({
+        decision: "VERIFIED",
+        actor: SOLE_MAINTAINER_AUTHORITY.identity,
+        roleVersion: SOLE_MAINTAINER_AUTHORITY.role_version,
+        signer: TRUSTED_WORKLOAD_IDENTITY,
+        signatureValue: "test-checkpoint-signature",
+        proofDigest,
+        anchor: {
+          provider: "SIGSTORE_REKOR",
+          reference: "rekor:test:1",
+          anchoredAt: "2099-01-01T00:00:01.000Z",
+        },
+      }),
+      importTrustedProof: (_root, _path, expectedDigest) => ({
+        proofDigest: expectedDigest,
+        disposition: "created",
+      }),
+      verifyCheckpointTrust: () => ({ decision: "VERIFIED" }),
     },
-  });
+  );
   assert.equal(checkpoint.created_at, createdAt);
   assert.equal(checkpoint.sequence, request.sequence);
   assert.deepEqual(checkpoint.previous, request.previous_checkpoint);
@@ -168,19 +184,7 @@ test("checkpoint finalize rejects a request after the chain advances", (t) => {
     () =>
       finalizeCheckpointTrustEnvelope(temporaryRoot, {
         prepare_request: request,
-        signature: {
-          status: "PENDING_TRUSTED_SIGNER",
-          signer: null,
-          signed_payload_digest: request.registry_root_digest,
-          signature: null,
-        },
-        external_anchor: {
-          status: "NOT_CONFIGURED",
-          provider: null,
-          reference: null,
-          anchored_at: null,
-          anchored_payload_digest: request.registry_root_digest,
-        },
+        proof_bundle_path: "/controlled/checkpoint-bundle.json",
       }),
     /sequence no longer follows/,
   );

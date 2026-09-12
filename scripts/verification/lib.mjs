@@ -417,6 +417,41 @@ export function writeJsonImmutable(filePath, value) {
   }
 }
 
+export function writeBytesImmutable(filePath, value) {
+  invariant(Buffer.isBuffer(value), "Immutable byte value must be a Buffer.");
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  let descriptor;
+  try {
+    descriptor = fs.openSync(
+      filePath,
+      fs.constants.O_WRONLY |
+        fs.constants.O_CREAT |
+        fs.constants.O_EXCL |
+        (fs.constants.O_NOFOLLOW ?? 0),
+      0o444,
+    );
+    fs.writeFileSync(descriptor, value);
+    fs.fsyncSync(descriptor);
+    fs.closeSync(descriptor);
+    descriptor = undefined;
+    fsyncParentDirectory(filePath);
+    return "created";
+  } catch (error) {
+    if (descriptor !== undefined) fs.closeSync(descriptor);
+    if (error?.code !== "EEXIST") throw error;
+    const metadata = fs.lstatSync(filePath);
+    invariant(
+      metadata.isFile() && !metadata.isSymbolicLink(),
+      `Immutable byte target is not a regular file: ${filePath}`,
+    );
+    invariant(
+      fs.readFileSync(filePath).equals(value),
+      `Immutable byte collision or rewrite attempt: ${filePath}`,
+    );
+    return "unchanged";
+  }
+}
+
 export function parseJsonLines(filePath) {
   if (!fs.existsSync(filePath)) return [];
   const content = normalizeText(decodeUtf8(fs.readFileSync(filePath), filePath));

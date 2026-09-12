@@ -1,0 +1,85 @@
+{
+  "_template_notice": {
+    "status": "NOT_FROZEN",
+    "registerable": false,
+    "instructions": "Copy outside Git, fill from currently approved immutable records, remove _template_notice and _ops_file_entry_template, then freeze before first participant contact. Compute the SHA-256 of the final immutable UTF-8 bytes and keep that digest in the controlled run index; do not write the digest back into this file. Never place a HMAC key, raw controlled-store locator, participant identity, or contact detail here."
+  },
+  "template_version": "pre-w1-research-run-freeze-v0.1",
+  "run_id": null,
+  "decision_authority": {
+    "governance_mode": "SOLE_MAINTAINER",
+    "identity": "github:AnnCYW-cm",
+    "role_version": "rolefox-sole-maintainer-v1"
+  },
+  "approved_input_bindings": {
+    "research_protocol_version": null,
+    "research_protocol_digest": null,
+    "research_protocol_approved_at": null,
+    "required_release_scope_catalog_id": null,
+    "required_release_scope_catalog_digest": null,
+    "required_release_scope_catalog_approved_at": null,
+    "spec_manifest_id": null,
+    "spec_manifest_digest": null,
+    "spec_normative_set_digest": null,
+    "candidate_scope_manifest_id": null,
+    "candidate_scope_manifest_digest": null,
+    "candidate_artifact_digest": null,
+    "candidate_scope_manifest_approved_at": null
+  },
+  "ops_bundle": {
+    "bundle_version": "pre-w1-research-ops-v0.1",
+    "bundle_digest_algorithm": "rolefox-sha256-lines-v1",
+    "files": [],
+    "bundle_digest": null
+  },
+  "_ops_file_entry_template": {
+    "relative_path": null,
+    "sha256": null
+  },
+  "frozen_policy_versions": {
+    "recruitment": "pre-w1-recruitment-v0.1",
+    "consent": "pre-w1-consent-v0.1",
+    "interview_guide": "pre-w1-interview-guide-v0.1",
+    "coding": "pre-w1-coding-v0.1",
+    "participant_surrogate": "pre-w1-random-cohort-surrogate-v0.1",
+    "job_selection": "pre-w1-recent-jobs-selection-v0.1",
+    "job_dedupe": "pre-w1-job-dedupe-v0.1",
+    "hmac_scheme": "rolefox-research-hmac-v1",
+    "eligibility_and_exclusion_policy_digest": null
+  },
+  "controlled_store_readiness": {
+    "checked_at": null,
+    "checked_by": null,
+    "access_isolation_test": null,
+    "restore_test": null,
+    "deletion_test": null,
+    "event_log_initialized": null,
+    "retention_scheduler_initialized": null,
+    "run_key_reference_hmac": null,
+    "hmac_implementation_digest": null,
+    "hmac_test_vector_id": null
+  },
+  "frozen_thresholds": {
+    "pain_cohort_minimum": 6,
+    "pain_cohort_maximum": 8,
+    "pain_qualified_minimum": 5,
+    "opportunities_per_week_minimum": 10,
+    "repetitive_work_rank_maximum": 3,
+    "target_channel_eligible_minimum": 5,
+    "rules_replay_participants_minimum": 5,
+    "jobs_per_replay_participant": 20,
+    "explicit_rejection_reasons_covered": "ALL",
+    "remaining_ambiguity": "FINITE_EXCEPTION_CATEGORIES"
+  },
+  "frozen_at": null,
+  "first_contact_not_before": null,
+  "freeze_assertions": {
+    "all_approvals_precede_frozen_at": null,
+    "all_approved_digests_resolve": null,
+    "ops_bundle_complete": null,
+    "controlled_store_ready": null,
+    "no_participant_contact_started": null,
+    "no_pii_or_secret_present": null,
+    "immutable_after_frozen_at": true
+  }
+}

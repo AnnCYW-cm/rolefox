@@ -16,7 +16,7 @@ import { SCHEMA_NAMES, validateSchema } from "../schema.mjs";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const absolute = (relativePath) => path.join(root, ...relativePath.split("/"));
 
-test("all seven schemas compile and every checked-in registry artifact validates", () => {
+test("all versioned schemas compile and every checked-in registry artifact validates", () => {
   validateSchema(
     root,
     SCHEMA_NAMES.catalog,
@@ -34,6 +34,12 @@ test("all seven schemas compile and every checked-in registry artifact validates
     SCHEMA_NAMES.protocol,
     readJson(absolute(PATHS.protocol)),
     "research protocol",
+  );
+  validateSchema(
+    root,
+    SCHEMA_NAMES.trustPolicy,
+    readJson(absolute(PATHS.trustPolicy)),
+    "trust policy",
   );
   for (const file of jsonFiles(absolute(PATHS.catalogSnapshotDirectory))) {
     validateSchema(root, SCHEMA_NAMES.catalog, readJson(file), path.basename(file));

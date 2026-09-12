@@ -403,6 +403,9 @@
               "type": "null"
             }
           ]
+        },
+        "proof_digest": {
+          "$ref": "#/$defs/nullableDigest"
         }
       }
     },
@@ -413,7 +416,8 @@
         "status",
         "signer",
         "signed_payload_digest",
-        "signature"
+        "signature",
+        "proof_digest"
       ],
       "properties": {
         "status": {
@@ -429,6 +433,9 @@
           "type": "string",
           "minLength": 16,
           "maxLength": 8192
+        },
+        "proof_digest": {
+          "$ref": "#/$defs/digest"
         }
       }
     },

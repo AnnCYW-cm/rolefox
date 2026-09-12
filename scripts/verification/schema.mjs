@@ -12,6 +12,7 @@ export const SCHEMA_NAMES = Object.freeze({
   gate: "gate-evidence-record",
   protocol: "pre-w1-research-protocol",
   checkpoint: "registry-checkpoint",
+  trustPolicy: "trust-policy",
 });
 
 const validatorsByRoot = new Map();

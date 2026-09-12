@@ -10,7 +10,7 @@ RoleFox 的最终目标不是让用户更快地刷岗位、改简历和点投递
 
 当前仓库处于 **M0 / pre-alpha**。它已经建立静态产品界面、领域状态机、基础策略判断规则和扩展契约，但还没有接入真实招聘平台，也不会真实投递。现在最适合参与产品讨论、验证架构和贡献基础能力，不适合直接用于无人值守求职。
 
-Pre-W1 的验证控制面已经建立，包括绑定规范与 verifier 工具链的 Spec Manifest、Required Release Scope Catalog、不可变 authority 快照、冻结的 Candidate Scope、两层内容寻址 Evidence 的 schema/writer、只追加 Gate Registry 与连续 checkpoint 的生成/检查工具。它目前只证明登记结构可复算，研究协议和范围仍待审批，真实访谈与规则回放证据尚未采集，因此 Gate 1 的当前状态仍是 `BLOCKED_NOT_STARTED`，W1 尚未启动。详见[验证登记说明](verification/README.md)。
+Pre-W1 的验证控制面已经建立，包括绑定规范与 verifier 工具链的 Spec Manifest、Required Release Scope Catalog、不可变 authority 快照、冻结的 Candidate Scope、两层内容寻址 Evidence 的 schema/writer、只追加 Gate Registry、连续 checkpoint，以及受保护 `main` 上的 GitHub Actions OIDC + Sigstore/Rekor 信任验证。唯一产品决策权威是 `github:AnnCYW-cm`；机器签名只证明来源，不替代产品决定。实时状态以 `pnpm verification:ready` 为准；在真实访谈、规则回放、Gate 1 PASS 和可信 checkpoint 全部成立前，W1 不得启动。详见[验证登记说明](verification/README.md)。
 
 v0.1 对外发布有一项独立且不可由 Demo 替代的真实闭环门：必须连接真实邮箱与真实日历 Provider，依次验证邮件入站、完成 7 天 Shadow 后的受控 L2 回复、日历 busy 查询/对账、候选人私有 tentative event，以及招聘确认与失败补偿。是否已经达到局部 L3 不阻断 v0.1；未达到时保持 L2，但 Fake Inbox、测试日历或只做投递交接都不能替代这项发布证据。当前 M0 尚未实现或通过该门。
 

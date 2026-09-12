@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:rolefox:schema:evidence-manifest:v1",
   "title": "RoleFox Evidence Manifest v1",
-  "$comment": "evidence_id and manifest_digest identify the canonical attestation payload after removing evidence_id, manifest_digest, record_digest, attestation, and any signature field. record_digest covers the final manifest including evidence_id, manifest_digest, and attestation, excluding only record_digest itself.",
+  "$comment": "evidence_id and manifest_digest identify the canonical attestation payload after removing evidence_id, manifest_digest, record_digest, attestation, and any signature field. record_digest covers the final manifest including evidence_id, manifest_digest, and attestation, excluding only record_digest itself. This schema also validates pre-attestation prepare payloads, so PASS may carry a structurally empty PENDING attestation; writers and registry validators require VERIFIED before persistence.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -294,6 +294,33 @@
     {
       "if": {
         "properties": {
+          "attestation": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "const": "PENDING"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          }
+        },
+        "required": [
+          "attestation"
+        ]
+      },
+      "then": {
+        "properties": {
+          "attestation": {
+            "$ref": "#/$defs/pendingAttestation"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
           "result": {
             "const": "PASS"
           }
@@ -304,9 +331,6 @@
       },
       "then": {
         "properties": {
-          "attestation": {
-            "$ref": "#/$defs/verifiedAttestation"
-          },
           "criterion_results": {
             "type": "array",
             "items": {
@@ -448,6 +472,34 @@
         },
         "proof_digest": {
           "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "pendingAttestation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "attested_by",
+        "attested_at",
+        "signed_payload_digest",
+        "proof_digest"
+      ],
+      "properties": {
+        "status": {
+          "const": "PENDING"
+        },
+        "attested_by": {
+          "type": "null"
+        },
+        "attested_at": {
+          "type": "null"
+        },
+        "signed_payload_digest": {
+          "type": "null"
+        },
+        "proof_digest": {
+          "type": "null"
         }
       }
     },
