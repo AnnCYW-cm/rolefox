@@ -10,6 +10,7 @@ import {
   canonicalDigestExcluding,
   canonicalJson,
   parseJsonLines,
+  sha256,
 } from "../lib.mjs";
 import {
   createCheckpointTrustRequest,
@@ -24,6 +25,49 @@ import {
 } from "../config.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
+
+const offlineProofVerifier = (verificationRoot, request) => {
+  const proofPath = request.bundlePath ?? path.join(
+    verificationRoot,
+    "verification",
+    "trust-proofs",
+    `proof_${request.proofDigest}.json`,
+  );
+  const bytes = fs.readFileSync(proofPath);
+  const proofDigest = sha256(bytes);
+  if (request.proofDigest !== undefined) assert.equal(proofDigest, request.proofDigest);
+  const bundle = JSON.parse(bytes.toString("utf8"));
+  assert.equal(
+    bundle.mediaType,
+    "application/vnd.dev.sigstore.bundle.v0.3+json",
+  );
+  const statement = JSON.parse(
+    Buffer.from(bundle.dsseEnvelope.payload, "base64").toString("utf8"),
+  );
+  assert.equal(statement.subject?.[0]?.digest?.sha256, request.payloadDigest);
+  assert.equal(sha256(request.payloadBytes), request.payloadDigest);
+  assert.equal(statement.predicate?.decision?.status, request.expectedDecision);
+  const entry = bundle.verificationMaterial.tlogEntries.find(
+    (candidate) => /^\d+$/.test(String(candidate.integratedTime)),
+  );
+  assert.ok(entry);
+  const anchoredAt = new Date(Number(entry.integratedTime) * 1000).toISOString();
+  return {
+    decision: request.expectedDecision,
+    decisionAt: statement.predicate.decision.decided_at,
+    attestedAt: anchoredAt,
+    actor: statement.predicate.decision.actor.identity,
+    roleVersion: statement.predicate.decision.actor.role_version,
+    signer: TRUSTED_WORKLOAD_IDENTITY,
+    signatureValue: bundle.dsseEnvelope.signatures[0].sig,
+    proofDigest,
+    anchor: {
+      provider: "SIGSTORE_REKOR",
+      reference: `rekor:test:${entry.logIndex}`,
+      anchoredAt,
+    },
+  };
+};
 
 const temporaryRepository = (t) => {
   const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), "rolefox-checkpoint-"));
@@ -42,7 +86,9 @@ const temporaryRepository = (t) => {
 };
 
 test("the checked-in checkpoint chain covers the current append-only prefix", () => {
-  const checkpoints = loadCheckpointChain(root);
+  const checkpoints = loadCheckpointChain(root, {
+    proofVerifier: offlineProofVerifier,
+  });
   assert.ok(checkpoints.length >= 1);
   assert.equal(checkpoints[0].sequence, 1);
 });
@@ -53,7 +99,10 @@ test("checkpoint validation detects a truncated Gate log", (t) => {
     path.join(temporaryRoot, "verification", "gate-evidence-v0.1.jsonl"),
     "",
   );
-  assert.throws(() => loadCheckpointChain(temporaryRoot), /truncated/);
+  assert.throws(
+    () => loadCheckpointChain(temporaryRoot, { proofVerifier: offlineProofVerifier }),
+    /truncated/,
+  );
 });
 
 test("checkpoint validation rejects a changed historical authority snapshot", (t) => {
@@ -71,7 +120,10 @@ test("checkpoint validation rejects a changed historical authority snapshot", (t
   snapshot.manifest_version = `${snapshot.manifest_version}-tampered`;
   fs.chmodSync(snapshotPath, 0o644);
   fs.writeFileSync(snapshotPath, `${JSON.stringify(snapshot, null, 2)}\n`);
-  assert.throws(() => loadCheckpointChain(temporaryRoot), /manifest_digest is stale/);
+  assert.throws(
+    () => loadCheckpointChain(temporaryRoot, { proofVerifier: offlineProofVerifier }),
+    /manifest_digest is stale/,
+  );
 });
 
 test("checkpoint creation rejects a changed verification toolchain", (t) => {
@@ -84,7 +136,10 @@ test("checkpoint creation rejects a changed verification toolchain", (t) => {
   );
   fs.appendFileSync(verifierPath, "\n// tampered\n");
   assert.throws(
-    () => createCurrentCheckpoint(temporaryRoot, { force: true }),
+    () => createCurrentCheckpoint(temporaryRoot, {
+      force: true,
+      proofVerifier: offlineProofVerifier,
+    }),
     /verification toolchain is stale/,
   );
 });
@@ -119,7 +174,10 @@ test("checkpoint creation rejects a Gate with a missing Evidence triple", (t) =>
   fs.writeFileSync(registryPath, `${canonicalJson(record)}\n`);
 
   assert.throws(
-    () => createCurrentCheckpoint(temporaryRoot, { force: true }),
+    () => createCurrentCheckpoint(temporaryRoot, {
+      force: true,
+      proofVerifier: offlineProofVerifier,
+    }),
     /missing or stale Evidence reference/,
   );
 });
@@ -128,9 +186,13 @@ test("checkpoint prepare freezes the timestamp and finalized root", (t) => {
   const temporaryRoot = temporaryRepository(t);
 
   const createdAt = "2099-01-01T00:00:00.000Z";
-  const request = createCheckpointTrustRequest(temporaryRoot, { createdAt });
+  const request = createCheckpointTrustRequest(temporaryRoot, {
+    createdAt,
+    proofVerifier: offlineProofVerifier,
+  });
   const laterRequest = createCheckpointTrustRequest(temporaryRoot, {
     createdAt: "2099-01-01T00:00:01.000Z",
+    proofVerifier: offlineProofVerifier,
   });
   assert.equal(request.created_at, createdAt);
   assert.notEqual(request.registry_root_digest, laterRequest.registry_root_digest);
@@ -162,6 +224,7 @@ test("checkpoint prepare freezes the timestamp and finalized root", (t) => {
         disposition: "created",
       }),
       verifyCheckpointTrust: () => ({ decision: "VERIFIED" }),
+      historicalProofVerifier: offlineProofVerifier,
     },
   );
   assert.equal(checkpoint.created_at, createdAt);
@@ -175,17 +238,23 @@ test("checkpoint finalize rejects a request after the chain advances", (t) => {
 
   const request = createCheckpointTrustRequest(temporaryRoot, {
     createdAt: "2099-01-01T00:00:00.000Z",
+    proofVerifier: offlineProofVerifier,
   });
   createCurrentCheckpoint(temporaryRoot, {
     force: true,
     createdAt: "2099-01-01T00:00:01.000Z",
+    proofVerifier: offlineProofVerifier,
   });
   assert.throws(
     () =>
-      finalizeCheckpointTrustEnvelope(temporaryRoot, {
-        prepare_request: request,
-        proof_bundle_path: "/controlled/checkpoint-bundle.json",
-      }),
+      finalizeCheckpointTrustEnvelope(
+        temporaryRoot,
+        {
+          prepare_request: request,
+          proof_bundle_path: "/controlled/checkpoint-bundle.json",
+        },
+        { historicalProofVerifier: offlineProofVerifier },
+      ),
     /sequence no longer follows/,
   );
 });

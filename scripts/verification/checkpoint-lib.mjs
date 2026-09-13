@@ -69,9 +69,13 @@ const readSnapshot = (
   return document;
 };
 
-export const validateHistoricalBindings = (
+export const validateHistoricalBindingDocuments = (
   root,
   {
+    specManifest,
+    catalog,
+    protocol,
+    candidate,
     specManifestDigest,
     normativeSetDigest,
     catalogDigest,
@@ -82,46 +86,26 @@ export const validateHistoricalBindings = (
     verificationToolchainDigest,
     label,
   },
+  { proofVerifier = verifyTrustedProof } = {},
 ) => {
-  const specManifest = readSnapshot(root, {
-    directory: PATHS.specManifestSnapshotDirectory,
-    prefix: "spec",
-    digest: specManifestDigest,
-    digestField: "manifest_digest",
-    schemaName: SCHEMA_NAMES.specManifest,
-    label: `${label} Spec Manifest`,
-  });
-  const catalog = readSnapshot(root, {
-    directory: PATHS.catalogSnapshotDirectory,
-    prefix: "catalog",
-    digest: catalogDigest,
-    digestField: "catalog_digest",
-    schemaName: SCHEMA_NAMES.catalog,
-    label: `${label} release-scope catalog`,
-  });
-  const protocol = readSnapshot(root, {
-    directory: PATHS.protocolSnapshotDirectory,
-    prefix: "protocol",
-    digest: researchProtocolDigest,
-    digestField: "protocol_digest",
-    schemaName: SCHEMA_NAMES.protocol,
-    label: `${label} research protocol`,
-  });
-  const candidateRelativePath =
-    `${PATHS.candidateDirectory}/candidate_${candidateScopeManifestDigest}.json`;
-  assertSafeRepositoryStorage(root, [candidateRelativePath]);
-  const candidatePath = absolute(root, candidateRelativePath);
-  invariant(
-    fs.existsSync(candidatePath),
-    `${label} Candidate Scope Manifest is missing: ${candidateRelativePath}`,
-  );
-  const candidate = readJson(candidatePath);
+  validateSchema(root, SCHEMA_NAMES.specManifest, specManifest, `${label} Spec Manifest`);
+  validateSchema(root, SCHEMA_NAMES.catalog, catalog, `${label} release-scope catalog`);
+  validateSchema(root, SCHEMA_NAMES.protocol, protocol, `${label} research protocol`);
   validateSchema(root, SCHEMA_NAMES.candidate, candidate, `${label} Candidate Scope Manifest`);
+  verifyFixedDigest(specManifest, "manifest_digest", `${label} Spec Manifest`);
+  verifyFixedDigest(catalog, "catalog_digest", `${label} release-scope catalog`);
+  verifyFixedDigest(protocol, "protocol_digest", `${label} research protocol`);
   verifyAddressedDocument(candidate, {
     prefix: "candidate",
     idField: "candidate_scope_manifest_id",
     digestField: "manifest_digest",
   });
+  invariant(
+    specManifest.manifest_digest === specManifestDigest &&
+      catalog.catalog_digest === catalogDigest &&
+      protocol.protocol_digest === researchProtocolDigest,
+    `${label} document digests do not match their requested historical bindings.`,
+  );
   const boundToolchainDigest =
     verificationToolchainDigest ?? specManifest.verification_toolchain?.digest;
 
@@ -242,7 +226,7 @@ export const validateHistoricalBindings = (
           isSha256(contract.envelope?.approval_proof_digest),
         `${contract.label} proof fields are incomplete.`,
       );
-      const verified = verifyTrustedProof(root, {
+      const verified = proofVerifier(root, {
         kind: contract.kind,
         payloadDigest: contract.envelope.signed_payload_digest,
         payloadBytes: canonicalPayloadBytes(contract.document, contract.excluded),
@@ -259,6 +243,58 @@ export const validateHistoricalBindings = (
   }
 
   return { specManifest, catalog, protocol, candidate };
+};
+
+export const validateHistoricalBindings = (
+  root,
+  binding,
+  options = {},
+) => {
+  const {
+    specManifestDigest,
+    catalogDigest,
+    researchProtocolDigest,
+    candidateScopeManifestDigest,
+    label,
+  } = binding;
+  const specManifest = readSnapshot(root, {
+    directory: PATHS.specManifestSnapshotDirectory,
+    prefix: "spec",
+    digest: specManifestDigest,
+    digestField: "manifest_digest",
+    schemaName: SCHEMA_NAMES.specManifest,
+    label: `${label} Spec Manifest`,
+  });
+  const catalog = readSnapshot(root, {
+    directory: PATHS.catalogSnapshotDirectory,
+    prefix: "catalog",
+    digest: catalogDigest,
+    digestField: "catalog_digest",
+    schemaName: SCHEMA_NAMES.catalog,
+    label: `${label} release-scope catalog`,
+  });
+  const protocol = readSnapshot(root, {
+    directory: PATHS.protocolSnapshotDirectory,
+    prefix: "protocol",
+    digest: researchProtocolDigest,
+    digestField: "protocol_digest",
+    schemaName: SCHEMA_NAMES.protocol,
+    label: `${label} research protocol`,
+  });
+  const candidateRelativePath =
+    `${PATHS.candidateDirectory}/candidate_${candidateScopeManifestDigest}.json`;
+  assertSafeRepositoryStorage(root, [candidateRelativePath]);
+  const candidatePath = absolute(root, candidateRelativePath);
+  invariant(
+    fs.existsSync(candidatePath),
+    `${label} Candidate Scope Manifest is missing: ${candidateRelativePath}`,
+  );
+  const candidate = readJson(candidatePath);
+  return validateHistoricalBindingDocuments(
+    root,
+    { ...binding, specManifest, catalog, protocol, candidate },
+    options,
+  );
 };
 
 export const checkpointStateFromDocument = (checkpoint) => ({
@@ -283,8 +319,12 @@ const checkpointRootPayload = (checkpoint) => ({
   ...checkpointStateFromDocument(checkpoint),
 });
 
-const verifyCheckpointTrust = (root, checkpoint, { bundlePath } = {}) => {
-  const verified = verifyTrustedProof(root, {
+const verifyCheckpointTrust = (
+  root,
+  checkpoint,
+  { bundlePath, proofVerifier = verifyTrustedProof } = {},
+) => {
+  const verified = proofVerifier(root, {
     kind: "CHECKPOINT_ROOT",
     payloadDigest: checkpoint.registry_root_digest,
     payloadBytes: canonicalPayloadBytes(checkpointRootPayload(checkpoint)),
@@ -393,7 +433,10 @@ const validateCheckpointTrustRequest = (
   );
 };
 
-export function loadCheckpointChain(root) {
+export function loadCheckpointChain(
+  root,
+  { proofVerifier = verifyTrustedProof } = {},
+) {
   assertSafeRepositoryStorage(root, Object.values(PATHS));
   const checkpointDirectory = absolute(root, PATHS.checkpointDirectory);
   const gateRegistryPath = absolute(root, PATHS.gateRegistry);
@@ -418,7 +461,7 @@ export function loadCheckpointChain(root) {
           evidence.candidate_scope_manifest_ref?.manifest_digest,
         candidateArtifactDigest: evidence.candidate_artifact_digest,
         label: `Evidence ${evidence.evidence_id}`,
-      });
+      }, { proofVerifier });
       assertNoSensitivePublicData(
         evidence,
         `Evidence ${evidence.evidence_id}`,
@@ -431,7 +474,7 @@ export function loadCheckpointChain(root) {
           isSha256(evidence.attestation?.proof_digest),
         `Evidence ${evidence.evidence_id} is not cryptographically attested.`,
       );
-      const verifiedEvidence = verifyTrustedProof(root, {
+      const verifiedEvidence = proofVerifier(root, {
         kind: "EVIDENCE_VERIFIED",
         payloadDigest: evidence.manifest_digest,
         payloadBytes: canonicalPayloadBytes(evidence, [
@@ -475,7 +518,7 @@ export function loadCheckpointChain(root) {
       candidateArtifactDigest: record.candidate_artifact_digest,
       verificationToolchainDigest: record.verification_toolchain_digest,
       label: `Gate ${record.record_id ?? "record"}`,
-    });
+    }, { proofVerifier });
     assertNoSensitivePublicData(
       record,
       `Gate ${record.record_id ?? "record"}`,
@@ -492,7 +535,7 @@ export function loadCheckpointChain(root) {
           isSha256(record.approval_proof_digest),
         `Gate ${record.record_id ?? "record"} trust proof fields are incomplete.`,
       );
-      const verifiedGate = verifyTrustedProof(root, {
+      const verifiedGate = proofVerifier(root, {
         kind,
         payloadDigest: record.approval_payload_digest,
         payloadBytes: canonicalPayloadBytes(record, [
@@ -628,7 +671,7 @@ export function loadCheckpointChain(root) {
       candidateArtifactDigest: checkpoint.candidate_artifact_digest,
       verificationToolchainDigest: checkpoint.verification_toolchain_digest,
       label: `Checkpoint ${checkpoint.checkpoint_id}`,
-    });
+    }, { proofVerifier });
     assertNoSensitivePublicData(
       {
         signature: checkpoint.signature,
@@ -808,13 +851,16 @@ export function loadCheckpointChain(root) {
         checkpoint.signature.status === "VERIFIED_TRUSTED_SIGNER",
         `Checkpoint anchor cannot be verified without its matching signature at ${checkpoint.checkpoint_id}.`,
       );
-      verifyCheckpointTrust(root, checkpoint);
+      verifyCheckpointTrust(root, checkpoint, { proofVerifier });
     }
   });
   return checkpoints;
 }
 
-export function collectRegistryState(root) {
+export function collectRegistryState(
+  root,
+  { proofVerifier = verifyTrustedProof } = {},
+) {
   assertSafeRepositoryStorage(root, Object.values(PATHS));
   const specManifest = readJson(absolute(root, PATHS.specManifest));
   const catalog = readJson(absolute(root, PATHS.catalog));
@@ -895,7 +941,7 @@ export function collectRegistryState(root) {
     candidateArtifactDigest: candidate.candidate_artifact_digest,
     verificationToolchainDigest: specManifest.verification_toolchain.digest,
     label: "Current registry state",
-  });
+  }, { proofVerifier });
 
   const gateRegistryPath = absolute(root, PATHS.gateRegistry);
   const gateRecords = parseJsonLines(gateRegistryPath);
@@ -977,11 +1023,14 @@ export function createCurrentCheckpoint(
     persist = true,
     trustRequest,
     trustVerifier = verifyCheckpointTrust,
+    proofVerifier = verifyTrustedProof,
   } = {},
 ) {
-  const checkpoints = loadCheckpointChain(root);
+  const checkpoints = loadCheckpointChain(root, { proofVerifier });
   const previousCheckpoint = checkpoints.at(-1);
-  const { state, gateHeadRefs, evidenceRefs } = collectRegistryState(root);
+  const { state, gateHeadRefs, evidenceRefs } = collectRegistryState(root, {
+    proofVerifier,
+  });
 
   if (trustRequest) {
     validateCheckpointTrustRequest(trustRequest, {
@@ -1111,7 +1160,7 @@ export function createCurrentCheckpoint(
       registry_root_digest: registryRootDigest,
       signature: normalizedSignature,
       external_anchor: normalizedExternalAnchor,
-    });
+    }, { proofVerifier });
   }
 
   const checkpoint = addressDocument(
@@ -1148,12 +1197,16 @@ export function createCurrentCheckpoint(
 
 export function createCheckpointTrustRequest(
   root,
-  { createdAt = new Date().toISOString() } = {},
+  {
+    createdAt = new Date().toISOString(),
+    proofVerifier = verifyTrustedProof,
+  } = {},
 ) {
   const { checkpoint } = createCurrentCheckpoint(root, {
     force: true,
     createdAt,
     persist: false,
+    proofVerifier,
   });
   return checkpointTrustRequestFromDocument(checkpoint);
 }
@@ -1164,6 +1217,8 @@ export function finalizeCheckpointTrustEnvelope(
   dependencyOverrides = {},
 ) {
   const verify = dependencyOverrides.verifyTrustedProof ?? verifyTrustedProof;
+  const historicalProofVerifier =
+    dependencyOverrides.historicalProofVerifier ?? verifyTrustedProof;
   const importProof = dependencyOverrides.importTrustedProof ?? importTrustedProof;
   invariant(
     trustEnvelope && typeof trustEnvelope === "object" && !Array.isArray(trustEnvelope),
@@ -1194,6 +1249,7 @@ export function finalizeCheckpointTrustEnvelope(
     createdAt: trustEnvelope.prepare_request.created_at,
     persist: false,
     trustRequest: trustEnvelope.prepare_request,
+    proofVerifier: historicalProofVerifier,
   });
   const verified = verify(root, {
     kind: "CHECKPOINT_ROOT",
@@ -1249,5 +1305,6 @@ export function finalizeCheckpointTrustEnvelope(
     trustRequest: trustEnvelope.prepare_request,
     trustVerifier:
       dependencyOverrides.verifyCheckpointTrust ?? verifyCheckpointTrust,
+    proofVerifier: historicalProofVerifier,
   });
 }

@@ -57,10 +57,57 @@ const index = process.argv.indexOf("--bundle");
 if (index === -1 || !process.argv[index + 1]) process.exit(2);
 const bundlePath = process.argv[index + 1];
 const bundle = JSON.parse(fs.readFileSync(bundlePath, "utf8"));
-if (!bundle.__test_verification_output) process.exit(3);
+let verificationOutput = bundle.__test_verification_output;
+// The temporary CLI repository can contain real checked-in bundles. This test-only
+// gh double derives the already-validated output shape from their public DSSE
+// statement so the suite stays offline; production always executes the real gh CLI.
+if (!verificationOutput) {
+  if (
+    bundle.mediaType !== "application/vnd.dev.sigstore.bundle.v0.3+json" ||
+    !bundle.dsseEnvelope?.payload ||
+    !Array.isArray(bundle.verificationMaterial?.tlogEntries)
+  ) process.exit(3);
+  const statement = JSON.parse(
+    Buffer.from(bundle.dsseEnvelope.payload, "base64").toString("utf8"),
+  );
+  const policy = JSON.parse(
+    fs.readFileSync("verification/trust/policy-v1.json", "utf8"),
+  );
+  const tlogEntry = bundle.verificationMaterial.tlogEntries.find(
+    (entry) => /^\\d+$/.test(String(entry.integratedTime)),
+  );
+  if (!tlogEntry) process.exit(3);
+  verificationOutput = [{
+    verificationResult: {
+      statement,
+      signature: {
+        certificate: {
+          subjectAlternativeName: policy.signer.workflow_uri,
+          extensions: {
+            issuer: policy.signer.oidc_issuer,
+            sourceRepositoryURI: "https://github.com/" + policy.repository.name,
+            sourceRepositoryIdentifier: policy.repository.id,
+            sourceRepositoryOwnerIdentifier: policy.repository.owner_id,
+            sourceRepositoryRef: policy.repository.source_ref,
+            sourceRepositoryDigest: "sha1:" + "a".repeat(40),
+            sourceRepositoryVisibilityAtSigning: policy.repository.visibility,
+            runnerEnvironment: policy.signer.runner_environment,
+            buildTrigger: policy.signer.event_name,
+            buildConfigURI: policy.signer.workflow_uri,
+            runInvocationURI:
+              "https://github.com/" + policy.repository.name + "/actions/runs/1",
+          },
+        },
+      },
+      verifiedTimestamps: [{
+        timestamp: new Date(Number(tlogEntry.integratedTime) * 1000).toISOString(),
+      }],
+    },
+  }];
+}
 if (
   process.env.ROLEFOX_TEST_GH_MUTATION &&
-  bundle.__test_verification_output?.[0]?.verificationResult?.statement?.predicate?.kind ===
+  verificationOutput?.[0]?.verificationResult?.statement?.predicate?.kind ===
     process.env.ROLEFOX_TEST_GH_MUTATION_KIND
 ) {
   const mutation = JSON.parse(
@@ -74,7 +121,7 @@ if (
     process.exit(4);
   }
 }
-process.stdout.write(JSON.stringify(bundle.__test_verification_output));
+process.stdout.write(JSON.stringify(verificationOutput));
 `,
     { mode: 0o755 },
   );
@@ -106,10 +153,8 @@ const writeTestTrustProof = (
         },
       ],
     },
-    content: {
-      dsseEnvelope: {
-        signatures: [{ sig: "dGVzdC1zaWdzdG9yZS1zaWduYXR1cmU=" }],
-      },
+    dsseEnvelope: {
+      signatures: [{ sig: "dGVzdC1zaWdzdG9yZS1zaWduYXR1cmU=" }],
     },
   };
   bundle.__test_verification_output = [
@@ -204,6 +249,52 @@ const temporaryCliRepository = (t) => {
   );
   assert.equal(bootstrap.status, 0, bootstrap.stderr);
   return temporaryRoot;
+};
+
+const checkedInCommandOptions = (t) => {
+  const testBinaryRoot = fs.mkdtempSync(
+    path.join(os.tmpdir(), "rolefox-checked-in-cli-"),
+  );
+  t.after(() => fs.rmSync(testBinaryRoot, { recursive: true, force: true }));
+  installTestGh(testBinaryRoot);
+  return {
+    cwd: root,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      PATH:
+        `${path.join(testBinaryRoot, ".test-bin")}` +
+        `${path.delimiter}${process.env.PATH}`,
+    },
+  };
+};
+
+const projectPendingCatalog = (temporaryRoot) => {
+  const snapshotDirectory = path.join(
+    temporaryRoot,
+    "verification",
+    "release-scope-catalogs",
+  );
+  const pending = fs
+    .readdirSync(snapshotDirectory)
+    .filter((name) => name.endsWith(".json"))
+    .map((name) => readJson(path.join(snapshotDirectory, name)))
+    .find((document) => document.status === "PROPOSED_PENDING_MAINTAINER_DECISION");
+  assert.ok(pending, "a pending Catalog snapshot is required for the test");
+  writeJson(
+    path.join(
+      temporaryRoot,
+      "verification",
+      "required-release-scopes-v0.1.json",
+    ),
+    pending,
+  );
+  const bootstrap = spawnSync(
+    process.execPath,
+    [path.join(temporaryRoot, "scripts", "verification", "bootstrap-pre-w1.mjs")],
+    commandOptions(temporaryRoot),
+  );
+  assert.equal(bootstrap.status, 0, bootstrap.stderr);
 };
 
 const approveFrozenInputsAndWriteFailedEvidence = (temporaryRoot) => {
@@ -471,14 +562,14 @@ const failedGateDecision = (evidence, overrides = {}) => ({
   ...overrides,
 });
 
-test("the W1 readiness command fails closed on the checked-in blockers", () => {
+test("the W1 readiness command fails closed on the checked-in blockers", (t) => {
   const result = spawnSync(
     process.execPath,
     [
       path.join(root, "scripts", "verification", "check-pre-w1.mjs"),
       "--require-pre-w1-pass",
     ],
-    { cwd: root, encoding: "utf8" },
+    checkedInCommandOptions(t),
   );
   assert.equal(result.status, 1);
   assert.match(result.stdout, /Readiness: BLOCKED_NOT_STARTED/);
@@ -486,7 +577,7 @@ test("the W1 readiness command fails closed on the checked-in blockers", () => {
   assert.doesNotMatch(result.stdout, /TRUST_VERIFICATION_NOT_IMPLEMENTED/);
 });
 
-test("documented pnpm separator form prepares a checkpoint without persisting it", () => {
+test("documented pnpm separator form prepares a checkpoint without persisting it", (t) => {
   const checkpointDirectory = path.join(root, "verification", "registry-checkpoints");
   const before = fs.readdirSync(checkpointDirectory).sort();
   const result = spawnSync(
@@ -496,7 +587,7 @@ test("documented pnpm separator form prepares a checkpoint without persisting it
       "--",
       "--prepare-trust-envelope",
     ],
-    { cwd: root, encoding: "utf8" },
+    checkedInCommandOptions(t),
   );
   assert.equal(result.status, 0, result.stderr);
   const request = JSON.parse(result.stdout);
@@ -505,7 +596,7 @@ test("documented pnpm separator form prepares a checkpoint without persisting it
   assert.deepEqual(fs.readdirSync(checkpointDirectory).sort(), before);
 });
 
-test("documented separator form reaches Evidence validation", () => {
+test("documented separator form reaches Evidence validation", (t) => {
   const result = spawnSync(
     process.execPath,
     [
@@ -521,7 +612,7 @@ test("documented separator form reaches Evidence validation", () => {
       ),
       "--prepare",
     ],
-    { cwd: root, encoding: "utf8" },
+    checkedInCommandOptions(t),
   );
   assert.equal(result.status, 1);
   assert.match(result.stderr, /Unknown Evidence field: _template_notice/);
@@ -993,29 +1084,29 @@ test("Evidence finalize fails closed when its approval context changes during tr
 });
 
 test("Evidence prepare refuses collection before frozen inputs are approved", (t) => {
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "rolefox-cli-"));
-  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
-  const inputPath = path.join(directory, "replay.json");
+  const temporaryRoot = temporaryCliRepository(t);
+  projectPendingCatalog(temporaryRoot);
+  const inputPath = path.join(temporaryRoot, "replay.json");
   fs.writeFileSync(inputPath, `${JSON.stringify(inconclusiveReplay())}\n`);
   const result = spawnSync(
     process.execPath,
     [
-      path.join(root, "scripts", "verification", "append-evidence.mjs"),
+      path.join(temporaryRoot, "scripts", "verification", "append-evidence.mjs"),
       "--",
       "--input",
       inputPath,
       "--prepare",
     ],
-    { cwd: root, encoding: "utf8" },
+    commandOptions(temporaryRoot),
   );
   assert.equal(result.status, 1);
   assert.match(result.stderr, /Required Release Scope Catalog is not accepted/i);
 });
 
 test("Evidence prepare rejects an email-like producer identity before writing", (t) => {
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "rolefox-cli-"));
-  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
-  const inputPath = path.join(directory, "replay-with-pii.json");
+  const temporaryRoot = temporaryCliRepository(t);
+  approveFrozenInputsAndWriteFailedEvidence(temporaryRoot);
+  const inputPath = path.join(temporaryRoot, "replay-with-pii.json");
   fs.writeFileSync(
     inputPath,
     `${JSON.stringify(inconclusiveReplay("person@example.com"))}\n`,
@@ -1023,13 +1114,13 @@ test("Evidence prepare rejects an email-like producer identity before writing", 
   const result = spawnSync(
     process.execPath,
     [
-      path.join(root, "scripts", "verification", "append-evidence.mjs"),
+      path.join(temporaryRoot, "scripts", "verification", "append-evidence.mjs"),
       "--",
       "--input",
       inputPath,
       "--prepare",
     ],
-    { cwd: root, encoding: "utf8" },
+    commandOptions(temporaryRoot),
   );
   assert.equal(result.status, 1);
   assert.match(

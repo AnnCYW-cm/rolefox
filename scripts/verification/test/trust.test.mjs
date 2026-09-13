@@ -44,10 +44,8 @@ function fixture() {
         },
       ],
     },
-    content: {
-      dsseEnvelope: {
-        signatures: [{ sig: "c2lnc3RvcmUtc2lnbmF0dXJl" }],
-      },
+    dsseEnvelope: {
+      signatures: [{ sig: "c2lnc3RvcmUtc2lnbmF0dXJl" }],
     },
   };
   const output = [
@@ -236,6 +234,92 @@ test("requires a gh-verified timestamp matching a Rekor integrated time", () => 
       }),
     /matches the Rekor integrated timestamp/,
   );
+});
+
+test("requires the standard top-level DSSE envelope in a Sigstore v0.3 bundle", () => {
+  const wrongMediaType = fixture();
+  wrongMediaType.bundle.mediaType = "application/vnd.dev.sigstore.bundle.v0.2+json";
+  assert.throws(
+    () =>
+      validateGhVerificationOutput(wrongMediaType.output, {
+        kind,
+        payloadDigest,
+        expectedDecision: "ACCEPTED",
+        bundle: wrongMediaType.bundle,
+        policy,
+      }),
+    /media type is not Sigstore bundle v0\.3/,
+  );
+
+  const nestedEnvelope = fixture();
+  nestedEnvelope.bundle.content = {
+    dsseEnvelope: nestedEnvelope.bundle.dsseEnvelope,
+  };
+  delete nestedEnvelope.bundle.dsseEnvelope;
+  assert.throws(
+    () =>
+      validateGhVerificationOutput(nestedEnvelope.output, {
+        kind,
+        payloadDigest,
+        expectedDecision: "ACCEPTED",
+        bundle: nestedEnvelope.bundle,
+        policy,
+      }),
+    /DSSE envelope is missing/,
+  );
+});
+
+test("requires exactly one DSSE signature and rejects message-signature bundles", () => {
+  for (const signatures of [[], [{ sig: "a".repeat(16) }, { sig: "b".repeat(16) }]]) {
+    const value = fixture();
+    value.bundle.dsseEnvelope.signatures = signatures;
+    assert.throws(
+      () =>
+        validateGhVerificationOutput(value.output, {
+          kind,
+          payloadDigest,
+          expectedDecision: "ACCEPTED",
+          bundle: value.bundle,
+          policy,
+        }),
+      /exactly one DSSE signature/,
+    );
+  }
+
+  const messageSignature = fixture();
+  delete messageSignature.bundle.dsseEnvelope;
+  messageSignature.bundle.messageSignature = {
+    messageDigest: { algorithm: "SHA2_256", digest: "a".repeat(44) },
+    signature: "b".repeat(88),
+  };
+  assert.throws(
+    () =>
+      validateGhVerificationOutput(messageSignature.output, {
+        kind,
+        payloadDigest,
+        expectedDecision: "ACCEPTED",
+        bundle: messageSignature.bundle,
+        policy,
+      }),
+    /DSSE envelope is missing/,
+  );
+});
+
+test("binds the Rekor reference to the entry whose timestamp gh verified", () => {
+  const value = fixture();
+  value.bundle.verificationMaterial.tlogEntries.unshift({
+    logId: { keyId: "invalid-time-entry" },
+    logIndex: 7,
+    integratedTime: "not-a-timestamp",
+  });
+  const verified = validateGhVerificationOutput(value.output, {
+    kind,
+    payloadDigest,
+    expectedDecision: "ACCEPTED",
+    bundle: value.bundle,
+    policy,
+  });
+  assert.equal(verified.anchor.reference, "rekor:rekor-public-key-id:42");
 });
 
 test("verifyTrustedProof checks canonical payload bytes and raw bundle digest before trusting gh", () => {
