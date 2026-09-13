@@ -51,6 +51,9 @@ const offlineProofVerifier = (verificationRoot, request) => {
     (candidate) => /^\d+$/.test(String(candidate.integratedTime)),
   );
   assert.ok(entry);
+  const logId =
+    entry.logId?.keyId ?? entry.log_id?.key_id ?? entry.logId ?? entry.log_id;
+  const logIndex = entry.logIndex ?? entry.log_index;
   const anchoredAt = new Date(Number(entry.integratedTime) * 1000).toISOString();
   return {
     decision: request.expectedDecision,
@@ -63,7 +66,9 @@ const offlineProofVerifier = (verificationRoot, request) => {
     proofDigest,
     anchor: {
       provider: "SIGSTORE_REKOR",
-      reference: `rekor:test:${entry.logIndex}`,
+      reference:
+        `rekor:${String(logId ?? "unknown")}:` +
+        String(logIndex ?? "unknown"),
       anchoredAt,
     },
   };
