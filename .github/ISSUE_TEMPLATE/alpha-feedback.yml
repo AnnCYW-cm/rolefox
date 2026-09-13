@@ -1,0 +1,55 @@
+name: Pre-user Alpha feedback
+description: Share usability feedback without posting personal or job-search data.
+title: "[Alpha feedback] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for trying the browser-local RoleFox Pre-user Alpha.
+
+        This issue is public. Do not include resumes, job descriptions, company names, contact details, application history, URLs with private tokens, or any other personal information. Use synthetic or fully redacted examples only.
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Public-data confirmation
+      options:
+        - label: I used only synthetic or fully redacted information in this report.
+          required: true
+  - type: dropdown
+    id: outcome
+    attributes:
+      label: What were you able to complete?
+      options:
+        - Configure my matching rules
+        - Add or paste sample jobs
+        - Review scores and reasons
+        - Mark jobs as interested or not interested
+        - Export local data or anonymous summary
+        - I could not complete the setup
+    validations:
+      required: true
+  - type: textarea
+    id: useful
+    attributes:
+      label: What felt useful?
+      description: Describe the workflow, not your real profile or job content.
+    validations:
+      required: true
+  - type: textarea
+    id: friction
+    attributes:
+      label: What was confusing or blocked you?
+      description: Include the visible error text if one appeared, after checking that it contains no personal data.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Browser and device type (optional)
+      placeholder: "Example: Safari on iPhone, Chrome on Windows"
+  - type: checkboxes
+    id: research
+    attributes:
+      label: Follow-up
+      options:
+        - label: I am open to being contacted through this GitHub issue about a future private research session.
