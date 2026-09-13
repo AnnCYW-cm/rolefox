@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "RoleFox — 开源求职 Autopilot（M0 原型）",
+  title: "RoleFox — Pre-user Alpha 岗位判断原型",
   description:
-    "面向面试前流程的开源、本地优先求职 Autopilot。当前为静态 M0 产品原型，不执行真实扫描、投递或回复。",
+    "浏览器本地运行的岗位判断与校准原型。没有账号、云同步、后台扫描、投递、回复或真实 Provider。",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
