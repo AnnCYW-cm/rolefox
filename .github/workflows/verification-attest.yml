@@ -49,6 +49,7 @@ jobs:
           ROLEFOX_KIND: ${{ inputs.kind }}
           ROLEFOX_PAYLOAD_DIGEST: ${{ inputs.payload_digest }}
           ROLEFOX_OUTPUT_DIRECTORY: ${{ runner.temp }}
+          ROLEFOX_REPOSITORY_VISIBILITY: ${{ github.event.repository.visibility }}
           ROLEFOX_RUNNER_ENVIRONMENT: ${{ runner.environment }}
         run: >-
           node scripts/verification/create-trust-request.mjs
