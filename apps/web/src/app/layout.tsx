@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "RoleFox — Pre-user Alpha 岗位判断原型",
+  title: "RoleFox v0.1.0-alpha.1 — 开源岗位判断工具",
   description:
-    "浏览器本地运行的岗位判断与校准原型。没有账号、云同步、后台扫描、投递、回复或真实 Provider。",
+    "浏览器本地运行的开源岗位判断与校准工具。没有账号、云同步、后台扫描、投递、回复或真实 Provider。",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

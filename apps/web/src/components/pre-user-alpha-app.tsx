@@ -31,7 +31,7 @@ import {
   type BatchParseError,
   type CalibrationDecision,
   type JobDraft,
-} from "@/lib/pre-user-alpha";
+} from "../lib/pre-user-alpha";
 
 type StorageMode = "loading" | "ready" | "locked";
 
@@ -57,6 +57,25 @@ const EMPTY_RULE_FORM = {
   includeKeywords: "",
   excludeKeywords: "",
 };
+
+const PROJECT_LINKS = [
+  {
+    href: "https://github.com/AnnCYW-cm/rolefox",
+    label: "GitHub 源码",
+  },
+  {
+    href: "https://github.com/AnnCYW-cm/rolefox/blob/main/README.md",
+    label: "README / 文档",
+  },
+  {
+    href: "https://github.com/AnnCYW-cm/rolefox/blob/main/LICENSE",
+    label: "Apache-2.0 许可",
+  },
+  {
+    href: "https://github.com/AnnCYW-cm/rolefox/blob/main/CONTRIBUTING.md",
+    label: "参与贡献",
+  },
+] as const;
 
 function rulesToForm(rules: AlphaRules) {
   return {
@@ -312,7 +331,7 @@ export default function PreUserAlphaApp() {
         <span className="brand-mark" aria-hidden="true">
           🦊
         </span>
-        <p>正在安全读取当前浏览器中的 RoleFox Alpha 数据…</p>
+        <p>正在安全读取当前浏览器中的 RoleFox 开源 Alpha 数据…</p>
       </main>
     );
   }
@@ -418,7 +437,7 @@ function HydratedPreUserAlphaApp() {
     }
 
     if (state.jobs.length + drafts.length > MAX_ALPHA_JOBS) {
-      setJobError(`本原型最多保存 ${MAX_ALPHA_JOBS} 个岗位，请先导出或清理数据。`);
+      setJobError(`本工具最多保存 ${MAX_ALPHA_JOBS} 个岗位，请先导出或清理数据。`);
       return false;
     }
 
@@ -488,7 +507,7 @@ function HydratedPreUserAlphaApp() {
       state.jobs.length + SAMPLE_JOB_DRAFTS.length > MAX_ALPHA_JOBS
     ) {
       setJobError(
-        `本原型最多保存 ${MAX_ALPHA_JOBS} 个岗位，请先导出或清理数据。`,
+        `本工具最多保存 ${MAX_ALPHA_JOBS} 个岗位，请先导出或清理数据。`,
       );
       return;
     }
@@ -703,7 +722,7 @@ function HydratedPreUserAlphaApp() {
           </span>
           <span>
             <strong>RoleFox</strong>
-            <small>PRE-USER ALPHA</small>
+            <small>OPEN-SOURCE ALPHA</small>
           </span>
         </div>
 
@@ -737,13 +756,29 @@ function HydratedPreUserAlphaApp() {
       >
         <header className="alpha-header">
           <div>
-            <p className="eyebrow">Pre-user Alpha validation prototype</p>
+            <p className="eyebrow">RoleFox open-source tool</p>
             <h1>先校准“哪些岗位值得看”</h1>
             <p className="lede">
               手工放入岗位，RoleFox 按你的目标给出可复查的排序；你的每次选择都会形成一份本地校准记录。
             </p>
           </div>
-          <span className="alpha-badge">验证原型 · 不是 v0.1</span>
+          <div className="release-meta">
+            <span className="alpha-badge">v0.1.0-alpha.1 · 开源首版</span>
+            <nav aria-label="开源项目资源" className="project-links">
+              {PROJECT_LINKS.map((link) => (
+                <a
+                  href={link.href}
+                  key={link.href}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  {link.label}
+                  <span aria-hidden="true">↗</span>
+                  <span className="sr-only">（在新窗口打开）</span>
+                </a>
+              ))}
+            </nav>
+          </div>
         </header>
 
         <section className="disclosure" aria-labelledby="disclosure-title">
@@ -753,7 +788,7 @@ function HydratedPreUserAlphaApp() {
           <div>
             <h2 id="disclosure-title">数据只保存在当前浏览器</h2>
             <p>
-              本原型没有账号、服务器存储或云同步，也不会扫描、投递、回复、连接邮箱/日历或调用 AI Provider。清除浏览器数据前请先导出备份。
+              这个开源 Alpha 没有账号、服务器存储或云同步，也不会扫描、投递、回复、连接邮箱/日历或调用 AI Provider。清除浏览器数据前请先导出备份。
             </p>
           </div>
         </section>
@@ -1099,7 +1134,11 @@ function HydratedPreUserAlphaApp() {
                         </div>
                       </div>
                       <div className="job-actions">
-                        <div className="decision-group" aria-label={`${job.title} 的校准选择`}>
+                        <div
+                          aria-label={`${job.title} 的校准选择`}
+                          className="decision-group"
+                          role="group"
+                        >
                           <DecisionButton
                             active={currentDecision === "interested"}
                             decision="interested"
@@ -1133,7 +1172,7 @@ function HydratedPreUserAlphaApp() {
         <section className="feedback-panel" aria-labelledby="feedback-title">
           <div>
             <p className="eyebrow">帮助决定下一步</p>
-            <h2 id="feedback-title">告诉我们这个判断原型哪里不对</h2>
+            <h2 id="feedback-title">告诉我们这个开源工具哪里不对</h2>
             <p>
               GitHub Issue 是公开的。请勿提交简历、岗位正文、联系人、邮箱、聊天记录或任何其他个人数据；只描述问题类型和你期望的行为。
             </p>
@@ -1191,8 +1230,8 @@ function HydratedPreUserAlphaApp() {
         </section>
 
         <footer className="alpha-footer">
-          <span>RoleFox Pre-user Alpha · 本地验证原型</span>
-          <span>没有后台任务，也不会产生外部求职动作</span>
+          <span>RoleFox v0.1.0-alpha.1 · Apache-2.0 开源工具</span>
+          <span>仅在当前浏览器运行 · 不会产生外部求职动作</span>
         </footer>
       </main>
 

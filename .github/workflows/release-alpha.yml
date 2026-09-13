@@ -1,0 +1,150 @@
+name: Release open-source Alpha
+
+on:
+  push:
+    tags:
+      - "v0.1.0-alpha.*"
+
+permissions: {}
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.repository == 'AnnCYW-cm/rolefox'
+    runs-on: ubuntu-24.04
+    permissions:
+      attestations: read
+      contents: read
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Require a release tag from protected main
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor HEAD origin/main
+          [[ "${RELEASE_TAG}" =~ ^v0\.1\.0-alpha\.[0-9]+$ ]]
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+        with:
+          version: 10.29.1
+          run_install: false
+
+      - name: Install Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Require every package to match the release tag
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          node --input-type=module -e '
+            import fs from "node:fs";
+            const files = [
+              "package.json",
+              "apps/runner/package.json",
+              "apps/web/package.json",
+              "apps/worker/package.json",
+              "packages/ai-provider/package.json",
+              "packages/connector-sdk/package.json",
+              "packages/domain/package.json",
+              "packages/policy/package.json",
+            ];
+            const expected = process.env.RELEASE_TAG.slice(1);
+            for (const file of files) {
+              const actual = JSON.parse(fs.readFileSync(file, "utf8")).version;
+              if (actual !== expected) throw new Error(`${file} is ${actual}; expected ${expected}`);
+            }
+          '
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Verify tagged source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: pnpm check
+
+      - name: Package the browser-local static build
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          release_directory="rolefox-web-${RELEASE_TAG}"
+          test -f "releases/${RELEASE_TAG}.md"
+          mkdir "${release_directory}"
+          cp -R apps/web/out/. "${release_directory}/"
+          cp LICENSE "${release_directory}/LICENSE"
+          cp "releases/${RELEASE_TAG}.md" "${release_directory}/RELEASE_NOTES.md"
+          cp "releases/${RELEASE_TAG}.md" release-notes.md
+          tar \
+            --format=ustar \
+            --sort=name \
+            --mtime='UTC 1970-01-01' \
+            --owner=0 \
+            --group=0 \
+            --numeric-owner \
+            -czf "${release_directory}.tar.gz" \
+            "${release_directory}"
+          sha256sum "${release_directory}.tar.gz" > "${release_directory}.tar.gz.sha256"
+
+      - name: Upload verified release candidate
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: rolefox-release-${{ github.run_id }}
+          path: |
+            rolefox-web-${{ github.ref_name }}.tar.gz
+            rolefox-web-${{ github.ref_name }}.tar.gz.sha256
+            release-notes.md
+          if-no-files-found: error
+          retention-days: 1
+
+  release:
+    if: github.repository == 'AnnCYW-cm/rolefox'
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      attestations: write
+      contents: write
+      id-token: write
+    steps:
+      - name: Download verified release candidate
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        with:
+          name: rolefox-release-${{ github.run_id }}
+          path: release-assets
+
+      - name: Verify the downloaded checksum
+        working-directory: release-assets
+        run: sha256sum --check rolefox-web-${{ github.ref_name }}.tar.gz.sha256
+
+      - name: Attest the static build with GitHub Actions OIDC
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        with:
+          subject-path: release-assets/rolefox-web-${{ github.ref_name }}.tar.gz
+
+      - name: Publish the prerelease and verified assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        working-directory: release-assets
+        run: |
+          gh release create "${RELEASE_TAG}" \
+            "rolefox-web-${RELEASE_TAG}.tar.gz" \
+            "rolefox-web-${RELEASE_TAG}.tar.gz.sha256" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --prerelease \
+            --title "RoleFox ${RELEASE_TAG}" \
+            --notes-file release-notes.md \
+            --verify-tag

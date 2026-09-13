@@ -1,9 +1,9 @@
 {
   "name": "rolefox",
-  "version": "0.1.0",
+  "version": "0.1.0-alpha.1",
   "private": true,
   "type": "module",
-  "description": "A policy-governed, open-source job-search agent from goals to booked interviews.",
+  "description": "An open-source, browser-local job triage and preference-calibration tool with explainable scoring.",
   "license": "Apache-2.0",
   "packageManager": "pnpm@10.29.1",
   "engines": {
