@@ -8,7 +8,7 @@
   "verification_toolchain": {
     "algorithm": "sha256",
     "canonicalization": "rolefox-canonical-digest-v1",
-    "digest": "9d3dacfaf64e07b11e177bd90c91c0156cd32bdb7f2830e4ca62b1b7c2b4b1b0",
+    "digest": "aa8da4f68d02c5c049c67ea77e42bea291f7f35dccfee10f608ac8eec4e1ea47",
     "files": [
       {
         "path": ".github/workflows/ci.yml",
@@ -47,8 +47,8 @@
       },
       {
         "path": "scripts/verification/bootstrap-pre-w1.mjs",
-        "bytes": 22893,
-        "sha256": "a96cf339a3bb91da72dcd12391d59cef77bf8aec42bbf442c59040245d5f171d"
+        "bytes": 20052,
+        "sha256": "671453514cb936e4fca5302aa6dac60085616b550691d0d9ff7a8b0b516c7d21"
       },
       {
         "path": "scripts/verification/check-pre-w1.mjs",
@@ -57,8 +57,8 @@
       },
       {
         "path": "scripts/verification/checkpoint-lib.mjs",
-        "bytes": 51651,
-        "sha256": "3907692c70a92b8bad7f002ff3cd25c5c42260da8c4c0b5277d50bf880ad52b4"
+        "bytes": 49803,
+        "sha256": "32f5a745e1b1296f8a92052ab122a58a42d9580293f90c3eb79df36e49568042"
       },
       {
         "path": "scripts/verification/config.mjs",
@@ -87,8 +87,8 @@
       },
       {
         "path": "scripts/verification/trust.mjs",
-        "bytes": 21113,
-        "sha256": "c8b8ee25d3ee517f0743fadc5fd60c973b488046b5e3aa08fed6adfc7e66d771"
+        "bytes": 20995,
+        "sha256": "50dec5ff4b0dc8f116c6e7fb067857757c82c1767e6882ac277db2eb2dad238c"
       },
       {
         "path": "scripts/verification/write-checkpoint.mjs",
@@ -428,5 +428,5 @@
     "tool": "scripts/verification/bootstrap-pre-w1.mjs",
     "deterministic_inputs": true
   },
-  "manifest_digest": "fef9327ce1eb6c15f288cd37ccb7386aefd069a6103fcf3c359ae4d45d81130f"
+  "manifest_digest": "6fb88a87b43d187484171ddab0c556ed5b0dae6b98a834b5decb1ef58aa13232"
 }

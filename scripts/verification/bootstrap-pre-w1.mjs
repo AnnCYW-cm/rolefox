@@ -3,7 +3,8 @@ import path from "node:path";
 
 import {
   createCurrentCheckpoint,
-  validateHistoricalBindings,
+  loadCheckpointChain,
+  validateHistoricalBindingDocuments,
 } from "./checkpoint-lib.mjs";
 import {
   ACCEPTED_SPEC_FILES,
@@ -16,6 +17,7 @@ import {
   VERIFICATION_TOOLCHAIN_FILES,
 } from "./config.mjs";
 import {
+  DIGEST_CONTRACT,
   addressDocument,
   appendJsonLine,
   assertRepositoryRelativePath,
@@ -23,11 +25,13 @@ import {
   canonicalDigest,
   canonicalDigestExcluding,
   digestFileSet,
+  digestFileMetadataSet,
   invariant,
   parseJsonLines,
   readJson,
   repositoryRoot,
   resolveRepositoryPath,
+  sha256,
   validateGateChains,
   verifyAddressedDocument,
   withVerificationLock,
@@ -36,6 +40,7 @@ import {
 } from "./lib.mjs";
 import { assertNoSensitivePublicData } from "./privacy.mjs";
 import { SCHEMA_NAMES, validateSchema } from "./schema.mjs";
+import { verifyTrustedProof } from "./trust.mjs";
 
 const root = repositoryRoot(import.meta.url);
 const absolute = (relativePath) => path.join(root, ...relativePath.split("/"));
@@ -89,6 +94,73 @@ const normalizeAuthorityDocument = (
   return normalized;
 };
 
+const compareText = (left, right) =>
+  Buffer.compare(Buffer.from(left, "utf8"), Buffer.from(right, "utf8"));
+
+const plannedJsonMetadata = (relativePath, document) => {
+  const bytes = Buffer.from(`${JSON.stringify(document, null, 2)}\n`, "utf8");
+  return { path: relativePath, bytes: bytes.length, sha256: sha256(bytes) };
+};
+
+const digestPlannedFileSet = (relativePaths, plannedJsonDocuments = new Map()) => {
+  const uniquePaths = [...new Set(relativePaths)];
+  invariant(uniquePaths.length === relativePaths.length, "File-set paths must be unique.");
+  uniquePaths.forEach(assertRepositoryRelativePath);
+  uniquePaths.sort(compareText);
+  const files = uniquePaths.map((relativePath) =>
+    plannedJsonDocuments.has(relativePath)
+      ? plannedJsonMetadata(relativePath, plannedJsonDocuments.get(relativePath))
+      : digestFileSet(root, [relativePath]).files[0],
+  );
+  return {
+    algorithm: "sha256",
+    canonicalization: DIGEST_CONTRACT,
+    digest: digestFileMetadataSet(files),
+    files,
+  };
+};
+
+const createMemoizedProofVerifier = () => {
+  const cache = new Map();
+  return (verificationRoot, request, options) => {
+    const key = canonicalDigest({
+      root: path.resolve(verificationRoot),
+      kind: request.kind,
+      payload_digest: request.payloadDigest,
+      payload_bytes_digest: sha256(request.payloadBytes),
+      proof_digest: request.proofDigest ?? null,
+      bundle_path:
+        request.bundlePath === undefined ? null : path.resolve(request.bundlePath),
+      expected_decision: request.expectedDecision ?? null,
+    });
+    const cached = cache.get(key);
+    if (cached) {
+      const proofPath = request.bundlePath ?? path.join(
+        verificationRoot,
+        ...PATHS.trustProofDirectory.split("/"),
+        `proof_${request.proofDigest}.json`,
+      );
+      const metadata = fs.lstatSync(proofPath);
+      invariant(
+        metadata.isFile() && !metadata.isSymbolicLink(),
+        "Cached trust proof must remain a regular file.",
+      );
+      invariant(
+        sha256(fs.readFileSync(proofPath)) === cached.proofDigest,
+        "Cached trust proof bytes changed after preflight verification.",
+      );
+      return cached;
+    }
+    const verified = verifyTrustedProof(
+      verificationRoot,
+      request,
+      options,
+    );
+    cache.set(key, verified);
+    return verified;
+  };
+};
+
 const discoverDesignFiles = (directory, prefix = "docs") =>
   fs
     .readdirSync(directory, { withFileTypes: true })
@@ -112,14 +184,6 @@ const catalog = normalizeAuthorityDocument(catalogInput, {
 });
 validateSchema(root, SCHEMA_NAMES.catalog, catalog, "Required Release Scope Catalog");
 assertNoSensitivePublicData(catalog.review, "Required Release Scope Catalog review");
-if (catalog.status !== "ACCEPTED") writeJsonAtomic(catalogPath, catalog);
-writeJsonImmutable(
-  path.join(
-    absolute(PATHS.catalogSnapshotDirectory),
-    `catalog_${catalog.catalog_digest}.json`,
-  ),
-  catalog,
-);
 
 const protocolPath = absolute(PATHS.protocol);
 const protocolInput = readJson(protocolPath);
@@ -136,14 +200,6 @@ invariant(
   "Pre-W1 Research Protocol must bind the configured sole-maintainer authority.",
 );
 assertNoSensitivePublicData(protocol.approval, "Pre-W1 Research Protocol approval");
-if (protocol.status !== "APPROVED") writeJsonAtomic(protocolPath, protocol);
-writeJsonImmutable(
-  path.join(
-    absolute(PATHS.protocolSnapshotDirectory),
-    `protocol_${protocol.protocol_digest}.json`,
-  ),
-  protocol,
-);
 
 const verificationToolchain = digestFileSet(
   root,
@@ -165,8 +221,16 @@ const inventoryPaths = [
   PATHS.catalog,
   PATHS.protocol,
 ];
-const inventory = inventoryPaths.map((relativePath) => {
-  const file = digestFileSet(root, [relativePath]).files[0];
+const plannedAuthorityDocuments = new Map([
+  [PATHS.catalog, catalog],
+  [PATHS.protocol, protocol],
+]);
+const plannedInventory = digestPlannedFileSet(
+  inventoryPaths,
+  plannedAuthorityDocuments,
+);
+const inventory = plannedInventory.files.map((file) => {
+  const relativePath = file.path;
   const isBaselineAccepted = ACCEPTED_SPEC_FILES.includes(relativePath);
   const isCatalog = relativePath === PATHS.catalog;
   const isProtocol = relativePath === PATHS.protocol;
@@ -195,7 +259,10 @@ const inventory = inventoryPaths.map((relativePath) => {
 const normativePaths = inventory
   .filter((entry) => entry.included_in_normative_set)
   .map((entry) => entry.path);
-const normativeSet = digestFileSet(root, normativePaths);
+const normativeSet = digestPlannedFileSet(
+  normativePaths,
+  plannedAuthorityDocuments,
+);
 const specManifestBody = {
   schema_version: "rolefox.spec-manifest.v1",
   manifest_version: "v0.1-bootstrap-1",
@@ -223,18 +290,9 @@ const specManifestBody = {
 };
 const specManifest = digestFixedDocument(specManifestBody, "manifest_digest");
 validateSchema(root, SCHEMA_NAMES.specManifest, specManifest, "Spec Manifest");
-writeJsonImmutable(
-  path.join(
-    absolute(PATHS.specManifestSnapshotDirectory),
-    `spec_${specManifest.manifest_digest}.json`,
-  ),
-  specManifest,
-);
-writeJsonAtomic(absolute(PATHS.specManifest), specManifest);
 
 const candidateDirectory = absolute(PATHS.candidateDirectory);
 const candidateIndexPath = absolute(PATHS.candidateIndex);
-fs.mkdirSync(candidateDirectory, { recursive: true });
 
 const candidateInputs = {
   spec_manifest_digest: specManifest.manifest_digest,
@@ -372,13 +430,15 @@ if (!candidate) {
     },
   );
   validateSchema(root, SCHEMA_NAMES.candidate, candidate, "Candidate Scope Manifest");
-  writeJsonImmutable(
-    path.join(candidateDirectory, `${candidate.candidate_scope_manifest_id}.json`),
-    candidate,
-  );
 }
 
-validateHistoricalBindings(root, {
+const proofVerifier = createMemoizedProofVerifier();
+loadCheckpointChain(root, { proofVerifier });
+validateHistoricalBindingDocuments(root, {
+  specManifest,
+  catalog,
+  protocol,
+  candidate,
   specManifestDigest: specManifest.manifest_digest,
   normativeSetDigest: specManifest.normative_set_digest,
   catalogDigest: catalog.catalog_digest,
@@ -388,9 +448,38 @@ validateHistoricalBindings(root, {
   candidateArtifactDigest: candidate.candidate_artifact_digest,
   verificationToolchainDigest: verificationToolchain.digest,
   label: "Bootstrap current state",
-});
+}, { proofVerifier });
 assertNoSensitivePublicData(candidate.approval, "Candidate Scope approval");
 
+writeJsonImmutable(
+  path.join(
+    absolute(PATHS.catalogSnapshotDirectory),
+    `catalog_${catalog.catalog_digest}.json`,
+  ),
+  catalog,
+);
+writeJsonImmutable(
+  path.join(
+    absolute(PATHS.protocolSnapshotDirectory),
+    `protocol_${protocol.protocol_digest}.json`,
+  ),
+  protocol,
+);
+writeJsonImmutable(
+  path.join(
+    absolute(PATHS.specManifestSnapshotDirectory),
+    `spec_${specManifest.manifest_digest}.json`,
+  ),
+  specManifest,
+);
+writeJsonImmutable(
+  path.join(candidateDirectory, `${candidate.candidate_scope_manifest_id}.json`),
+  candidate,
+);
+
+if (catalog.status !== "ACCEPTED") writeJsonAtomic(catalogPath, catalog);
+if (protocol.status !== "APPROVED") writeJsonAtomic(protocolPath, protocol);
+writeJsonAtomic(absolute(PATHS.specManifest), specManifest);
 writeJsonAtomic(candidateIndexPath, {
   schema_version: "rolefox.current-candidate-scope.v1",
   candidate_scope_manifest_id: candidate.candidate_scope_manifest_id,
@@ -525,6 +614,7 @@ const checkpointCreatedAt = now();
 const { checkpoint: preparedCheckpoint } = createCurrentCheckpoint(root, {
   createdAt: checkpointCreatedAt,
   persist: false,
+  proofVerifier,
 });
 validateSchema(
   root,
@@ -534,6 +624,7 @@ validateSchema(
 );
 const { checkpoint } = createCurrentCheckpoint(root, {
   createdAt: checkpointCreatedAt,
+  proofVerifier,
 });
 
 console.log("RoleFox Pre-W1 verification bootstrap is structurally initialized.");

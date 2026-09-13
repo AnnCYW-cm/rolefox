@@ -251,12 +251,16 @@ function verifiedTimestampsFrom(result) {
 
 function rawBundleParts(bundle) {
   invariant(isObject(bundle), "Attestation bundle must be one JSON object.");
+  invariant(
+    bundle.mediaType === "application/vnd.dev.sigstore.bundle.v0.3+json",
+    "Attestation bundle media type is not Sigstore bundle v0.3.",
+  );
   const verificationMaterial = bundle.verificationMaterial ?? bundle.verification_material;
   invariant(isObject(verificationMaterial), "Attestation bundle verificationMaterial is missing.");
   const tlogEntries =
     verificationMaterial.tlogEntries ?? verificationMaterial.tlog_entries;
   invariant(Array.isArray(tlogEntries), "Attestation bundle tlogEntries is missing.");
-  const envelope = bundle.content?.dsseEnvelope ?? bundle.content?.dsse_envelope;
+  const envelope = bundle.dsseEnvelope ?? bundle.dsse_envelope;
   invariant(isObject(envelope), "Attestation bundle DSSE envelope is missing.");
   invariant(
     Array.isArray(envelope.signatures) && envelope.signatures.length === 1,
@@ -297,20 +301,22 @@ function verifyRekorAnchor(bundle, verifiedTimestamps, policy, decisionAt) {
     verifiedTimestamps.length >= policy.sigstore.minimum_verified_rekor_timestamps,
     "Attestation has no required verified timestamp.",
   );
-  const tlogTimes = tlogEntries.map(tlogTimestamp).filter(Boolean);
-  invariant(tlogTimes.length > 0, "Rekor entry has no integrated timestamp.");
+  const anchoredEntries = tlogEntries
+    .map((entry) => ({ entry, integratedAt: tlogTimestamp(entry) }))
+    .filter(({ integratedAt }) => integratedAt !== null);
+  invariant(anchoredEntries.length > 0, "Rekor entry has no integrated timestamp.");
   const verifiedTimes = verifiedTimestamps.map(timestampValue);
-  const anchoredAt = tlogTimes.find((time) =>
+  const anchoredEntry = anchoredEntries.find(({ integratedAt }) =>
     verifiedTimes.some(
-      (verified) => Math.abs(Date.parse(verified) - Date.parse(time)) <= 1000,
+      (verified) => Math.abs(Date.parse(verified) - Date.parse(integratedAt)) <= 1000,
     ),
   );
-  invariant(anchoredAt, "No gh-verified timestamp matches the Rekor integrated timestamp.");
+  invariant(anchoredEntry, "No gh-verified timestamp matches the Rekor integrated timestamp.");
+  const { entry, integratedAt: anchoredAt } = anchoredEntry;
   invariant(
     Date.parse(anchoredAt) + 999 >= Date.parse(decisionAt),
     "Rekor timestamp predates the signed maintainer decision.",
   );
-  const entry = tlogEntries[tlogTimes.indexOf(anchoredAt)] ?? tlogEntries[0];
   const logId =
     entry.logId?.keyId ?? entry.log_id?.key_id ?? entry.logId ?? entry.log_id;
   const logIndex = entry.logIndex ?? entry.log_index;
