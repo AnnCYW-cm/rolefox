@@ -1,0 +1,74 @@
+[
+  {
+    "title": "AI 产品经理",
+    "company": "星槎软件（虚构）",
+    "location": "全球远程",
+    "description": "负责 B2B AI 工作流产品的需求研究、路线图和交付复盘，与设计及工程团队协作。"
+  },
+  {
+    "title": "高级产品经理（协作平台）",
+    "company": "松塔协作（虚构）",
+    "location": "远程",
+    "description": "负责企业协作工作流，服务 B2B 客户，推动发现、验证与迭代。"
+  },
+  {
+    "title": "SaaS 产品经理",
+    "company": "澄湾科技（虚构）",
+    "location": "上海 / 混合办公",
+    "description": "规划 B2B 管理平台并探索 AI 辅助能力，要求能够拆解复杂业务流程。"
+  },
+  {
+    "title": "Product Manager, AI Tools",
+    "company": "Juniper Harbor（虚构）",
+    "location": "Remote / APAC",
+    "description": "Own an AI-assisted B2B workflow product from discovery through measurable delivery."
+  },
+  {
+    "title": "产品运营负责人",
+    "company": "北辰工坊（虚构）",
+    "location": "新加坡 / 混合办公",
+    "description": "建设跨团队工作流和指标体系，支持 B2B 产品上线后的运营改进。"
+  },
+  {
+    "title": "平台产品经理",
+    "company": "云杉系统（虚构）",
+    "location": "北京",
+    "description": "负责内部平台、权限模型和研发工作流，不要求 AI 项目经验。"
+  },
+  {
+    "title": "客户成功经理",
+    "company": "河谷云服（虚构）",
+    "location": "远程",
+    "description": "帮助 B2B 客户完成系统上线、培训与续约，并把反馈整理给产品团队。"
+  },
+  {
+    "title": "产品设计师",
+    "company": "白榆设计（虚构）",
+    "location": "远程",
+    "description": "为 AI 工作流工具设计端到端体验，与研究和工程团队共同验证方案。"
+  },
+  {
+    "title": "后端工程师",
+    "company": "潮汐计算（虚构）",
+    "location": "远程",
+    "description": "使用 TypeScript 构建高可用服务，维护 API、数据库和可观测性。"
+  },
+  {
+    "title": "企业软件销售经理",
+    "company": "山岚商业（虚构）",
+    "location": "远程",
+    "description": "承担季度销售目标，负责客户开拓、报价和合同谈判。"
+  },
+  {
+    "title": "Web3 产品经理",
+    "company": "棱镜网络（虚构）",
+    "location": "远程",
+    "description": "负责区块链钱包和社区治理产品，推动生态合作。"
+  },
+  {
+    "title": "内容运营专员",
+    "company": "纸飞机内容（虚构）",
+    "location": "杭州",
+    "description": "策划品牌栏目、编辑稿件并维护内容发布节奏。"
+  }
+]

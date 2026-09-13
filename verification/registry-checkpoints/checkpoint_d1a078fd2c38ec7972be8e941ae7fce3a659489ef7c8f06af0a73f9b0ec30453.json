@@ -1,0 +1,66 @@
+{
+  "schema_version": "rolefox.registry-checkpoint.v1",
+  "sequence": 16,
+  "created_at": "2026-09-13T09:02:24.679Z",
+  "previous": {
+    "checkpoint_id": "checkpoint_8cd0fe88f6ff8a309f75dc545993c9aec67f83a19ba5c5e0c3ecda8beb96768e",
+    "checkpoint_digest": "8cd0fe88f6ff8a309f75dc545993c9aec67f83a19ba5c5e0c3ecda8beb96768e",
+    "registry_root_digest": "c9347f31d8dc3c4010dd836144312e188451d76e3c8812beac0679282e3a7c94",
+    "record_counts": {
+      "gate_records": 14,
+      "evidence_manifests": 0,
+      "case_evidence_requirements": 0,
+      "case_verification": 0,
+      "journey_invariant_verification": 0
+    }
+  },
+  "spec_manifest_digest": "8c350c0214c663fc96858a497095ff935549ec5a31d46c38100015d90fe73368",
+  "normative_set_digest": "daddc27b93de742de4a3869380b548b75578a32de8b122c5e1a9bbccd6000cf0",
+  "catalog_digest": "f0067111f8f5035931619bf9fc86b46de6a9f27c2e4c8f3d48e18623dc698d85",
+  "research_protocol_digest": "c2c85eec2ce3bb0b3cc4fd6e1d9555e06a025038d2d6e0bbd30c75eab47346ec",
+  "candidate_scope_manifest_digest": "36e4798add384918b7a227bf979b9d9f0843212275c893162133a5b4b45c0eec",
+  "candidate_artifact_digest": "e8d1c84435e8fb8cf684c68806b466351d3ee9d2066bc309b94f1399a0208942",
+  "verification_toolchain_digest": "9d3dacfaf64e07b11e177bd90c91c0156cd32bdb7f2830e4ca62b1b7c2b4b1b0",
+  "gate_registry_digest": "a626ed20477e59c82e18c61459f31a5220d6a7d2e75b8f0e9b7b19598aaa7c28",
+  "gate_head_set_digest": "8ca9b9c620d62b98fd8d8bebcfe80dfc37f052d3771bcd5bdadae8b312d02fd1",
+  "evidence_manifest_set_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "registry_digests": {
+    "case_evidence_requirements": null,
+    "case_verification": null,
+    "journey_invariant_verification": null,
+    "lifecycle_state": "NOT_CREATED_PRE_W1"
+  },
+  "record_counts": {
+    "gate_records": 15,
+    "evidence_manifests": 0,
+    "case_evidence_requirements": 0,
+    "case_verification": 0,
+    "journey_invariant_verification": 0
+  },
+  "gate_heads": [
+    {
+      "gate_id": "PRE_W1_PROBLEM_RULES",
+      "scope_id": "pre_w1_problem_and_rules_research",
+      "record_id": "gate_f2d85e59396505af2b8956901a8ba29e23cee1acc2b93980270fb9c64465610d",
+      "record_digest": "f2d85e59396505af2b8956901a8ba29e23cee1acc2b93980270fb9c64465610d",
+      "result": "BLOCKED"
+    }
+  ],
+  "evidence_manifest_refs": [],
+  "registry_root_digest": "281a9363547b7daf86ba56e0487153a438ebc86c51cb697481a8be0d377db336",
+  "signature": {
+    "status": "PENDING_TRUSTED_SIGNER",
+    "signer": null,
+    "signed_payload_digest": "281a9363547b7daf86ba56e0487153a438ebc86c51cb697481a8be0d377db336",
+    "signature": null
+  },
+  "external_anchor": {
+    "status": "NOT_CONFIGURED",
+    "provider": null,
+    "reference": null,
+    "anchored_at": null,
+    "anchored_payload_digest": "281a9363547b7daf86ba56e0487153a438ebc86c51cb697481a8be0d377db336"
+  },
+  "checkpoint_id": "checkpoint_d1a078fd2c38ec7972be8e941ae7fce3a659489ef7c8f06af0a73f9b0ec30453",
+  "checkpoint_digest": "d1a078fd2c38ec7972be8e941ae7fce3a659489ef7c8f06af0a73f9b0ec30453"
+}

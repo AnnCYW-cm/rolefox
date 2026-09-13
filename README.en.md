@@ -2,63 +2,51 @@
 
 [中文](README.md) | [English](README.en.md)
 
-> **Set your goal. Show up for the interview.**
->
-> An open-source, local-by-default, self-hostable autonomous job-search agent controlled by the candidate.
+> An open-source, browser-local tool for deciding which jobs are worth a closer look.
 
-RoleFox aims to take over the routine work between a candidate's goals and a booked interview: discover and evaluate roles, tailor evidence-grounded materials, apply, follow up, handle pre-screen conversations and schedule interviews. After a candidate provides truthful data and a versioned delegation policy, RoleFox should interrupt them only for exceptions or a confirmed interview.
+RoleFox **v0.1.0-alpha.1** is the first publicly usable Alpha. Define a target role, location, and keywords; add jobs manually or in batches; review deterministic scores, hard exclusions, and inspectable reasons; then record your own interested / not-interested decisions. Data stays in the current browser by default.
 
-This repository is currently **M0 / pre-alpha**. It includes a static product demo, domain state machine, foundational policy rules and extensibility contracts. It does not connect to real job boards or submit real applications yet.
+[Try it online](https://anncyw-cm.github.io/rolefox/) · [Synthetic examples](examples/fake-job-board/README.md) · [Release notes](releases/v0.1.0-alpha.1.md) · [Share feedback](https://github.com/AnnCYW-cm/rolefox/issues/new?template=alpha-feedback.yml)
 
-The Pre-W1 verification control plane now includes a Spec Manifest bound to both normative inputs and the verifier toolchain, a Required Release Scope Catalog, immutable authority snapshots, a frozen Candidate Scope, a schema and writer for two-layer content-addressed Evidence, an append-only Gate Registry, chained checkpoints, and protected-`main` GitHub Actions OIDC + Sigstore/Rekor trust verification. RoleFox uses a sole-maintainer governance model: `github:AnnCYW-cm` makes product and Gate decisions, while the machine signer proves provenance and never substitutes for that decision. Live status is derived by `pnpm verification:ready`; W1 must not start until real interviews, rules replay, a Gate 1 PASS, and a trusted checkpoint are all present.
+## 3–5 minute quickstart
 
-The v0.1 release has a separate real-provider gate that a demo cannot satisfy: RoleFox must connect to a real mailbox and a real calendar provider and verify inbound mail, controlled L2 replies after the seven-day Shadow gate, busy-time query and reconciliation, a candidate-private tentative event, recruiter confirmation, and failure compensation end to end. Reaching limited L3 is not required for v0.1—capabilities may remain at L2—but a fake inbox, test calendar, or application handoff cannot replace this release evidence. M0 has not implemented or passed this gate.
+1. Open the [live tool](https://anncyw-cm.github.io/rolefox/) and select “加载合成示例” (load synthetic examples).
+2. Review the sample rules, or replace them with your target role, location, preferred keywords, and exclusion keywords, then save.
+3. Inspect each job's score, reasons, and concerns, and mark it interested or not interested.
+4. Under local data controls, export a full backup. If you want to share test results, export the anonymous aggregate instead; it excludes rule text and job content.
 
-## Principles
+Start with synthetic or fully redacted data. GitHub issues are public: do not post resumes, real job descriptions, company names, contact details, private links, or other personal information.
 
-- **Candidate-owned data** — profiles, rules, credentials and audit history stay under the user's control.
-- **Policy as authorization** — low-risk L3 actions inside a versioned delegation envelope do not need per-action approval; exceptions do.
-- **Explainable outcomes** — users can inspect match reasons, supporting evidence and action risk.
-- **Replaceable infrastructure** — job sources, AI providers, storage and notifications are extensible.
+The v0.1.0-alpha.1 interface and repository example tutorial are currently in Chinese. This English README translates the main controls; an English interface is not part of this Alpha.
 
-RoleFox started from one person's real job search, but that person is the project's zero user, not a hard-coded product persona. A new candidate should be able to use RoleFox by changing workspace data and connectors, not core code.
+You can also use the [copy-and-paste synthetic rules and jobs](examples/fake-job-board/README.md) to test batch input.
 
-## Project status
+## What this Alpha does
 
-| Capability | Status |
+| Capability | v0.1.0-alpha.1 status |
 | --- | --- |
-| Web workspace with synthetic demo data | Implemented demo |
-| Application state machine | M0 legacy foundation only: string transitions and illegal-transition tests exist; the accepted Application/Interview lifecycles, Operation/Saga evidence, CAS and recovery semantics are not implemented |
-| Dry-run, kill switch, level matrix and limit rules | M0 legacy evaluator only: it compares caller-supplied usage and configuration; system hard ceilings, atomic counters/reservations, authorization records and L3 readiness are not implemented |
-| Capability-based job, messaging, notification and calendar connector contracts | Initial version |
-| Provider-agnostic AI contract | Initial version |
-| Worker and local runner | Safe stubs; no authorization store, exception workflow or external execution |
-| SQLite, matching and material generation | Planned |
-| Real job-board applications | Not implemented |
+| Target rules | Target role, location, preferred keywords, and hard exclusions |
+| Job input | Manual entry or batch paste using `title \| company \| location \| description` |
+| Local evaluation | Deterministic scoring, sorting, reasons, concerns, and hard exclusions |
+| Human calibration | Interested / not-interested decisions stored locally |
+| Data control | Browser-local persistence, full JSON backup and restore, anonymous aggregate, per-job deletion, and full clearing |
+| Safe defaults | No external actions; failed storage reads or restore validation lock editing to prevent accidental overwrite |
 
-General-purpose does not mean every job site is supported on day one. The core schema is portable; each real source needs an explicit connector and a review of its permissions and terms.
+Scores are explainable local rule results. They are not AI recommendations and do not predict job quality, hiring outcomes, or career fit.
 
-## Safety model
+## Explicitly out of scope
 
-RoleFox starts in `L2` with `DRY_RUN=true`, so the legacy foundational policy evaluator returns `preview_only`. M0 does not yet implement accepted hard ceilings, atomic usage counters/reservations, ActionPlan creation, authorization and exception services, L3 readiness, or execution.
+This first Alpha has **no** accounts, server database, cloud sync, automatic scraping, real job-board connection, AI calls, material generation, automatic applications, message replies, mailbox access, or calendar access. It never takes external actions in the background.
 
-The target experience is **L3 Autopilot**, not unbounded L4 autonomy. RoleFox may keep working only while the job, content, answers and calendar slot remain inside the candidate's versioned delegation policy. Missing facts, out-of-range answers, ambiguous times, calendar conflicts and high-risk commitments become exceptions.
+Those capabilities belong to a later productization phase. The repository's domain state machine, policy modules, Connector SDK, AI Provider, Worker, and Runner are foundational contracts or safety stubs—not usable product capabilities. The accepted v0.1 Autopilot documents remain a design baseline for that later phase; they do not mean this Alpha implements the 254 acceptance cases.
 
-```text
-Connector draft → immutable ActionPlan → durable policy evaluation
-                                           ↓
-                         current 7-day pre-L2 Shadow receipt gate
-                                           ↓
-                           L2 approval or current limited L3 grant
-                                           ↓
-            atomic Authorization / Operation / AuditIntent / Outbox
-                                           ↓
-          execution-time binding + receipt recheck → external execution
-```
+## Data and privacy
 
-Human approval never bypasses Shadow. The exact field bindings, composite scheduling receipt set, and three-state reconciliation rules are defined by the [common mutation sequence](docs/product/uml/05-sequence-flows.md).
-
-Compensation ranges, start dates and locations may be handled only when explicitly preauthorized and supported by candidate evidence; anything outside that range is escalated. Offer acceptance, legal declarations and unverifiable identity or experience claims always remain with the user. RoleFox will not solve CAPTCHAs or bypass access controls and platform safeguards.
+- Rules, jobs, and calibration choices are kept in the current browser's `localStorage`; there is no account or server copy.
+- Clearing site data also removes local records, so export a full backup first.
+- A full export can contain personal or job-search information you entered. Treat it as a private file.
+- The anonymous aggregate includes counts, score bands, decision statistics, and rule shape only—not rule text, job content, companies, or locations.
+- RoleFox does not solve CAPTCHAs, bypass access controls or platform safeguards, or optimize for indiscriminate bulk applications.
 
 ## Run locally
 
@@ -68,24 +56,38 @@ Requires Node.js 20.9+ and pnpm 10.29.1+.
 git clone https://github.com/AnnCYW-cm/rolefox.git
 cd rolefox
 pnpm install
-cp .env.example .env
 pnpm dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). The current UI uses synthetic data only.
+Open [http://localhost:3000](http://localhost:3000). This release is a browser-local tool and makes no Docker or server-deployment commitment. Packaging, self-hosted services, and cross-device modes will be evaluated during productization.
 
-The accepted v0.1 support target is Docker Compose on macOS, Windows, and Linux, plus supported native development on macOS. Native Linux and Windows runtimes are best effort. M0 has not completed that installation matrix yet.
-
-Before opening a pull request:
+Before submitting changes, run:
 
 ```bash
 pnpm check
 ```
 
-Run `pnpm verification:check` to validate the Pre-W1 registry structure. W1 may start only when `pnpm verification:ready` succeeds; it currently fails closed by design.
+## Verification Gate and the next phase
 
-See the [product scope](docs/product-scope.md), [Autopilot decision record](docs/adr/0001-pre-interview-autopilot.md), [accepted v0.1 decision baseline](docs/adr/0002-v0.1-product-decision-baseline.md), [safety-control Shadow boundary](docs/adr/0003-shadow-safety-control-exceptions.md), [JD raw-retention and preparation-pack decision](docs/adr/0004-jd-raw-retention-and-preparation-pack.md), [sole-maintainer governance decision](docs/adr/0005-sole-maintainer-governance.md), [implementation evidence and release-closure contract](docs/product/implementation-verification-v0.1.md), [architecture](docs/architecture.md), [roadmap](docs/roadmap.md), [public changelog](CHANGELOG.md), [open-source strategy](docs/open-source-strategy.md), and [contribution guide](CONTRIBUTING.md).
+The Pre-W1 Spec Manifest, Scope Catalog, Evidence, Gate Registry, checkpoints, and trusted-signature verification remain intact. Gate 1 intentionally remains **`BLOCKED`** because no real-user research evidence has been collected. Synthetic examples or the fact that the Alpha is online must not be used to manufacture a PASS.
+
+This does not block v0.1.0-alpha.1 as a narrowly scoped open-source tool. Gate 1 is used only to decide whether and how to invest in the next productization phase. W1 in the accepted Autopilot baseline must not start until real interviews, rules replay, a Gate 1 PASS, and a trusted checkpoint all exist. Run `pnpm verification:check` to validate registry structure; the research-readiness command `pnpm verification:ready` should currently fail closed.
+
+Possible next-phase work includes onboarding, a candidate fact store, a persistent database, file and link import, deduplication, AI assistance, workflows, and compliant connectors. First-release feedback and Gate 1 evidence—not this release—will determine that scope.
+
+## Docs and participation
+
+- [v0.1.0-alpha.1 release notes](releases/v0.1.0-alpha.1.md)
+- [Synthetic rule and job examples](examples/fake-job-board/README.md)
+- [Current open-source release strategy](OPEN_SOURCE_ALPHA.md)
+- [Long-term open-source principles](docs/open-source-strategy.md) (accepted historical design baseline)
+- [Long-term roadmap](docs/roadmap.md)
+- [Product design index](docs/product/README.md) (accepted baseline for the later phase)
+- [Verification registry guide](verification/README.md)
+- [Contribution guide](CONTRIBUTING.md) and [Code of Conduct](CODE_OF_CONDUCT.md)
+- [Security policy](SECURITY.md) (report vulnerabilities privately)
+- [Changelog](CHANGELOG.md)
 
 ## License
 
-[Apache License 2.0](LICENSE). Its long-term governance and hosted-service boundaries will be discussed publicly before outside contributions scale.
+[Apache License 2.0](LICENSE). You may use, modify, and distribute RoleFox under its terms.

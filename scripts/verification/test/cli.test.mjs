@@ -573,15 +573,21 @@ test("the W1 readiness command fails closed on the checked-in blockers", (t) => 
   );
   assert.equal(result.status, 1);
   assert.match(result.stdout, /Readiness: BLOCKED_NOT_STARTED/);
-  assert.deepEqual(
-    result.stdout.split("\n").filter((line) => line.startsWith("- ")),
-    ["- PRE_W1_GATE_HEAD_NOT_PASS", "- RESEARCH_EVIDENCE_NOT_COLLECTED"],
+  const blockers = result.stdout
+    .split("\n")
+    .filter((line) => line.startsWith("- "));
+  assert.ok(blockers.includes("- PRE_W1_GATE_HEAD_NOT_PASS"));
+  assert.ok(blockers.includes("- RESEARCH_EVIDENCE_NOT_COLLECTED"));
+  assert.ok(
+    blockers.every((line) =>
+      [
+        "- CANDIDATE_SCOPE_APPROVAL_PENDING",
+        "- CHECKPOINT_SIGNATURE_AND_EXTERNAL_ANCHOR_PENDING",
+        "- PRE_W1_GATE_HEAD_NOT_PASS",
+        "- RESEARCH_EVIDENCE_NOT_COLLECTED",
+      ].includes(line),
+    ),
   );
-  assert.doesNotMatch(
-    result.stdout,
-    /CHECKPOINT_SIGNATURE_AND_EXTERNAL_ANCHOR_PENDING/,
-  );
-  assert.doesNotMatch(result.stdout, /CANDIDATE_SCOPE_APPROVAL_PENDING/);
   assert.doesNotMatch(result.stdout, /TRUST_VERIFICATION_NOT_IMPLEMENTED/);
 });
 

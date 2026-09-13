@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   ALPHA_STORAGE_KEY,
@@ -14,7 +15,9 @@ import {
   scoreJob,
   serializeAlphaState,
   type AlphaJob,
+  type AlphaRules,
   type AlphaState,
+  type JobDraft,
   type StorageLike,
 } from "./pre-user-alpha";
 
@@ -76,6 +79,85 @@ function memoryStorage(initial?: string): StorageLike & { value: string | null }
     },
   };
 }
+
+function readExample(filename: string): string {
+  return readFileSync(
+    new URL(`../../../../examples/fake-job-board/${filename}`, import.meta.url),
+    "utf8",
+  );
+}
+
+function parseExampleCsv(input: string): JobDraft[] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = "";
+  let quoted = false;
+
+  for (let index = 0; index < input.length; index += 1) {
+    const character = input[index];
+    if (quoted) {
+      if (character === '"' && input[index + 1] === '"') {
+        field += '"';
+        index += 1;
+      } else if (character === '"') {
+        quoted = false;
+      } else {
+        field += character;
+      }
+    } else if (character === '"') {
+      quoted = true;
+    } else if (character === ",") {
+      row.push(field);
+      field = "";
+    } else if (character === "\n") {
+      row.push(field);
+      rows.push(row);
+      row = [];
+      field = "";
+    } else if (character !== "\r") {
+      field += character;
+    }
+  }
+
+  if (field.length > 0 || row.length > 0) {
+    row.push(field);
+    rows.push(row);
+  }
+
+  expect(quoted).toBe(false);
+  expect(rows.shift()).toEqual(["title", "company", "location", "description"]);
+  return rows.map(([title, company, location, description]) => ({
+    title,
+    company,
+    location,
+    description,
+  }));
+}
+
+describe("published synthetic examples", () => {
+  it("keeps paste, CSV, JSON, and scoring fixtures aligned", () => {
+    const parsed = parseBatchJobs(readExample("jobs.paste.txt"));
+    const jobs = JSON.parse(readExample("jobs.json")) as JobDraft[];
+    const rules = JSON.parse(readExample("rules.json")) as AlphaRules;
+
+    expect(parsed.errors).toEqual([]);
+    expect(parsed.jobs).toHaveLength(12);
+    expect(parsed.jobs).toEqual(jobs);
+    expect(parseExampleCsv(readExample("jobs.csv"))).toEqual(jobs);
+
+    const scored = scoreAndSortJobs(
+      jobs.map((job, index) => ({
+        ...job,
+        id: `published_example_${index + 1}`,
+        createdAt: now,
+      })),
+      rules,
+    );
+    expect(
+      scored.filter(({ score }) => !score.eligible).map(({ job }) => job.title),
+    ).toEqual(["企业软件销售经理", "Web3 产品经理"]);
+  });
+});
 
 describe("Pre-user Alpha rule parsing", () => {
   it("normalizes separators, whitespace, and case-insensitive duplicates", () => {
