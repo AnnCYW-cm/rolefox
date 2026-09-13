@@ -1,0 +1,56 @@
+{
+  "schema_version": "rolefox.candidate-scope-manifest.v1",
+  "manifest_kind": "SPEC_OR_EXPERIMENT",
+  "created_at": "2026-09-13T05:51:42.666Z",
+  "candidate_artifact_kind": "SPEC_OR_EXPERIMENT",
+  "candidate_artifact_digest": "a023a800e50b57581eb8abae4cecf3b216b5142598361f286404aada59a93165",
+  "verification_toolchain_ref": {
+    "digest": "9d3dacfaf64e07b11e177bd90c91c0156cd32bdb7f2830e4ca62b1b7c2b4b1b0"
+  },
+  "spec_manifest_ref": {
+    "path": "verification/spec-manifest-v0.1.json",
+    "manifest_digest": "fef9327ce1eb6c15f288cd37ccb7386aefd069a6103fcf3c359ae4d45d81130f",
+    "normative_set_digest": "58f3aff7bbd23b51f83d9c9cac66ef9cd129a0758286f0075bc67cf0123faafa"
+  },
+  "required_release_scope_catalog_ref": {
+    "path": "verification/required-release-scopes-v0.1.json",
+    "catalog_digest": "f0067111f8f5035931619bf9fc86b46de6a9f27c2e4c8f3d48e18623dc698d85"
+  },
+  "research_protocol_ref": {
+    "path": "verification/research/pre-w1-protocol-v0.1.json",
+    "protocol_digest": "c2c85eec2ce3bb0b3cc4fd6e1d9555e06a025038d2d6e0bbd30c75eab47346ec"
+  },
+  "release_scope_ids": [
+    "application_submit_l2",
+    "calendar_busy_read",
+    "calendar_tentative_cancel",
+    "calendar_tentative_create",
+    "calendar_tentative_update",
+    "credential_revocation",
+    "default_email_notification",
+    "job_source_read",
+    "mailbox_read",
+    "mailbox_reply_l2",
+    "release_v01_real_provider_joined",
+    "safety_liveness_heartbeat",
+    "safety_stop_alert"
+  ],
+  "research_scope_ids": [
+    "pain_interviews",
+    "rules_replay",
+    "target_channel_feasibility"
+  ],
+  "software_capabilities_claimed": [],
+  "cohort_and_criteria_frozen": true,
+  "approval": {
+    "status": "APPROVED",
+    "approved_by": "github:AnnCYW-cm",
+    "approved_at": "2026-09-13T05:59:53.000Z",
+    "approver_role_version": "rolefox-sole-maintainer-v1",
+    "approval_proof_digest": "1bd078bd45b885ebc4358c97c1d572833239257aa62a3cbc7612aec7897e26f2",
+    "signed_payload_digest": "cb2842f98955d68e827ead0491c3f712b9032ecf1bc7c3f33cfab6830424f0e2"
+  },
+  "collection_guard": "APPROVED_FOR_PROTOCOL_BOUND_COLLECTION",
+  "candidate_scope_manifest_id": "candidate_24e15e99353b650ae52c7499f52704285eab1d3fcdd9a9eb9d546701f382ac69",
+  "manifest_digest": "24e15e99353b650ae52c7499f52704285eab1d3fcdd9a9eb9d546701f382ac69"
+}

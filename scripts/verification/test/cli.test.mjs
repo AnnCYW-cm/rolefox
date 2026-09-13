@@ -573,7 +573,10 @@ test("the W1 readiness command fails closed on the checked-in blockers", (t) => 
   );
   assert.equal(result.status, 1);
   assert.match(result.stdout, /Readiness: BLOCKED_NOT_STARTED/);
-  assert.match(result.stdout, /CANDIDATE_SCOPE_APPROVAL_PENDING/);
+  assert.match(result.stdout, /RESEARCH_EVIDENCE_NOT_COLLECTED/);
+  assert.match(result.stdout, /PRE_W1_GATE_HEAD_NOT_PASS/);
+  assert.match(result.stdout, /CHECKPOINT_SIGNATURE_AND_EXTERNAL_ANCHOR_PENDING/);
+  assert.doesNotMatch(result.stdout, /CANDIDATE_SCOPE_APPROVAL_PENDING/);
   assert.doesNotMatch(result.stdout, /TRUST_VERIFICATION_NOT_IMPLEMENTED/);
 });
 
