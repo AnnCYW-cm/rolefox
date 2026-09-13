@@ -43,7 +43,7 @@ export function validateTrustedWorkflowEnvironment(environment, policy) {
     "Trust request repository id mismatch.",
   );
   invariant(
-    environment.GITHUB_REPOSITORY_VISIBILITY === policy.repository.visibility,
+    environment.ROLEFOX_REPOSITORY_VISIBILITY === policy.repository.visibility,
     "Trust request repository visibility mismatch.",
   );
   invariant(

@@ -296,7 +296,7 @@ test("workflow context rejects a non-Ann actor, unprotected ref, and self-hosted
   const validEnvironment = {
     GITHUB_REPOSITORY: policy.repository.name,
     GITHUB_REPOSITORY_ID: policy.repository.id,
-    GITHUB_REPOSITORY_VISIBILITY: policy.repository.visibility,
+    ROLEFOX_REPOSITORY_VISIBILITY: policy.repository.visibility,
     GITHUB_ACTOR: policy.maintainer.login,
     GITHUB_ACTOR_ID: policy.maintainer.actor_id,
     GITHUB_TRIGGERING_ACTOR: policy.maintainer.login,
@@ -312,6 +312,7 @@ test("workflow context rejects a non-Ann actor, unprotected ref, and self-hosted
     ["GITHUB_ACTOR", "mallory"],
     ["GITHUB_ACTOR_ID", "999"],
     ["GITHUB_TRIGGERING_ACTOR", "mallory"],
+    ["ROLEFOX_REPOSITORY_VISIBILITY", "private"],
     ["GITHUB_REF_PROTECTED", "false"],
     ["ROLEFOX_RUNNER_ENVIRONMENT", "self-hosted"],
   ]) {
