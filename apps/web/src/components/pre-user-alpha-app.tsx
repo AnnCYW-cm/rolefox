@@ -222,7 +222,6 @@ function DecisionButton({
       onClick={() => onSelect(decision)}
       type="button"
     >
-      <span aria-hidden="true">{interested ? "＋" : "−"}</span>
       {interested ? "感兴趣" : "不感兴趣"}
     </button>
   );
@@ -365,8 +364,10 @@ function ResultsSection({
     >
       <div className="section-heading">
         <div>
-          <p className="eyebrow">03 / 判断结果</p>
-          <h2 id="results-title" tabIndex={-1}>机会排序</h2>
+          <p className="eyebrow">判断结果</p>
+          <h2 id="results-title" tabIndex={-1}>
+            机会排序
+          </h2>
           <p>分数只用于排序，不代表真实适合度，更不会触发任何外部动作。</p>
         </div>
         <div className="result-toolbar">
@@ -418,13 +419,11 @@ function ResultsSection({
                 }`}
                 key={job.id}
               >
-                <div className="rank">
-                  <span aria-hidden="true">
+                <div className="score-block">
+                  <span aria-hidden="true" className="score-rank">
                     {String(index + 1).padStart(2, "0")}
                   </span>
                   <span className="sr-only">排序第 {index + 1}</span>
-                </div>
-                <div className="score-block">
                   <strong>{score.score}</strong>
                   <span>规则分</span>
                 </div>
@@ -454,7 +453,7 @@ function ResultsSection({
                   <details className="reason-details">
                     <summary>
                       依据 {score.reasons.length} · 留意 {score.concerns.length}
-                      <span aria-hidden="true">＋</span>
+                      <span aria-hidden="true">⌄</span>
                     </summary>
                     <div className="reason-grid">
                       <div>
@@ -1017,25 +1016,25 @@ function HydratedPreUserAlphaApp() {
           id="overview"
         >
           <div className="hero-copy">
-            <p className="eyebrow">开源岗位判断 / ALPHA.4</p>
+            <p className="eyebrow">本地优先 · 开源工具</p>
             <h1 id="hero-title">
-              <span>筛掉噪音，</span>
-              <span className="hero-accent">留住机会。</span>
+              <span>把岗位排成</span>
+              <span className="hero-accent">清晰的优先级。</span>
             </h1>
             <p className="lede">
-              不追踪，不投递。只在当前浏览器里，把岗位排成一份有依据的清单。
+              设定规则、录入岗位、得到有依据的排序。所有数据只保存在当前浏览器。
             </p>
           </div>
 
           <section className="release-meta" aria-labelledby="local-view-title">
             <div className="hero-status-head">
-              <span className="alpha-badge">v0.1.0-alpha.4</span>
+              <span className="alpha-badge">v0.1.0-alpha.5</span>
               <span className="hero-mode">仅在本机</span>
             </div>
             <div className="hero-score-row">
               <div>
                 <strong>{eligibleCount}</strong>
-                <span>可进入判断</span>
+                <span>符合硬规则</span>
               </div>
               <div>
                 <strong>{state.jobs.length}</strong>
@@ -1044,7 +1043,7 @@ function HydratedPreUserAlphaApp() {
             </div>
             <div className="hero-progress-copy">
               <div>
-                <span id="local-view-title">判断进度</span>
+                <span id="local-view-title">已标记</span>
                 <strong>
                   {state.jobs.length === 0
                     ? "0%"
@@ -1070,7 +1069,7 @@ function HydratedPreUserAlphaApp() {
             <span className="disclosure-icon" aria-hidden="true" />
             <strong>本地模式 · 数据不离开浏览器</strong>
             <span className="disclosure-hint">
-              查看完整边界 <i aria-hidden="true">＋</i>
+              查看完整边界 <i aria-hidden="true">⌄</i>
             </span>
           </summary>
           <p>
@@ -1125,7 +1124,7 @@ function HydratedPreUserAlphaApp() {
           <section className="panel" id="rules" aria-labelledby="rules-title">
             <div className="section-heading compact">
               <div>
-                <p className="eyebrow">01 / 筛选规则</p>
+                <p className="eyebrow">筛选规则</p>
                 <h2 id="rules-title">设置筛选偏好</h2>
               </div>
               <span className={`completion-chip ${rulesConfigured ? "complete" : ""}`}>
@@ -1232,7 +1231,7 @@ function HydratedPreUserAlphaApp() {
           <section className="panel" id="job-entry" aria-labelledby="job-entry-title">
             <div className="section-heading compact">
               <div>
-                <p className="eyebrow">02 / 添加岗位</p>
+                <p className="eyebrow">添加岗位</p>
                 <h2 id="job-entry-title">添加岗位</h2>
               </div>
               <span className="privacy-chip">仅手动输入</span>
@@ -1434,7 +1433,7 @@ function HydratedPreUserAlphaApp() {
               </span>
               <span>
                 <strong>RoleFox</strong>
-                <small>v0.1.0-alpha.4 · Apache-2.0</small>
+                <small>v0.1.0-alpha.5 · Apache-2.0</small>
               </span>
             </div>
             <nav aria-label="开源项目资源" className="project-links">

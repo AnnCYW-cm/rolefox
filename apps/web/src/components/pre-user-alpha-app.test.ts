@@ -124,7 +124,7 @@ describe("RoleFox open-source Alpha interface", () => {
     await renderApp();
 
     expect(container.textContent).not.toContain("不是 v0.1");
-    expect(container.textContent).toContain("v0.1.0-alpha.4 · Apache-2.0");
+    expect(container.textContent).toContain("v0.1.0-alpha.5 · Apache-2.0");
     const boundaryDisclosure = container.querySelector("details.disclosure");
     expect(boundaryDisclosure?.textContent).toContain(
       "没有账号、服务器存储或云同步",

@@ -28,11 +28,17 @@ Alpha.2 的标签、版本说明和发布时的范围陈述作为历史记录保
 
 这次重做只改变品牌表达、视觉、信息编排和交互呈现。评分、排序、规则、合成样例、岗位输入、校准、导出、恢复、删除、清除及失败关闭行为保持不变；存储键、浏览器本地数据 schema、校验规则和安全边界也没有变化，Alpha.1–Alpha.3 数据不需要迁移。Alpha.3 的标签、版本说明、Changelog 记录与 verification lineage 保持不可变。Alpha.4 不构成用户研究证据，Pre-W1 Gate 1 继续保持 `BLOCKED`。
 
+### Alpha.5 是 Quiet Utility / Quiet Intelligence 重做
+
+**v0.1.0-alpha.5** 将 Alpha.4 的 Signal Desk 完整重构为 Quiet Utility / Quiet Intelligence：以统一浅色中性色和单一靛蓝建立安静、现代的工具界面，用全无衬线字体、圆角、轻边框和更克制的层级取代橙绿配色、黑色控制台、切角、宋体与厚重框线。结果卡更紧凑，排名合并进分数块；固定移动底栏被移除，有岗位时结果仍在 DOM、键盘和视觉顺序中一致优先出现。按钮触控目标与长文本在窄屏下继续保持安全。
+
+这次重做仍只改变品牌表达、视觉、信息编排和交互呈现。业务能力、评分与排序、规则、合成样例、岗位输入、校准、导出、恢复、删除、清除、失败关闭行为、存储键、浏览器本地数据 schema、校验规则和安全边界均未改变，Alpha.1–Alpha.4 数据无需迁移。Alpha.4 的标签、版本说明、Changelog 记录与 verification lineage 保持不可变。Alpha.5 不构成用户研究证据，Pre-W1 Gate 1 继续保持 `BLOCKED_NOT_STARTED`。
+
 ### 后续阶段再做产品形态
 
 下一阶段可能评估引导配置、候选人事实库、持久化数据库、文件与链接导入、去重、AI 辅助、工作流、合规连接器、安装包、自托管服务和跨设备使用。它们是方向，不是本 Alpha 的承诺；范围由首版反馈和真实用户研究决定。
 
-Pre-W1 Gate 1 继续保持 `BLOCKED`。没有近期活跃用户时可以先发布本 Alpha 获取反馈，但上线和合成数据不能替代真实研究。Gate 1 只决定是否、以及如何启动后续产品化 W1，不是本 Alpha 的发布许可。
+Pre-W1 Gate 1 继续保持 `BLOCKED_NOT_STARTED`。没有近期活跃用户时可以先发布本 Alpha 获取反馈，但上线和合成数据不能替代真实研究。Gate 1 只决定是否、以及如何启动后续产品化 W1，不是本 Alpha 的发布许可。
 
 仓库内 Accepted 的 Autopilot 规范、UML、长期[开源原则](docs/open-source-strategy.md)和 254 个 P0 Case 是不可静默改写的历史设计基线。Accepted 不等于 Implemented，本次发布不会据此声称拥有产品化或自动执行能力。
 
@@ -74,11 +80,17 @@ This is a complete interface rebuild, not a capability expansion. Scoring, rules
 
 This rebuild changes brand expression, visual design, information arrangement, and interaction presentation only. Scoring, ordering, rules, synthetic examples, job input, calibration, export, restore, deletion, clearing, fail-closed behavior, the storage key, browser-local data schema, validation rules, and safety boundary are unchanged. Alpha.1–Alpha.3 data require no migration. The Alpha.3 tag, release notes, changelog record, and verification lineage remain immutable. Alpha.4 is not user-research evidence; Pre-W1 Gate 1 remains `BLOCKED`.
 
+### Alpha.5 is the Quiet Utility / Quiet Intelligence rebuild
+
+**v0.1.0-alpha.5** completely rebuilds the Alpha.4 Signal Desk as Quiet Utility / Quiet Intelligence. A unified light-neutral system and one indigo accent establish a calm, modern utility interface. An all-sans-serif type stack, rounded surfaces, light borders, and restrained hierarchy replace the orange-and-lime palette, black console, clipped corners, serif display type, and heavy frames. Result cards are more compact and rank is integrated into the score block. The fixed mobile dock is removed; when jobs exist, results still come first in matching DOM, keyboard, and visual order. Button targets and long text remain safe at narrow widths.
+
+This rebuild still changes brand expression, visual design, information arrangement, and interaction presentation only. Product capabilities, scoring and ordering, rules, synthetic examples, job input, calibration, export, restore, deletion, clearing, fail-closed behavior, the storage key, browser-local data schema, validation rules, and safety boundary are unchanged. Alpha.1–Alpha.4 data require no migration. The Alpha.4 tag, release notes, changelog record, and verification lineage remain immutable. Alpha.5 is not user-research evidence; Pre-W1 Gate 1 remains `BLOCKED_NOT_STARTED`.
+
 ### Productize in a later phase
 
 A later phase may evaluate onboarding, a candidate fact store, persistent storage, file and link import, deduplication, AI assistance, workflows, compliant connectors, installers, self-hosted services, and cross-device use. These are directions, not Alpha promises; first-release feedback and real-user research will decide the scope.
 
-Pre-W1 Gate 1 remains `BLOCKED`. Publishing this Alpha before an active user base exists is valid, but publication and synthetic data cannot replace real research. Gate 1 decides only whether and how to start the later productization W1; it is not permission to publish this Alpha.
+Pre-W1 Gate 1 remains `BLOCKED_NOT_STARTED`. Publishing this Alpha before an active user base exists is valid, but publication and synthetic data cannot replace real research. Gate 1 decides only whether and how to start the later productization W1; it is not permission to publish this Alpha.
 
 The repository's accepted Autopilot specifications, UML, long-term [open-source principles](docs/open-source-strategy.md), and 254 P0 cases remain an immutable historical design baseline. Accepted does not mean implemented, and this release makes no productized or autonomous-execution claim from those documents.
 
