@@ -4,11 +4,11 @@
 
 > 一个在浏览器本地运行、帮助你判断“哪些岗位值得看”的开源工具。
 
-RoleFox **v0.1.0-alpha.3** 将 Alpha.2 的界面与信息架构完整重做为 Quiet Workbench：你可以设置目标职位、地点和关键词，手工或批量放入岗位，获得确定性评分、硬排除结果与可复查理由，再用“感兴趣 / 不感兴趣”记录自己的判断。数据默认只保存在当前浏览器。
+RoleFox **v0.1.0-alpha.4** 是一款浏览器本地的开源岗位判断工具：设置目标职位、地点和关键词，手工或批量放入岗位，获得确定性评分、硬排除结果与可复查理由，再用“感兴趣 / 不感兴趣”记录自己的判断。数据默认只保存在当前浏览器。
 
-[在线体验](https://anncyw-cm.github.io/rolefox/) · [合成样例](examples/fake-job-board/README.md) · [版本说明](releases/v0.1.0-alpha.3.md) · [提交反馈](https://github.com/AnnCYW-cm/rolefox/issues/new?template=alpha-feedback.yml)
+[在线体验](https://anncyw-cm.github.io/rolefox/) · [合成样例](examples/fake-job-board/README.md) · [版本说明](releases/v0.1.0-alpha.4.md) · [提交反馈](https://github.com/AnnCYW-cm/rolefox/issues/new?template=alpha-feedback.yml)
 
-Alpha.3 使用暖灰白与狐橙的克制视觉、平直顶栏、桌面配置栏与连续结果列表，并让移动端首屏更早进入核心任务。它没有修改功能、评分行为、浏览器本地数据 schema 或安全边界；Alpha.2 作为已经发布的历史版本保持不可变。
+Alpha.4 将 Alpha.3 的 Quiet Workbench 重构为更鲜明的 Signal Desk：冷石墨黑、雾白与电光狐橙构成编辑式工作台，几何负形狐标、硬边框和切角取代通用圆角卡片；桌面使用设置栏与连续“机会排序”账本，移动端加入底部任务导航并在已有岗位时优先呈现结果。它没有修改功能、评分行为、浏览器本地数据 schema 或安全边界；Alpha.3 作为已经发布的历史版本保持不可变。
 
 ## 3–5 分钟快速上手
 
@@ -23,7 +23,7 @@ Alpha.3 使用暖灰白与狐橙的克制视觉、平直顶栏、桌面配置栏
 
 ## 这个 Alpha 能做什么
 
-| 能力 | v0.1.0-alpha.3 状态 |
+| 能力 | v0.1.0-alpha.4 状态 |
 | --- | --- |
 | 目标规则 | 设置目标职位、地点、加分词和硬排除词 |
 | 岗位输入 | 手工添加，或以 `职位 \| 公司 \| 地点 \| 描述` 格式批量粘贴 |
@@ -71,13 +71,14 @@ pnpm check
 
 Pre-W1 的 Spec Manifest、Scope Catalog、Evidence、Gate Registry、checkpoint 和可信签名验证仍然保留。当前 Gate 1 按设计保持 **`BLOCKED`**，因为尚未收集真实用户研究证据；不要用合成样例或上线事实伪造 PASS。
 
-这不阻止 v0.1.0-alpha.3 作为范围明确的开源工具发布。Gate 1 只用于判断是否、以及如何投入下一阶段产品化工作；在真实访谈、规则回放、Gate 1 PASS 和可信 checkpoint 全部成立前，不启动 Accepted Autopilot 基线中的 W1。查看结构完整性可运行 `pnpm verification:check`；要求研究就绪的 `pnpm verification:ready` 当前应失败关闭。
+这不阻止 v0.1.0-alpha.4 作为范围明确的开源工具发布。Gate 1 只用于判断是否、以及如何投入下一阶段产品化工作；在真实访谈、规则回放、Gate 1 PASS 和可信 checkpoint 全部成立前，不启动 Accepted Autopilot 基线中的 W1。查看结构完整性可运行 `pnpm verification:check`；要求研究就绪的 `pnpm verification:ready` 当前应失败关闭。
 
 下一阶段可能包括引导配置、候选人事实库、持久化数据库、文件与链接导入、去重、AI 辅助、工作流和合规连接器。具体范围将由首版反馈和 Gate 1 证据决定，不是本次发布承诺。
 
 ## 文档与参与
 
-- [v0.1.0-alpha.3 版本说明](releases/v0.1.0-alpha.3.md)
+- [v0.1.0-alpha.4 版本说明](releases/v0.1.0-alpha.4.md)
+- [v0.1.0-alpha.3 历史版本说明](releases/v0.1.0-alpha.3.md)
 - [v0.1.0-alpha.2 历史版本说明](releases/v0.1.0-alpha.2.md)
 - [v0.1.0-alpha.1 首次公开发布记录](releases/v0.1.0-alpha.1.md)
 - [合成规则与岗位样例](examples/fake-job-board/README.md)

@@ -4,6 +4,27 @@ All notable public changes to RoleFox are recorded here. Release status refers o
 
 ## Unreleased
 
+## [0.1.0-alpha.4](releases/v0.1.0-alpha.4.md) - 2026-09-14
+
+Signal Desk visual and responsive-interface rebuild of v0.1.0-alpha.3. This release keeps the same browser-local job-triage capabilities, stored-data schema, and safety boundary.
+
+### Changed
+
+- Replaced the warm beige and muted-orange palette with cool graphite, mist white, electric fox orange, and small semantic lime/blue accents.
+- Replaced the former mascot with a geometric negative-space fox/F mark and introduced an editorial masthead, hard rules, redlines, and clipped-corner controls.
+- Kept the desktop configuration rail beside a continuous opportunity ledger, while making advanced rules collapsible and result rows denser and easier to scan.
+- Added mobile bottom task navigation and results-first DOM and visual ordering when jobs exist; empty-state rule input remains in the first screen.
+- Kept the sample loader reachable at every viewport and restored 44px targets for destructive and technical-detail controls.
+- Preserved visible focus, reduced-motion behavior, modal focus trapping, Escape cancellation, trigger focus return, and a results-heading fallback after confirmed deletion.
+
+### Compatibility and scope
+
+- Did not change scoring, rules, synthetic examples, job input, calibration, export, restore, clearing, or any other product capability.
+- Kept the existing storage key, browser-local data schema, and validation behavior; Alpha.1 through Alpha.3 local data require no migration.
+- Did not add accounts, server storage, cloud sync, collection, AI, connectors, generated materials, applications, messages, mailbox access, calendar access, or other external actions.
+- Kept Pre-W1 Gate 1 `BLOCKED`; this redesign is not research evidence and changes no verification state.
+- Preserved v0.1.0-alpha.3 as an immutable historical release. Alpha.4 does not rewrite its tag, release notes, changelog record, or verification lineage.
+
 ## [0.1.0-alpha.3](releases/v0.1.0-alpha.3.md) - 2026-09-14
 
 Complete Quiet Workbench UI and information-architecture rebuild of v0.1.0-alpha.2. This release keeps the same browser-local job-triage capabilities, stored-data schema, and safety boundary.

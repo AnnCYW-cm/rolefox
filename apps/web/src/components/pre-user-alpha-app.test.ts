@@ -3,7 +3,10 @@
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { ALPHA_STORAGE_KEY } from "../lib/pre-user-alpha";
+import {
+  ALPHA_STORAGE_KEY,
+  type AlphaState,
+} from "../lib/pre-user-alpha";
 import PreUserAlphaApp from "./pre-user-alpha-app";
 
 let container: HTMLDivElement;
@@ -21,6 +24,34 @@ function buttonWithText(text: string): HTMLButtonElement {
   return button;
 }
 
+function controlWithLabel(
+  text: string,
+): HTMLInputElement | HTMLTextAreaElement {
+  const label = Array.from(document.querySelectorAll("label")).find(
+    (candidate) =>
+      Array.from(candidate.children).some(
+        (child) =>
+          child instanceof HTMLSpanElement && child.textContent?.trim() === text,
+      ),
+  );
+  const control = label?.querySelector("input, textarea");
+
+  if (!(control instanceof HTMLInputElement || control instanceof HTMLTextAreaElement)) {
+    throw new Error(`Form control not found: ${text}`);
+  }
+
+  return control;
+}
+
+function readStoredState(): AlphaState {
+  const stored = window.localStorage.getItem(ALPHA_STORAGE_KEY);
+  if (!stored) {
+    throw new Error("Expected RoleFox state in localStorage.");
+  }
+
+  return JSON.parse(stored) as AlphaState;
+}
+
 async function renderApp(): Promise<void> {
   container = document.createElement("div");
   document.body.append(container);
@@ -33,6 +64,25 @@ async function renderApp(): Promise<void> {
 async function click(element: HTMLElement): Promise<void> {
   await act(async () => {
     element.click();
+  });
+}
+
+async function setControlValue(
+  control: HTMLInputElement | HTMLTextAreaElement,
+  value: string,
+): Promise<void> {
+  const prototype =
+    control instanceof HTMLInputElement
+      ? HTMLInputElement.prototype
+      : HTMLTextAreaElement.prototype;
+  const setter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
+  if (!setter) {
+    throw new Error("Form control value setter is unavailable.");
+  }
+
+  await act(async () => {
+    setter.call(control, value);
+    control.dispatchEvent(new Event("input", { bubbles: true }));
   });
 }
 
@@ -74,9 +124,12 @@ describe("RoleFox open-source Alpha interface", () => {
     await renderApp();
 
     expect(container.textContent).not.toContain("不是 v0.1");
-    expect(container.textContent).toContain("v0.1.0-alpha.3 · Apache-2.0");
-    expect(container.textContent).toContain("隐私与安全边界");
-    expect(container.textContent).toContain("不会扫描、投递、回复");
+    expect(container.textContent).toContain("v0.1.0-alpha.4 · Apache-2.0");
+    const boundaryDisclosure = container.querySelector("details.disclosure");
+    expect(boundaryDisclosure?.textContent).toContain(
+      "没有账号、服务器存储或云同步",
+    );
+    expect(boundaryDisclosure?.textContent).toContain("不会扫描、投递、回复");
 
     const expectedLinks = new Map([
       ["GitHub 源码", "https://github.com/AnnCYW-cm/rolefox"],
@@ -133,6 +186,128 @@ describe("RoleFox open-source Alpha interface", () => {
     expect(
       container.querySelectorAll(".decision-button[aria-pressed='true']"),
     ).toHaveLength(1);
+  });
+
+  it("saves normalized rules to the versioned local state", async () => {
+    await renderApp();
+
+    await setControlValue(controlWithLabel("目标职位 *"), "  产品经理  ");
+    await setControlValue(controlWithLabel("目标地点 *"), "  远程  ");
+    await setControlValue(controlWithLabel("加分关键词"), "AI，工作流\nai");
+    await setControlValue(controlWithLabel("硬排除关键词"), "销售\n区块链");
+    await click(buttonWithText("保存并重新评分"));
+
+    expect(readStoredState().rules).toEqual({
+      targetRole: "产品经理",
+      targetLocation: "远程",
+      includeKeywords: ["AI", "工作流"],
+      excludeKeywords: ["销售", "区块链"],
+    });
+    expect(container.textContent).toContain(
+      "目标规则已保存，现有岗位已在本地重新评分。",
+    );
+  });
+
+  it("toggles a calibration decision off when selected again", async () => {
+    await renderApp();
+    await click(buttonWithText("加载合成示例"));
+
+    const interestedButton = container.querySelector<HTMLButtonElement>(
+      ".decision-button--interested",
+    );
+    expect(interestedButton).not.toBeNull();
+
+    await click(interestedButton!);
+    expect(interestedButton?.getAttribute("aria-pressed")).toBe("true");
+    expect(Object.keys(readStoredState().feedback)).toHaveLength(1);
+
+    await click(interestedButton!);
+    expect(interestedButton?.getAttribute("aria-pressed")).toBe("false");
+    expect(readStoredState().feedback).toEqual({});
+  });
+
+  it("deletes a job and its linked calibration decision together", async () => {
+    await renderApp();
+    await click(buttonWithText("加载合成示例"));
+
+    const firstCard = container.querySelector<HTMLElement>(".job-card");
+    const interestedButton = firstCard?.querySelector<HTMLButtonElement>(
+      ".decision-button--interested",
+    );
+    const deleteButton = firstCard?.querySelector<HTMLButtonElement>(
+      ".text-button",
+    );
+    expect(firstCard).not.toBeNull();
+    expect(interestedButton).not.toBeNull();
+    expect(deleteButton?.textContent?.trim()).toBe("删除本地记录");
+
+    await click(interestedButton!);
+    const beforeDelete = readStoredState();
+    const [selectedJobId] = Object.keys(beforeDelete.feedback);
+    expect(selectedJobId).toBeDefined();
+    expect(beforeDelete.jobs.some((job) => job.id === selectedJobId)).toBe(true);
+
+    deleteButton!.focus();
+    await click(deleteButton!);
+    await click(buttonWithText("确认删除"));
+
+    const afterDelete = readStoredState();
+    expect(afterDelete.jobs).toHaveLength(beforeDelete.jobs.length - 1);
+    expect(afterDelete.jobs.some((job) => job.id === selectedJobId)).toBe(false);
+    expect(afterDelete.feedback).not.toHaveProperty(selectedJobId!);
+    expect(container.querySelectorAll(".job-card")).toHaveLength(
+      beforeDelete.jobs.length - 1,
+    );
+    expect(document.activeElement?.id).toBe("results-title");
+  });
+
+  it("rejects a mixed-validity batch without importing its valid rows", async () => {
+    await renderApp();
+    await setControlValue(controlWithLabel("目标职位 *"), "产品经理");
+    await setControlValue(controlWithLabel("目标地点 *"), "远程");
+    await click(buttonWithText("保存并重新评分"));
+
+    const batchInput = controlWithLabel("每行一个岗位");
+    const batchText = [
+      "AI 产品经理 | Example Labs | 远程 | AI 工作流",
+      "缺少分隔字段",
+    ].join("\n");
+    await setControlValue(batchInput, batchText);
+    await click(buttonWithText("检查并导入"));
+
+    expect(readStoredState().jobs).toEqual([]);
+    expect(batchInput.value).toBe(batchText);
+    expect(container.querySelectorAll("#batch-errors li")).toHaveLength(1);
+    expect(container.textContent).toContain(
+      "请先修正下方格式问题；本次没有导入任何岗位。",
+    );
+  });
+
+  it("clears rules, jobs, and feedback only after confirmation", async () => {
+    await renderApp();
+    await click(buttonWithText("加载合成示例"));
+    const advancedRules = container.querySelector<HTMLDetailsElement>(
+      "details.advanced-rules",
+    );
+    expect(advancedRules?.open).toBe(false);
+    const interestedButton = container.querySelector<HTMLButtonElement>(
+      ".decision-button--interested",
+    );
+    await click(interestedButton!);
+    expect(window.localStorage.getItem(ALPHA_STORAGE_KEY)).not.toBeNull();
+
+    await click(buttonWithText("清除当前浏览器数据"));
+    expect(window.localStorage.getItem(ALPHA_STORAGE_KEY)).not.toBeNull();
+    await click(buttonWithText("确认永久清除"));
+
+    expect(window.localStorage.getItem(ALPHA_STORAGE_KEY)).toBeNull();
+    expect(container.querySelectorAll(".job-card")).toHaveLength(0);
+    expect(controlWithLabel("目标职位 *").value).toBe("");
+    expect(controlWithLabel("目标地点 *").value).toBe("");
+    expect(advancedRules?.open).toBe(true);
+    expect(container.textContent).toContain(
+      "当前浏览器中的 RoleFox Alpha 数据已清除。此操作无法撤销。",
+    );
   });
 
   it("exposes an accessible delete confirmation and returns focus on Escape", async () => {
