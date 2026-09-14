@@ -57,8 +57,8 @@ describe("RoleFox open-source Alpha interface", () => {
     await renderApp();
 
     expect(container.textContent).not.toContain("不是 v0.1");
-    expect(container.textContent).toContain("v0.1.0-alpha.1 · 开源首版");
-    expect(container.textContent).toContain("数据只保存在当前浏览器");
+    expect(container.textContent).toContain("v0.1.0-alpha.2 · Apache-2.0");
+    expect(container.textContent).toContain("你的数据，只在这台浏览器里");
     expect(container.textContent).toContain("不会扫描、投递、回复");
 
     const expectedLinks = new Map([

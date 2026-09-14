@@ -4,6 +4,23 @@ All notable public changes to RoleFox are recorded here. Release status refers o
 
 ## Unreleased
 
+## [0.1.0-alpha.2](releases/v0.1.0-alpha.2.md) - 2026-09-14
+
+UI follow-up to the first public Alpha. This release keeps the same browser-local job-triage capabilities and safety boundary as v0.1.0-alpha.1.
+
+### Changed
+
+- Refreshed the visual system, brand mark, responsive layout, navigation, and content hierarchy without changing the tool's underlying workflow.
+- Reorganized the page around define, add, and calibrate steps; added a compact decision-progress summary; and moved project resources into the footer.
+- Improved keyboard focus visibility, semantic landmarks, status messaging, and responsive reading order while retaining the existing skip-navigation and dialog focus/Escape behavior.
+- Clarified browser-storage status, full-backup controls, the no-text aggregate label, and the public nature of GitHub feedback.
+
+### Scope and security
+
+- Did not add accounts, server storage, cloud sync, collection, AI, connectors, generated materials, applications, messages, mailbox access, calendar access, or other external actions.
+- Kept the existing browser-local data model and fail-closed storage and restore behavior.
+- Kept Pre-W1 Gate 1 `BLOCKED`; this UI release is not research evidence and does not start the later productization W1.
+
 ## [0.1.0-alpha.1](releases/v0.1.0-alpha.1.md) - 2026-09-13
 
 First public open-source Alpha: a browser-local tool for testing whether explicit rules make job triage more useful and explainable.
