@@ -4,39 +4,41 @@
 
 > An open-source, browser-local tool for deciding which jobs are worth a closer look.
 
-RoleFox **v0.1.0-alpha.1** is the first publicly usable Alpha. Define a target role, location, and keywords; add jobs manually or in batches; review deterministic scores, hard exclusions, and inspectable reasons; then record your own interested / not-interested decisions. Data stays in the current browser by default.
+RoleFox **v0.1.0-alpha.2** is a UI follow-up to the first public release, v0.1.0-alpha.1. Define a target role, location, and keywords; add jobs manually or in batches; review deterministic scores, hard exclusions, and inspectable reasons; then record your own interested / not-interested decisions. Data stays in the current browser by default.
 
-[Try it online](https://anncyw-cm.github.io/rolefox/) · [Synthetic examples](examples/fake-job-board/README.md) · [Release notes](releases/v0.1.0-alpha.1.md) · [Share feedback](https://github.com/AnnCYW-cm/rolefox/issues/new?template=alpha-feedback.yml)
+[Try it online](https://anncyw-cm.github.io/rolefox/) · [Synthetic examples](examples/fake-job-board/README.md) · [Release notes](releases/v0.1.0-alpha.2.md) · [Share feedback](https://github.com/AnnCYW-cm/rolefox/issues/new?template=alpha-feedback.yml)
+
+Alpha.2 refreshes only the visual design, information architecture, responsive layout, and accessibility interactions. It adds no product capabilities and remains an open-source, browser-local tool.
 
 ## 3–5 minute quickstart
 
 1. Open the [live tool](https://anncyw-cm.github.io/rolefox/) and select “加载合成示例” (load synthetic examples).
 2. Review the sample rules, or replace them with your target role, location, preferred keywords, and exclusion keywords, then save.
 3. Inspect each job's score, reasons, and concerns, and mark it interested or not interested.
-4. Under local data controls, export a full backup. If you want to share test results, export the anonymous aggregate instead; it excludes rule text and job content.
+4. Under “导出、备份或彻底清除” (export, back up, or clear), export a full backup. If you want to share test results, export the “无原文汇总” (no-text aggregate) instead; it excludes rule text and job content.
 
 Start with synthetic or fully redacted data. GitHub issues are public: do not post resumes, real job descriptions, company names, contact details, private links, or other personal information.
 
-The v0.1.0-alpha.1 interface and repository example tutorial are currently in Chinese. This English README translates the main controls; an English interface is not part of this Alpha.
+The v0.1.0-alpha.2 interface and repository example tutorial are currently in Chinese. This English README translates the main controls; an English interface is not part of this Alpha.
 
 You can also use the [copy-and-paste synthetic rules and jobs](examples/fake-job-board/README.md) to test batch input.
 
 ## What this Alpha does
 
-| Capability | v0.1.0-alpha.1 status |
+| Capability | v0.1.0-alpha.2 status |
 | --- | --- |
 | Target rules | Target role, location, preferred keywords, and hard exclusions |
 | Job input | Manual entry or batch paste using `title \| company \| location \| description` |
 | Local evaluation | Deterministic scoring, sorting, reasons, concerns, and hard exclusions |
 | Human calibration | Interested / not-interested decisions stored locally |
-| Data control | Browser-local persistence, full JSON backup and restore, anonymous aggregate, per-job deletion, and full clearing |
+| Data control | Browser-local persistence, full JSON backup and restore, a no-text aggregate, per-job deletion, and full clearing |
 | Safe defaults | No external actions; failed storage reads or restore validation lock editing to prevent accidental overwrite |
 
 Scores are explainable local rule results. They are not AI recommendations and do not predict job quality, hiring outcomes, or career fit.
 
 ## Explicitly out of scope
 
-This first Alpha has **no** accounts, server database, cloud sync, automatic scraping, real job-board connection, AI calls, material generation, automatic applications, message replies, mailbox access, or calendar access. It never takes external actions in the background.
+This Alpha has **no** accounts, server database, cloud sync, automatic scraping, real job-board connection, AI calls, material generation, automatic applications, message replies, mailbox access, or calendar access. It never takes external actions in the background.
 
 Those capabilities belong to a later productization phase. The repository's domain state machine, policy modules, Connector SDK, AI Provider, Worker, and Runner are foundational contracts or safety stubs—not usable product capabilities. The accepted v0.1 Autopilot documents remain a design baseline for that later phase; they do not mean this Alpha implements the 254 acceptance cases.
 
@@ -45,7 +47,7 @@ Those capabilities belong to a later productization phase. The repository's doma
 - Rules, jobs, and calibration choices are kept in the current browser's `localStorage`; there is no account or server copy.
 - Clearing site data also removes local records, so export a full backup first.
 - A full export can contain personal or job-search information you entered. Treat it as a private file.
-- The anonymous aggregate includes counts, score bands, decision statistics, and rule shape only—not rule text, job content, companies, or locations.
+- The no-text aggregate includes counts, score bands, decision statistics, and rule shape only—not rule text, job content, companies, or locations.
 - RoleFox does not solve CAPTCHAs, bypass access controls or platform safeguards, or optimize for indiscriminate bulk applications.
 
 ## Run locally
@@ -71,13 +73,14 @@ pnpm check
 
 The Pre-W1 Spec Manifest, Scope Catalog, Evidence, Gate Registry, checkpoints, and trusted-signature verification remain intact. Gate 1 intentionally remains **`BLOCKED`** because no real-user research evidence has been collected. Synthetic examples or the fact that the Alpha is online must not be used to manufacture a PASS.
 
-This does not block v0.1.0-alpha.1 as a narrowly scoped open-source tool. Gate 1 is used only to decide whether and how to invest in the next productization phase. W1 in the accepted Autopilot baseline must not start until real interviews, rules replay, a Gate 1 PASS, and a trusted checkpoint all exist. Run `pnpm verification:check` to validate registry structure; the research-readiness command `pnpm verification:ready` should currently fail closed.
+This does not block v0.1.0-alpha.2 as a narrowly scoped open-source tool. Gate 1 is used only to decide whether and how to invest in the next productization phase. W1 in the accepted Autopilot baseline must not start until real interviews, rules replay, a Gate 1 PASS, and a trusted checkpoint all exist. Run `pnpm verification:check` to validate registry structure; the research-readiness command `pnpm verification:ready` should currently fail closed.
 
 Possible next-phase work includes onboarding, a candidate fact store, a persistent database, file and link import, deduplication, AI assistance, workflows, and compliant connectors. First-release feedback and Gate 1 evidence—not this release—will determine that scope.
 
 ## Docs and participation
 
-- [v0.1.0-alpha.1 release notes](releases/v0.1.0-alpha.1.md)
+- [v0.1.0-alpha.2 release notes](releases/v0.1.0-alpha.2.md)
+- [v0.1.0-alpha.1 first-public-release record](releases/v0.1.0-alpha.1.md)
 - [Synthetic rule and job examples](examples/fake-job-board/README.md)
 - [Current open-source release strategy](OPEN_SOURCE_ALPHA.md)
 - [Long-term open-source principles](docs/open-source-strategy.md) (accepted historical design baseline)

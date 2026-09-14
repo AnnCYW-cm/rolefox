@@ -77,6 +77,31 @@ const PROJECT_LINKS = [
   },
 ] as const;
 
+function FoxMark() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="fox-logo"
+      focusable="false"
+      viewBox="0 0 64 64"
+    >
+      <path className="fox-ear" d="M10 12 28 21 18 38Z" />
+      <path className="fox-ear" d="m54 12-18 9 10 17Z" />
+      <path
+        className="fox-face"
+        d="M14 27C18 16 27 12 32 12s14 4 18 15c4 11-2 25-18 25S10 38 14 27Z"
+      />
+      <path
+        className="fox-muzzle"
+        d="M17 31c7 3 11 7 15 18 4-11 8-15 15-18-1 12-6 21-15 21s-14-9-15-21Z"
+      />
+      <circle className="fox-eye" cx="25" cy="30" r="2.2" />
+      <circle className="fox-eye" cx="39" cy="30" r="2.2" />
+      <path className="fox-nose" d="m28.5 41 3.5 2.5 3.5-2.5L32 47Z" />
+    </svg>
+  );
+}
+
 function rulesToForm(rules: AlphaRules) {
   return {
     targetRole: rules.targetRole,
@@ -200,7 +225,7 @@ function DecisionButton({
   return (
     <button
       aria-pressed={active}
-      className={`decision-button ${active ? "selected" : ""}`}
+      className={`decision-button decision-button--${decision} ${active ? "selected" : ""}`}
       disabled={disabled}
       onClick={() => onSelect(decision)}
       type="button"
@@ -329,7 +354,7 @@ export default function PreUserAlphaApp() {
     return (
       <main className="alpha-loading" aria-busy="true" aria-live="polite">
         <span className="brand-mark" aria-hidden="true">
-          🦊
+          <FoxMark />
         </span>
         <p>正在安全读取当前浏览器中的 RoleFox 开源 Alpha 数据…</p>
       </main>
@@ -718,20 +743,35 @@ function HydratedPreUserAlphaApp() {
       >
         <div className="brand-lockup">
           <span className="brand-mark" aria-hidden="true">
-            🦊
+            <FoxMark />
           </span>
           <span>
             <strong>RoleFox</strong>
-            <small>OPEN-SOURCE ALPHA</small>
+            <small>LOCAL-FIRST TOOL</small>
           </span>
         </div>
 
-        <nav>
-          <a href="#overview">概览</a>
-          <a href="#rules">目标规则</a>
-          <a href="#job-entry">添加岗位</a>
-          <a href="#results">判断结果</a>
-          <a href="#data-controls">本地数据</a>
+        <nav aria-label="页面内导航">
+          <a aria-label="概览" href="#overview">
+            <span className="nav-label-full">概览</span>
+            <span aria-hidden="true" className="nav-label-short">概览</span>
+          </a>
+          <a aria-label="目标规则" href="#rules">
+            <span className="nav-label-full">目标规则</span>
+            <span aria-hidden="true" className="nav-label-short">规则</span>
+          </a>
+          <a aria-label="添加岗位" href="#job-entry">
+            <span className="nav-label-full">添加岗位</span>
+            <span aria-hidden="true" className="nav-label-short">岗位</span>
+          </a>
+          <a aria-label="判断结果" href="#results">
+            <span className="nav-label-full">判断结果</span>
+            <span aria-hidden="true" className="nav-label-short">结果</span>
+          </a>
+          <a aria-label="本地数据" href="#data-controls">
+            <span className="nav-label-full">本地数据</span>
+            <span aria-hidden="true" className="nav-label-short">数据</span>
+          </a>
         </nav>
 
         <div className="sidebar-status">
@@ -739,7 +779,7 @@ function HydratedPreUserAlphaApp() {
           <div>
             <strong>
               {storageMode === "ready"
-                ? "本地保存正常"
+                ? "浏览器存储可用"
                 : storageMode === "loading"
                   ? "正在读取本地数据"
                   : "本地数据已锁定"}
@@ -754,31 +794,77 @@ function HydratedPreUserAlphaApp() {
         id="main-content"
         inert={modalOpen ? true : undefined}
       >
-        <header className="alpha-header">
-          <div>
-            <p className="eyebrow">RoleFox open-source tool</p>
-            <h1>先校准“哪些岗位值得看”</h1>
+        <header
+          aria-labelledby="hero-title"
+          className="alpha-header"
+          id="overview"
+        >
+          <div className="hero-copy">
+            <p className="eyebrow">LOCAL-FIRST · OPEN SOURCE</p>
+            <h1 id="hero-title">
+              先看值得看的岗位<span aria-hidden="true">。</span>
+            </h1>
             <p className="lede">
-              手工放入岗位，RoleFox 按你的目标给出可复查的排序；你的每次选择都会形成一份本地校准记录。
+              设定偏好，粘贴岗位。RoleFox 用透明规则排序，你来判断结果。
             </p>
+            <div className="hero-actions">
+              <button
+                className="hero-primary-button"
+                disabled={!canEdit}
+                onClick={loadSamples}
+                type="button"
+              >
+                加载合成示例 <span aria-hidden="true">↗</span>
+              </button>
+              <a className="hero-secondary-link" href="#rules">
+                开始设置 <span aria-hidden="true">↓</span>
+              </a>
+            </div>
+            <ul className="hero-signals" aria-label="工具边界">
+              <li>浏览器本地运行</li>
+              <li>规则完全可解释</li>
+              <li>零外部求职动作</li>
+            </ul>
           </div>
-          <div className="release-meta">
-            <span className="alpha-badge">v0.1.0-alpha.1 · 开源首版</span>
-            <nav aria-label="开源项目资源" className="project-links">
-              {PROJECT_LINKS.map((link) => (
-                <a
-                  href={link.href}
-                  key={link.href}
-                  rel="noreferrer"
-                  target="_blank"
-                >
-                  {link.label}
-                  <span aria-hidden="true">↗</span>
-                  <span className="sr-only">（在新窗口打开）</span>
-                </a>
-              ))}
-            </nav>
-          </div>
+
+          <section className="release-meta" aria-labelledby="local-view-title">
+            <div className="hero-status-head">
+              <span className="alpha-badge">v0.1.0-alpha.2</span>
+              <span className="runtime-status">
+                <i aria-hidden="true" /> LOCAL ONLY
+              </span>
+            </div>
+            <div className="hero-score-row">
+              <div>
+                <strong>{eligibleCount}</strong>
+                <span>未被硬排除</span>
+              </div>
+              <div>
+                <strong>{state.jobs.length}</strong>
+                <span>当前岗位</span>
+              </div>
+            </div>
+            <div className="hero-progress-copy">
+              <div>
+                <span id="local-view-title">判断进度</span>
+                <strong>
+                  {state.jobs.length === 0
+                    ? "0%"
+                    : `${Math.round((decidedCount / state.jobs.length) * 100)}%`}
+                </strong>
+              </div>
+              <progress
+                aria-label="判断进度"
+                max={Math.max(state.jobs.length, 1)}
+                value={decidedCount}
+              >
+                {decidedCount} / {state.jobs.length}
+              </progress>
+              <p>
+                已判断 {decidedCount} 个 · 感兴趣 {interestedCount} 个
+              </p>
+            </div>
+          </section>
         </header>
 
         <section className="disclosure" aria-labelledby="disclosure-title">
@@ -786,7 +872,7 @@ function HydratedPreUserAlphaApp() {
             ◉
           </span>
           <div>
-            <h2 id="disclosure-title">数据只保存在当前浏览器</h2>
+            <h2 id="disclosure-title">你的数据，只在这台浏览器里</h2>
             <p>
               这个开源 Alpha 没有账号、服务器存储或云同步，也不会扫描、投递、回复、连接邮箱/日历或调用 AI Provider。清除浏览器数据前请先导出备份。
             </p>
@@ -823,9 +909,6 @@ function HydratedPreUserAlphaApp() {
           </section>
         ) : null}
 
-        <p className="sr-only" aria-live="polite">
-          {notice}
-        </p>
         {notice ? (
           <div className="notice" role="status">
             <span aria-hidden="true">✓</span> {notice}
@@ -835,53 +918,12 @@ function HydratedPreUserAlphaApp() {
           </div>
         ) : null}
 
-        <section className="overview-section" id="overview" aria-labelledby="overview-title">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">只读概览</p>
-              <h2 id="overview-title">当前校准进度</h2>
-            </div>
-            <button className="sample-button" disabled={!canEdit} onClick={loadSamples} type="button">
-              加载合成示例
-            </button>
-          </div>
-
-          <div className="metric-grid">
-            <article>
-              <span>已添加岗位</span>
-              <strong>{state.jobs.length}</strong>
-              <small>仅当前浏览器</small>
-            </article>
-            <article>
-              <span>未被硬排除</span>
-              <strong>{eligibleCount}</strong>
-              <small>仍需你亲自判断</small>
-            </article>
-            <article>
-              <span>已做选择</span>
-              <strong>{decidedCount}</strong>
-              <small>感兴趣 {interestedCount}</small>
-            </article>
-            <article className="progress-card">
-              <span>校准覆盖</span>
-              <strong>
-                {state.jobs.length === 0
-                  ? "0%"
-                  : `${Math.round((decidedCount / state.jobs.length) * 100)}%`}
-              </strong>
-              <progress aria-label="校准覆盖" max={Math.max(state.jobs.length, 1)} value={decidedCount}>
-                {decidedCount} / {state.jobs.length}
-              </progress>
-            </article>
-          </div>
-        </section>
-
         <div className="two-column-grid">
           <section className="panel" id="rules" aria-labelledby="rules-title">
             <div className="section-heading compact">
               <div>
-                <p className="eyebrow">步骤 1</p>
-                <h2 id="rules-title">告诉我们什么值得看</h2>
+                <p className="eyebrow">01 · DEFINE</p>
+                <h2 id="rules-title">定义筛选偏好</h2>
               </div>
               <span className={`completion-chip ${rulesConfigured ? "complete" : ""}`}>
                 {rulesConfigured ? "已配置" : "待配置"}
@@ -892,6 +934,8 @@ function HydratedPreUserAlphaApp() {
               <label>
                 <span>目标职位 *</span>
                 <input
+                  aria-describedby={rulesError ? "rules-error" : undefined}
+                  aria-invalid={Boolean(rulesError && !ruleForm.targetRole.trim())}
                   autoComplete="off"
                   disabled={!canEdit}
                   maxLength={200}
@@ -908,6 +952,8 @@ function HydratedPreUserAlphaApp() {
               <label>
                 <span>目标地点 *</span>
                 <input
+                  aria-describedby={rulesError ? "rules-error" : undefined}
+                  aria-invalid={Boolean(rulesError && !ruleForm.targetLocation.trim())}
                   autoComplete="off"
                   disabled={!canEdit}
                   maxLength={200}
@@ -956,7 +1002,11 @@ function HydratedPreUserAlphaApp() {
                 <small>任一命中都会标记为“硬规则排除”。</small>
               </label>
             </div>
-            {rulesError ? <p className="field-error" role="alert">{rulesError}</p> : null}
+            {rulesError ? (
+              <p className="field-error" id="rules-error" role="alert">
+                {rulesError}
+              </p>
+            ) : null}
             <button className="primary-button" disabled={!canEdit} onClick={saveRules} type="button">
               保存并重新评分
             </button>
@@ -965,16 +1015,23 @@ function HydratedPreUserAlphaApp() {
           <section className="panel" id="job-entry" aria-labelledby="job-entry-title">
             <div className="section-heading compact">
               <div>
-                <p className="eyebrow">步骤 2</p>
-                <h2 id="job-entry-title">手工添加岗位</h2>
+                <p className="eyebrow">02 · ADD</p>
+                <h2 id="job-entry-title">添加岗位</h2>
               </div>
-              <span className="privacy-chip">不抓取链接</span>
+              <span className="privacy-chip">仅手动输入</span>
             </div>
 
             <div className="form-grid job-form">
               <label>
                 <span>职位 *</span>
                 <input
+                  aria-describedby={
+                    jobError === "职位和公司不能为空。" ? "job-error" : undefined
+                  }
+                  aria-invalid={Boolean(
+                    jobError === "职位和公司不能为空。" &&
+                      !jobForm.title.trim(),
+                  )}
                   disabled={!canEdit}
                   maxLength={300}
                   onChange={(event) =>
@@ -987,6 +1044,13 @@ function HydratedPreUserAlphaApp() {
               <label>
                 <span>公司 *</span>
                 <input
+                  aria-describedby={
+                    jobError === "职位和公司不能为空。" ? "job-error" : undefined
+                  }
+                  aria-invalid={Boolean(
+                    jobError === "职位和公司不能为空。" &&
+                      !jobForm.company.trim(),
+                  )}
                   disabled={!canEdit}
                   maxLength={300}
                   onChange={(event) =>
@@ -1030,10 +1094,14 @@ function HydratedPreUserAlphaApp() {
             </button>
 
             <details className="batch-entry">
-              <summary>批量粘贴多行</summary>
+              <summary>批量粘贴</summary>
               <label>
                 <span>每行一个岗位</span>
                 <textarea
+                  aria-describedby={
+                    batchErrors.length > 0 ? "batch-errors" : undefined
+                  }
+                  aria-invalid={batchErrors.length > 0}
                   disabled={!canEdit}
                   maxLength={MAX_TEXT_LENGTH}
                   onChange={(event) => setBatchInput(event.target.value)}
@@ -1049,9 +1117,17 @@ function HydratedPreUserAlphaApp() {
                 检查并导入
               </button>
             </details>
-            {jobError ? <p className="field-error" role="alert">{jobError}</p> : null}
+            {jobError ? (
+              <p className="field-error" id="job-error" role="alert">
+                {jobError}
+              </p>
+            ) : null}
             {batchErrors.length > 0 ? (
-              <ul className="error-list" aria-label="批量导入错误">
+              <ul
+                className="error-list"
+                id="batch-errors"
+                aria-label="批量导入错误"
+              >
                 {batchErrors.map((error) => (
                   <li key={`${error.line}-${error.message}`}>
                     {error.line > 0 ? `第 ${error.line} 行：` : ""}
@@ -1066,8 +1142,8 @@ function HydratedPreUserAlphaApp() {
         <section className="results-section" id="results" aria-labelledby="results-title">
           <div className="section-heading">
             <div>
-              <p className="eyebrow">步骤 3 · 人工校准</p>
-              <h2 id="results-title">逐个判断排序是否有用</h2>
+              <p className="eyebrow">03 · CALIBRATE</p>
+              <h2 id="results-title">这份排序符合你的判断吗？</h2>
               <p>分数只用于排序，不代表真实适合度，更不会触发任何外部动作。</p>
             </div>
             <span className="result-count">{scoredJobs.length} 个岗位</span>
@@ -1088,15 +1164,22 @@ function HydratedPreUserAlphaApp() {
                 const currentDecision = state.feedback[job.id];
                 return (
                   <article
-                    className={`job-card ${score.eligible ? "" : "excluded"}`}
+                    className={`job-card ${
+                      score.eligible
+                        ? score.label === "推荐关注"
+                          ? "recommended"
+                          : "review"
+                        : "excluded"
+                    }`}
                     key={job.id}
                   >
-                    <div className="rank" aria-label={`排序第 ${index + 1}`}>
-                      {index + 1}
+                    <div className="rank">
+                      <span aria-hidden="true">{index + 1}</span>
+                      <span className="sr-only">排序第 {index + 1}</span>
                     </div>
                     <div className="score-block">
                       <strong>{score.score}</strong>
-                      <span>本地规则分</span>
+                      <span>规则分</span>
                     </div>
                     <div className="job-content">
                       <div className="job-title-line">
@@ -1111,28 +1194,38 @@ function HydratedPreUserAlphaApp() {
                         </span>
                       </div>
                       {job.description ? <p className="job-description">{job.description}</p> : null}
-                      <div className="reason-grid">
-                        <div>
-                          <h4>加分与通过理由</h4>
-                          {score.reasons.length > 0 ? (
-                            <ul>
-                              {score.reasons.map((reason) => <li key={reason}>{reason}</li>)}
-                            </ul>
-                          ) : (
-                            <p>无</p>
-                          )}
+                      <details className="reason-details">
+                        <summary>
+                          查看评分依据
+                          <span aria-hidden="true">＋</span>
+                        </summary>
+                        <div className="reason-grid">
+                          <div>
+                            <h4>为什么排在这里</h4>
+                            {score.reasons.length > 0 ? (
+                              <ul>
+                                {score.reasons.map((reason) => (
+                                  <li key={reason}>{reason}</li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <p>无</p>
+                            )}
+                          </div>
+                          <div>
+                            <h4>需要留意</h4>
+                            {score.concerns.length > 0 ? (
+                              <ul>
+                                {score.concerns.map((concern) => (
+                                  <li key={concern}>{concern}</li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <p>当前规则没有发现额外问题。</p>
+                            )}
+                          </div>
                         </div>
-                        <div>
-                          <h4>仍需确认</h4>
-                          {score.concerns.length > 0 ? (
-                            <ul>
-                              {score.concerns.map((concern) => <li key={concern}>{concern}</li>)}
-                            </ul>
-                          ) : (
-                            <p>当前规则没有发现额外问题。</p>
-                          )}
-                        </div>
-                      </div>
+                      </details>
                       <div className="job-actions">
                         <div
                           aria-label={`${job.title} 的校准选择`}
@@ -1169,41 +1262,23 @@ function HydratedPreUserAlphaApp() {
           )}
         </section>
 
-        <section className="feedback-panel" aria-labelledby="feedback-title">
-          <div>
-            <p className="eyebrow">帮助决定下一步</p>
-            <h2 id="feedback-title">告诉我们这个开源工具哪里不对</h2>
-            <p>
-              GitHub Issue 是公开的。请勿提交简历、岗位正文、联系人、邮箱、聊天记录或任何其他个人数据；只描述问题类型和你期望的行为。
-            </p>
-          </div>
-          <a
-            className="github-button"
-            href="https://github.com/AnnCYW-cm/rolefox/issues/new?template=alpha-feedback.yml"
-            rel="noreferrer"
-            target="_blank"
-          >
-            提交匿名化反馈 <span aria-hidden="true">↗</span>
-          </a>
-        </section>
-
         <section className="data-panel" id="data-controls" aria-labelledby="data-title">
           <div>
-            <p className="eyebrow">本地数据控制</p>
+            <p className="eyebrow">YOUR DATA</p>
             <h2 id="data-title">导出、备份或彻底清除</h2>
             <p>
-              完整导出包含你输入的规则和岗位；匿名汇总只含数量、分数区间和选择统计，不含任何原文。
+              完整备份包含你输入的规则和岗位；无原文汇总只含数量、分数区间和选择统计。
             </p>
           </div>
           <div className="data-actions">
             <button className="secondary-button" disabled={!canEdit} onClick={exportFullData} type="button">
-              导出完整本地数据
+              导出完整备份
             </button>
             <button className="secondary-button" disabled={!canEdit} onClick={exportAnonymousFeedback} type="button">
-              导出匿名汇总
+              导出无原文汇总
             </button>
             <label className="restore-control">
-              <span>从完整导出恢复</span>
+              <span>从备份恢复</span>
               <input
                 accept="application/json,.json"
                 aria-describedby="restore-help"
@@ -1226,12 +1301,61 @@ function HydratedPreUserAlphaApp() {
               {restoreError}
             </p>
           ) : null}
-          <code>{ALPHA_STORAGE_KEY}</code>
+          <details className="technical-details">
+            <summary>技术信息</summary>
+            <code>{ALPHA_STORAGE_KEY}</code>
+          </details>
+        </section>
+
+        <section className="feedback-panel" aria-labelledby="feedback-title">
+          <div>
+            <p className="eyebrow">OPEN SOURCE LOOP</p>
+            <h2 id="feedback-title">告诉我们哪里可以更好</h2>
+            <p>
+              GitHub Issue 是公开的。请勿提交简历、岗位正文、联系人、邮箱、聊天记录或任何其他个人数据；只描述问题类型和你期望的行为。
+            </p>
+          </div>
+          <a
+            className="github-button"
+            href="https://github.com/AnnCYW-cm/rolefox/issues/new?template=alpha-feedback.yml"
+            rel="noreferrer"
+            target="_blank"
+          >
+            前往 GitHub 公开反馈 <span aria-hidden="true">↗</span>
+            <span className="sr-only">（在新窗口打开）</span>
+          </a>
         </section>
 
         <footer className="alpha-footer">
-          <span>RoleFox v0.1.0-alpha.1 · Apache-2.0 开源工具</span>
-          <span>仅在当前浏览器运行 · 不会产生外部求职动作</span>
+          <div className="footer-topline">
+            <div className="footer-brand">
+              <span className="footer-mark" aria-hidden="true">
+                <FoxMark />
+              </span>
+              <span>
+                <strong>RoleFox</strong>
+                <small>v0.1.0-alpha.2 · Apache-2.0</small>
+              </span>
+            </div>
+            <nav aria-label="开源项目资源" className="project-links">
+              {PROJECT_LINKS.map((link) => (
+                <a
+                  href={link.href}
+                  key={link.href}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  {link.label}
+                  <span aria-hidden="true">↗</span>
+                  <span className="sr-only">（在新窗口打开）</span>
+                </a>
+              ))}
+            </nav>
+          </div>
+          <div className="footer-meta">
+            <span>仅在当前浏览器运行</span>
+            <span>不会产生外部求职动作</span>
+          </div>
         </footer>
       </main>
 

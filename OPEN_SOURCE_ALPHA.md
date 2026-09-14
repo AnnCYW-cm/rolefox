@@ -10,6 +10,10 @@ RoleFox 的首个公开版本是 **v0.1.0-alpha.1 浏览器本地开源工具**�
 
 当前开源核心包括目标职位与地点、加分词与硬排除词、手工与批量粘贴岗位、确定性评分与解释、感兴趣 / 不感兴趣校准，以及浏览器本地保存、导出、恢复和清除。首版没有账号、服务端、云同步、自动抓取、AI、材料生成、投递、消息、邮箱或日历连接。
 
+### Alpha.2 是界面后续更新
+
+**v0.1.0-alpha.2** 只刷新首版的视觉设计、信息架构、响应式布局与可访问性交互。它沿用 v0.1.0-alpha.1 的浏览器本地开源核心、数据模型和安全边界，没有新增账号、服务端、自动化、AI 或任何外部求职动作，也不构成 Gate 研究证据。
+
 ### 下一版本再做产品形态
 
 下一阶段可能评估引导配置、候选人事实库、持久化数据库、文件与链接导入、去重、AI 辅助、工作流、合规连接器、安装包、自托管服务和跨设备使用。它们是方向，不是本 Alpha 的承诺；范围由首版反馈和真实用户研究决定。
@@ -37,6 +41,10 @@ Pre-W1 Gate 1 继续保持 `BLOCKED`。没有近期活跃用户时可以先发�
 RoleFox's first public version is **v0.1.0-alpha.1**, an open-source browser-local tool. It tests one concrete proposition: can explicit goals and keyword rules make job triage faster and easier to inspect?
 
 The open-source core in this release includes target role and location rules, preferred and hard-exclusion keywords, manual and batch-pasted jobs, deterministic scores and explanations, interested / not-interested calibration, and browser-local save, export, restore, and clearing. It has no account, server, cloud sync, automatic collection, AI, material generation, applications, messaging, mailbox, or calendar connection.
+
+### Alpha.2 is a UI follow-up
+
+**v0.1.0-alpha.2** refreshes only the first release's visual design, information architecture, responsive layout, and accessibility interactions. It keeps v0.1.0-alpha.1's open-source browser-local core, data model, and safety boundary. It adds no accounts, servers, automation, AI, or external job-search actions, and it does not count as Gate research evidence.
 
 ### Productize in the next version
 
