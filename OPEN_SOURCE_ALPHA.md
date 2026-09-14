@@ -22,6 +22,12 @@ Alpha.2 的标签、版本说明和发布时的范围陈述作为历史记录保
 
 这是一次完整的界面重做，不是能力扩张。评分、规则、岗位输入、校准、导出、恢复、清除及失败关闭行为保持不变；浏览器本地数据 schema 与安全边界也没有变化，现有 Alpha.1 和 Alpha.2 数据不需要迁移。Alpha.3 同样不构成 Gate 研究证据。
 
+### Alpha.4 是 Signal Desk 重做
+
+**v0.1.0-alpha.4** 将 Alpha.3 的 Quiet Workbench 重构为更鲜明的 Signal Desk：以冷石墨黑、雾白和电光狐橙建立编辑式工作台，用几何负形狐标、硬边框、红线和切角取代通用圆角卡片。桌面继续采用设置栏与连续“机会排序”账本；移动端加入底部任务导航，并在已有岗位时让结果在 DOM、键盘和视觉顺序中一致优先出现。空白态的首个规则输入仍位于第一屏。
+
+这次重做只改变品牌表达、视觉、信息编排和交互呈现。评分、排序、规则、合成样例、岗位输入、校准、导出、恢复、删除、清除及失败关闭行为保持不变；存储键、浏览器本地数据 schema、校验规则和安全边界也没有变化，Alpha.1–Alpha.3 数据不需要迁移。Alpha.3 的标签、版本说明、Changelog 记录与 verification lineage 保持不可变。Alpha.4 不构成用户研究证据，Pre-W1 Gate 1 继续保持 `BLOCKED`。
+
 ### 后续阶段再做产品形态
 
 下一阶段可能评估引导配置、候选人事实库、持久化数据库、文件与链接导入、去重、AI 辅助、工作流、合规连接器、安装包、自托管服务和跨设备使用。它们是方向，不是本 Alpha 的承诺；范围由首版反馈和真实用户研究决定。
@@ -61,6 +67,12 @@ The Alpha.2 tag, release notes, and published scope statements remain immutable 
 **v0.1.0-alpha.3** completely rebuilds the Alpha.2 UI and information architecture as the Quiet Workbench: a restrained warm-gray-and-white palette with fox-orange accents, a flat top bar for global state, a desktop configuration rail beside a continuous results list, and less first-screen decoration and vertical stacking on mobile so the core workflow appears sooner.
 
 This is a complete interface rebuild, not a capability expansion. Scoring, rules, job input, calibration, export, restore, clearing, and fail-closed behavior remain unchanged. The browser-local data schema and safety boundary are also unchanged, so existing Alpha.1 and Alpha.2 data require no migration. Alpha.3 does not count as Gate research evidence.
+
+### Alpha.4 is the Signal Desk rebuild
+
+**v0.1.0-alpha.4** rebuilds the Alpha.3 Quiet Workbench as a more distinctive Signal Desk. Cool graphite, mist white, and electric fox orange form an editorial workspace, while a geometric negative-space fox mark, hard rules, redlines, and clipped corners replace generic rounded cards. Desktop keeps a configuration rail beside a continuous opportunity ledger. Mobile adds bottom task navigation and, when jobs exist, presents results first in matching DOM, keyboard, and visual order. The first rule input remains in the initial empty-state screen.
+
+This rebuild changes brand expression, visual design, information arrangement, and interaction presentation only. Scoring, ordering, rules, synthetic examples, job input, calibration, export, restore, deletion, clearing, fail-closed behavior, the storage key, browser-local data schema, validation rules, and safety boundary are unchanged. Alpha.1–Alpha.3 data require no migration. The Alpha.3 tag, release notes, changelog record, and verification lineage remain immutable. Alpha.4 is not user-research evidence; Pre-W1 Gate 1 remains `BLOCKED`.
 
 ### Productize in a later phase
 

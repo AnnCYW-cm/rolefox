@@ -85,19 +85,11 @@ function FoxMark() {
       focusable="false"
       viewBox="0 0 64 64"
     >
-      <path className="fox-ear" d="M10 12 28 21 18 38Z" />
-      <path className="fox-ear" d="m54 12-18 9 10 17Z" />
       <path
-        className="fox-face"
-        d="M14 27C18 16 27 12 32 12s14 4 18 15c4 11-2 25-18 25S10 38 14 27Z"
+        className="fox-glyph"
+        fillRule="evenodd"
+        d="M10 11 27 20 32 17 37 20 54 11 49 35 41 49 32 56 23 49 15 35ZM23 24h20v6H30v5h9v6h-9v6h-7Z"
       />
-      <path
-        className="fox-muzzle"
-        d="M17 31c7 3 11 7 15 18 4-11 8-15 15-18-1 12-6 21-15 21s-14-9-15-21Z"
-      />
-      <circle className="fox-eye" cx="25" cy="30" r="2.2" />
-      <circle className="fox-eye" cx="39" cy="30" r="2.2" />
-      <path className="fox-nose" d="m28.5 41 3.5 2.5 3.5-2.5L32 47Z" />
     </svg>
   );
 }
@@ -240,21 +232,25 @@ function ConfirmationDialog({
   confirmClassName,
   confirmLabel,
   description,
+  fallbackFocusId,
   icon,
   iconClassName = "",
   id,
   onCancel,
   onConfirm,
+  returnFocusTo,
   title,
 }: {
   confirmClassName: string;
   confirmLabel: string;
   description: ReactNode;
+  fallbackFocusId?: string;
   icon: string;
   iconClassName?: string;
   id: string;
   onCancel: () => void;
   onConfirm: () => void;
+  returnFocusTo?: HTMLElement | null;
   title: string;
 }) {
   const dialogRef = useRef<HTMLElement>(null);
@@ -262,17 +258,20 @@ function ConfirmationDialog({
 
   useEffect(() => {
     const previouslyFocused =
-      document.activeElement instanceof HTMLElement
+      returnFocusTo ??
+      (document.activeElement instanceof HTMLElement
         ? document.activeElement
-        : null;
+        : null);
     cancelButtonRef.current?.focus();
 
     return () => {
       if (previouslyFocused?.isConnected) {
         previouslyFocused.focus();
+      } else if (fallbackFocusId) {
+        document.getElementById(fallbackFocusId)?.focus();
       }
     };
-  }, []);
+  }, [fallbackFocusId, returnFocusTo]);
 
   function handleKeyDown(event: ReactKeyboardEvent<HTMLElement>): void {
     if (event.key === "Escape") {
@@ -343,6 +342,185 @@ function ConfirmationDialog({
   );
 }
 
+function ResultsSection({
+  canEdit,
+  feedback,
+  onDelete,
+  onDecision,
+  onLoadSamples,
+  scoredJobs,
+}: {
+  canEdit: boolean;
+  feedback: AlphaState["feedback"];
+  onDelete: (jobId: string) => void;
+  onDecision: (jobId: string, decision: CalibrationDecision) => void;
+  onLoadSamples: () => void;
+  scoredJobs: ReturnType<typeof scoreAndSortJobs>;
+}) {
+  return (
+    <section
+      aria-labelledby="results-title"
+      className="results-section"
+      id="results"
+    >
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">03 / 判断结果</p>
+          <h2 id="results-title" tabIndex={-1}>机会排序</h2>
+          <p>分数只用于排序，不代表真实适合度，更不会触发任何外部动作。</p>
+        </div>
+        <div className="result-toolbar">
+          {scoredJobs.length > 0 ? (
+            <button
+              className="secondary-button"
+              disabled={!canEdit}
+              onClick={onLoadSamples}
+              type="button"
+            >
+              加载示例
+            </button>
+          ) : null}
+          <span className="result-count">{scoredJobs.length} 个岗位</span>
+        </div>
+      </div>
+
+      {scoredJobs.length === 0 ? (
+        <div className="empty-state">
+          <span aria-hidden="true" className="empty-state-mark">
+            <svg viewBox="0 0 48 48">
+              <path d="M8 9h11l5 8 5-8h11l-7 14v11l-9 6-9-6V23L8 9Z" />
+              <path d="M18 27h12M24 17v18" />
+            </svg>
+          </span>
+          <h3>还没有岗位</h3>
+          <p>先配置规则并手工添加岗位，或者加载完全合成的示例。</p>
+          <button
+            className="sample-button"
+            disabled={!canEdit}
+            onClick={onLoadSamples}
+            type="button"
+          >
+            加载合成示例
+          </button>
+        </div>
+      ) : (
+        <div className="job-list">
+          {scoredJobs.map(({ job, score }, index) => {
+            const currentDecision = feedback[job.id];
+            return (
+              <article
+                className={`job-card ${
+                  score.eligible
+                    ? score.label === "推荐关注"
+                      ? "recommended"
+                      : "review"
+                    : "excluded"
+                }`}
+                key={job.id}
+              >
+                <div className="rank">
+                  <span aria-hidden="true">
+                    {String(index + 1).padStart(2, "0")}
+                  </span>
+                  <span className="sr-only">排序第 {index + 1}</span>
+                </div>
+                <div className="score-block">
+                  <strong>{score.score}</strong>
+                  <span>规则分</span>
+                </div>
+                <div className="job-content">
+                  <div className="job-title-line">
+                    <div>
+                      <h3>{job.title}</h3>
+                      <p>
+                        {job.company} · {job.location || "地点未填写"}
+                      </p>
+                    </div>
+                    <span
+                      className={`score-label ${
+                        score.eligible
+                          ? score.label === "推荐关注"
+                            ? "recommended"
+                            : "review"
+                          : "blocked"
+                      }`}
+                    >
+                      {score.label}
+                    </span>
+                  </div>
+                  {job.description ? (
+                    <p className="job-description">{job.description}</p>
+                  ) : null}
+                  <details className="reason-details">
+                    <summary>
+                      依据 {score.reasons.length} · 留意 {score.concerns.length}
+                      <span aria-hidden="true">＋</span>
+                    </summary>
+                    <div className="reason-grid">
+                      <div>
+                        <h4>为什么排在这里</h4>
+                        {score.reasons.length > 0 ? (
+                          <ul>
+                            {score.reasons.map((reason) => (
+                              <li key={reason}>{reason}</li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p>无</p>
+                        )}
+                      </div>
+                      <div>
+                        <h4>需要留意</h4>
+                        {score.concerns.length > 0 ? (
+                          <ul>
+                            {score.concerns.map((concern) => (
+                              <li key={concern}>{concern}</li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p>当前规则没有发现额外问题。</p>
+                        )}
+                      </div>
+                    </div>
+                  </details>
+                  <div className="job-actions">
+                    <div
+                      aria-label={`${job.title} 的校准选择`}
+                      className="decision-group"
+                      role="group"
+                    >
+                      <DecisionButton
+                        active={currentDecision === "interested"}
+                        decision="interested"
+                        disabled={!canEdit}
+                        onSelect={(decision) => onDecision(job.id, decision)}
+                      />
+                      <DecisionButton
+                        active={currentDecision === "not_interested"}
+                        decision="not_interested"
+                        disabled={!canEdit}
+                        onSelect={(decision) => onDecision(job.id, decision)}
+                      />
+                    </div>
+                    <button
+                      className="text-button"
+                      disabled={!canEdit}
+                      onClick={() => onDelete(job.id)}
+                      type="button"
+                    >
+                      删除本地记录
+                    </button>
+                  </div>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default function PreUserAlphaApp() {
   const hydrated = useSyncExternalStore(
     subscribeToHydration,
@@ -386,6 +564,13 @@ function HydratedPreUserAlphaApp() {
   );
   const [jobForm, setJobForm] = useState<JobDraft>(EMPTY_JOB);
   const [batchInput, setBatchInput] = useState("");
+  const [dialogReturnFocusTo, setDialogReturnFocusTo] =
+    useState<HTMLElement | null>(null);
+  const [advancedRulesOpen, setAdvancedRulesOpen] = useState(
+    () =>
+      !initialSession.state.rules.targetRole.trim() ||
+      !initialSession.state.rules.targetLocation.trim(),
+  );
 
   const scoredJobs = useMemo(
     () => scoreAndSortJobs(state.jobs, state.rules),
@@ -402,6 +587,25 @@ function HydratedPreUserAlphaApp() {
   );
   const modalOpen =
     showClearConfirmation || Boolean(pendingDeleteJobId) || Boolean(pendingRestore);
+
+  function rememberDialogTrigger(element?: HTMLElement | null): void {
+    setDialogReturnFocusTo(
+      element ??
+      (document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null),
+    );
+  }
+
+  function requestClearConfirmation(): void {
+    rememberDialogTrigger();
+    setShowClearConfirmation(true);
+  }
+
+  function requestDeleteConfirmation(jobId: string): void {
+    rememberDialogTrigger();
+    setPendingDeleteJobId(jobId);
+  }
 
   function updateState(updater: (current: AlphaState) => AlphaState): boolean {
     if (!canEdit) {
@@ -452,6 +656,7 @@ function HydratedPreUserAlphaApp() {
       return;
     }
     setRulesError("");
+    setAdvancedRulesOpen(false);
     setNotice("目标规则已保存，现有岗位已在本地重新评分。");
   }
 
@@ -558,6 +763,7 @@ function HydratedPreUserAlphaApp() {
     }
     if (shouldSetSampleRules) {
       setRuleForm(rulesToForm(SAMPLE_RULES));
+      setAdvancedRulesOpen(false);
     }
     setNotice(
       hasSamples
@@ -660,6 +866,10 @@ function HydratedPreUserAlphaApp() {
 
     setState(restoredState);
     setRuleForm(rulesToForm(restoredState.rules));
+    setAdvancedRulesOpen(
+      !restoredState.rules.targetRole.trim() ||
+        !restoredState.rules.targetLocation.trim(),
+    );
     setJobForm(EMPTY_JOB);
     setBatchInput("");
     setBatchErrors([]);
@@ -712,6 +922,7 @@ function HydratedPreUserAlphaApp() {
     const emptyState = createEmptyAlphaState(new Date().toISOString());
     setState(emptyState);
     setRuleForm(EMPTY_RULE_FORM);
+    setAdvancedRulesOpen(true);
     setJobForm(EMPTY_JOB);
     setBatchInput("");
     setBatchErrors([]);
@@ -725,6 +936,17 @@ function HydratedPreUserAlphaApp() {
     setShowClearConfirmation(false);
     setNotice("当前浏览器中的 RoleFox Alpha 数据已清除。此操作无法撤销。");
   }
+
+  const resultsSection = (
+    <ResultsSection
+      canEdit={canEdit}
+      feedback={state.feedback}
+      onDelete={requestDeleteConfirmation}
+      onDecision={setDecision}
+      onLoadSamples={loadSamples}
+      scoredJobs={scoredJobs}
+    />
+  );
 
   return (
     <div className="alpha-shell">
@@ -747,7 +969,7 @@ function HydratedPreUserAlphaApp() {
           </span>
           <span>
             <strong>RoleFox</strong>
-            <small>OPEN SOURCE · LOCAL</small>
+            <small>开源 · 本地判断</small>
           </span>
         </div>
 
@@ -785,7 +1007,7 @@ function HydratedPreUserAlphaApp() {
       </header>
 
       <main
-        className="alpha-main"
+        className={`alpha-main ${scoredJobs.length > 0 ? "has-results" : "is-empty"}`}
         id="main-content"
         inert={modalOpen ? true : undefined}
       >
@@ -795,27 +1017,29 @@ function HydratedPreUserAlphaApp() {
           id="overview"
         >
           <div className="hero-copy">
-            <p className="eyebrow">开源 · 本地优先</p>
+            <p className="eyebrow">开源岗位判断 / ALPHA.4</p>
             <h1 id="hero-title">
-              先看值得看的岗位<span aria-hidden="true">。</span>
+              <span>筛掉噪音，</span>
+              <span className="hero-accent">留住机会。</span>
             </h1>
             <p className="lede">
-              设置规则，粘贴岗位，得到一份可解释的优先级清单。
+              不追踪，不投递。只在当前浏览器里，把岗位排成一份有依据的清单。
             </p>
           </div>
 
           <section className="release-meta" aria-labelledby="local-view-title">
             <div className="hero-status-head">
-              <span className="alpha-badge">v0.1.0-alpha.3</span>
+              <span className="alpha-badge">v0.1.0-alpha.4</span>
+              <span className="hero-mode">仅在本机</span>
             </div>
             <div className="hero-score-row">
               <div>
                 <strong>{eligibleCount}</strong>
-                <span>未被硬排除</span>
+                <span>可进入判断</span>
               </div>
               <div>
                 <strong>{state.jobs.length}</strong>
-                <span>当前岗位</span>
+                <span>已录入岗位</span>
               </div>
             </div>
             <div className="hero-progress-copy">
@@ -844,7 +1068,7 @@ function HydratedPreUserAlphaApp() {
         <details className="disclosure">
           <summary>
             <span className="disclosure-icon" aria-hidden="true" />
-            <strong>隐私与安全边界</strong>
+            <strong>本地模式 · 数据不离开浏览器</strong>
             <span className="disclosure-hint">
               查看完整边界 <i aria-hidden="true">＋</i>
             </span>
@@ -875,7 +1099,7 @@ function HydratedPreUserAlphaApp() {
               ) : null}
               <button
                 className="danger-button"
-                onClick={() => setShowClearConfirmation(true)}
+                onClick={requestClearConfirmation}
                 type="button"
               >
                 清除并重新开始
@@ -893,7 +1117,10 @@ function HydratedPreUserAlphaApp() {
           </div>
         ) : null}
 
-        <div className="workbench-grid">
+        <div
+          className={`workbench-grid ${scoredJobs.length > 0 ? "has-results" : "is-empty"}`}
+        >
+        {scoredJobs.length > 0 ? resultsSection : null}
         <div className="two-column-grid">
           <section className="panel" id="rules" aria-labelledby="rules-title">
             <div className="section-heading compact">
@@ -943,40 +1170,54 @@ function HydratedPreUserAlphaApp() {
                   value={ruleForm.targetLocation}
                 />
               </label>
-              <label>
-                <span>加分关键词</span>
-                <textarea
-                  disabled={!canEdit}
-                  maxLength={2_000}
-                  onChange={(event) =>
-                    setRuleForm((current) => ({
-                      ...current,
-                      includeKeywords: event.target.value,
-                    }))
-                  }
-                  placeholder="AI，工作流，B2B"
-                  rows={3}
-                  value={ruleForm.includeKeywords}
-                />
-                <small>用逗号或换行分隔；它们只加分，不会自动投递。</small>
-              </label>
-              <label>
-                <span>硬排除关键词</span>
-                <textarea
-                  disabled={!canEdit}
-                  maxLength={2_000}
-                  onChange={(event) =>
-                    setRuleForm((current) => ({
-                      ...current,
-                      excludeKeywords: event.target.value,
-                    }))
-                  }
-                  placeholder="销售，区块链"
-                  rows={3}
-                  value={ruleForm.excludeKeywords}
-                />
-                <small>任一命中都会标记为“硬规则排除”。</small>
-              </label>
+              <details
+                className="advanced-rules"
+                onToggle={(event) =>
+                  setAdvancedRulesOpen(event.currentTarget.open)
+                }
+                open={advancedRulesOpen}
+              >
+                <summary>
+                  <span>高级规则</span>
+                  <small>加分与硬排除关键词</small>
+                </summary>
+                <div className="advanced-rules-fields">
+                  <label>
+                    <span>加分关键词</span>
+                    <textarea
+                      disabled={!canEdit}
+                      maxLength={2_000}
+                      onChange={(event) =>
+                        setRuleForm((current) => ({
+                          ...current,
+                          includeKeywords: event.target.value,
+                        }))
+                      }
+                      placeholder="AI，工作流，B2B"
+                      rows={3}
+                      value={ruleForm.includeKeywords}
+                    />
+                    <small>用逗号或换行分隔；它们只加分。</small>
+                  </label>
+                  <label>
+                    <span>硬排除关键词</span>
+                    <textarea
+                      disabled={!canEdit}
+                      maxLength={2_000}
+                      onChange={(event) =>
+                        setRuleForm((current) => ({
+                          ...current,
+                          excludeKeywords: event.target.value,
+                        }))
+                      }
+                      placeholder="销售，区块链"
+                      rows={3}
+                      value={ruleForm.excludeKeywords}
+                    />
+                    <small>任一命中都会标记为“硬规则排除”。</small>
+                  </label>
+                </div>
+              </details>
             </div>
             {rulesError ? (
               <p className="field-error" id="rules-error" role="alert">
@@ -1115,142 +1356,10 @@ function HydratedPreUserAlphaApp() {
           </section>
         </div>
 
-        <section className="results-section" id="results" aria-labelledby="results-title">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">03 / 判断结果</p>
-              <h2 id="results-title">排序结果</h2>
-              <p>分数只用于排序，不代表真实适合度，更不会触发任何外部动作。</p>
-            </div>
-            <div className="result-toolbar">
-              {scoredJobs.length > 0 ? (
-                <button
-                  className="secondary-button"
-                  disabled={!canEdit}
-                  onClick={loadSamples}
-                  type="button"
-                >
-                  加载示例
-                </button>
-              ) : null}
-              <span className="result-count">{scoredJobs.length} 个岗位</span>
-            </div>
-          </div>
-
-          {scoredJobs.length === 0 ? (
-            <div className="empty-state">
-              <span aria-hidden="true">⌕</span>
-              <h3>还没有岗位</h3>
-              <p>先配置规则并手工添加岗位，或者加载完全合成的示例。</p>
-              <button className="sample-button" disabled={!canEdit} onClick={loadSamples} type="button">
-                加载合成示例
-              </button>
-            </div>
-          ) : (
-            <div className="job-list">
-              {scoredJobs.map(({ job, score }, index) => {
-                const currentDecision = state.feedback[job.id];
-                return (
-                  <article
-                    className={`job-card ${
-                      score.eligible
-                        ? score.label === "推荐关注"
-                          ? "recommended"
-                          : "review"
-                        : "excluded"
-                    }`}
-                    key={job.id}
-                  >
-                    <div className="rank">
-                      <span aria-hidden="true">{index + 1}</span>
-                      <span className="sr-only">排序第 {index + 1}</span>
-                    </div>
-                    <div className="score-block">
-                      <strong>{score.score}</strong>
-                      <span>规则分</span>
-                    </div>
-                    <div className="job-content">
-                      <div className="job-title-line">
-                        <div>
-                          <h3>{job.title}</h3>
-                          <p>
-                            {job.company} · {job.location || "地点未填写"}
-                          </p>
-                        </div>
-                        <span className={`score-label ${score.eligible ? score.label === "推荐关注" ? "recommended" : "review" : "blocked"}`}>
-                          {score.label}
-                        </span>
-                      </div>
-                      {job.description ? <p className="job-description">{job.description}</p> : null}
-                      <details className="reason-details">
-                        <summary>
-                          查看评分依据
-                          <span aria-hidden="true">＋</span>
-                        </summary>
-                        <div className="reason-grid">
-                          <div>
-                            <h4>为什么排在这里</h4>
-                            {score.reasons.length > 0 ? (
-                              <ul>
-                                {score.reasons.map((reason) => (
-                                  <li key={reason}>{reason}</li>
-                                ))}
-                              </ul>
-                            ) : (
-                              <p>无</p>
-                            )}
-                          </div>
-                          <div>
-                            <h4>需要留意</h4>
-                            {score.concerns.length > 0 ? (
-                              <ul>
-                                {score.concerns.map((concern) => (
-                                  <li key={concern}>{concern}</li>
-                                ))}
-                              </ul>
-                            ) : (
-                              <p>当前规则没有发现额外问题。</p>
-                            )}
-                          </div>
-                        </div>
-                      </details>
-                      <div className="job-actions">
-                        <div
-                          aria-label={`${job.title} 的校准选择`}
-                          className="decision-group"
-                          role="group"
-                        >
-                          <DecisionButton
-                            active={currentDecision === "interested"}
-                            decision="interested"
-                            disabled={!canEdit}
-                            onSelect={(decision) => setDecision(job.id, decision)}
-                          />
-                          <DecisionButton
-                            active={currentDecision === "not_interested"}
-                            decision="not_interested"
-                            disabled={!canEdit}
-                            onSelect={(decision) => setDecision(job.id, decision)}
-                          />
-                        </div>
-                        <button
-                          className="text-button"
-                          disabled={!canEdit}
-                          onClick={() => setPendingDeleteJobId(job.id)}
-                          type="button"
-                        >
-                          删除本地记录
-                        </button>
-                      </div>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-          )}
-        </section>
+        {scoredJobs.length === 0 ? resultsSection : null}
         </div>
 
+        <div className="colophon-grid">
         <section className="data-panel" id="data-controls" aria-labelledby="data-title">
           <div>
             <p className="eyebrow">本地数据</p>
@@ -1272,13 +1381,14 @@ function HydratedPreUserAlphaApp() {
                 accept="application/json,.json"
                 aria-describedby="restore-help"
                 onChange={(event) => {
+                  rememberDialogTrigger(event.currentTarget);
                   void stageRestore(event.target.files?.[0]);
                   event.target.value = "";
                 }}
                 type="file"
               />
             </label>
-            <button className="danger-text-button" onClick={() => setShowClearConfirmation(true)} type="button">
+            <button className="danger-text-button" onClick={requestClearConfirmation} type="button">
               清除当前浏览器数据
             </button>
           </div>
@@ -1314,6 +1424,7 @@ function HydratedPreUserAlphaApp() {
             <span className="sr-only">（在新窗口打开）</span>
           </a>
         </section>
+        </div>
 
         <footer className="alpha-footer">
           <div className="footer-topline">
@@ -1323,7 +1434,7 @@ function HydratedPreUserAlphaApp() {
               </span>
               <span>
                 <strong>RoleFox</strong>
-                <small>v0.1.0-alpha.3 · Apache-2.0</small>
+                <small>v0.1.0-alpha.4 · Apache-2.0</small>
               </span>
             </div>
             <nav aria-label="开源项目资源" className="project-links">
@@ -1357,6 +1468,7 @@ function HydratedPreUserAlphaApp() {
           id="clear"
           onCancel={() => setShowClearConfirmation(false)}
           onConfirm={resetLocalData}
+          returnFocusTo={dialogReturnFocusTo}
           title="清除当前浏览器中的全部 Alpha 数据？"
         />
       ) : null}
@@ -1375,8 +1487,10 @@ function HydratedPreUserAlphaApp() {
           }
           icon="−"
           id="delete-job"
+          fallbackFocusId="results-title"
           onCancel={() => setPendingDeleteJobId(null)}
           onConfirm={() => removeJob(pendingDeleteJobId)}
+          returnFocusTo={dialogReturnFocusTo}
           title="删除这条本地岗位记录？"
         />
       ) : null}
@@ -1398,6 +1512,7 @@ function HydratedPreUserAlphaApp() {
           id="restore"
           onCancel={() => setPendingRestore(null)}
           onConfirm={restoreStagedData}
+          returnFocusTo={dialogReturnFocusTo}
           title="用导出文件覆盖当前本地数据？"
         />
       ) : null}
