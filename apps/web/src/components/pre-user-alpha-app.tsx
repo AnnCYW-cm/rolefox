@@ -736,8 +736,8 @@ function HydratedPreUserAlphaApp() {
         跳到主要内容
       </a>
 
-      <aside
-        aria-label="页面导航"
+      <header
+        aria-label="应用导航"
         className="alpha-sidebar"
         inert={modalOpen ? true : undefined}
       >
@@ -747,15 +747,11 @@ function HydratedPreUserAlphaApp() {
           </span>
           <span>
             <strong>RoleFox</strong>
-            <small>LOCAL-FIRST TOOL</small>
+            <small>OPEN SOURCE · LOCAL</small>
           </span>
         </div>
 
         <nav aria-label="页面内导航">
-          <a aria-label="概览" href="#overview">
-            <span className="nav-label-full">概览</span>
-            <span aria-hidden="true" className="nav-label-short">概览</span>
-          </a>
           <a aria-label="目标规则" href="#rules">
             <span className="nav-label-full">目标规则</span>
             <span aria-hidden="true" className="nav-label-short">规则</span>
@@ -768,13 +764,9 @@ function HydratedPreUserAlphaApp() {
             <span className="nav-label-full">判断结果</span>
             <span aria-hidden="true" className="nav-label-short">结果</span>
           </a>
-          <a aria-label="本地数据" href="#data-controls">
-            <span className="nav-label-full">本地数据</span>
-            <span aria-hidden="true" className="nav-label-short">数据</span>
-          </a>
         </nav>
 
-        <div className="sidebar-status">
+        <div className="sidebar-status" aria-live="polite">
           <span className={`status-dot ${storageMode}`} aria-hidden="true" />
           <div>
             <strong>
@@ -786,8 +778,11 @@ function HydratedPreUserAlphaApp() {
             </strong>
             <span>无账号 · 无云同步</span>
           </div>
+          <span className="mobile-storage-label" aria-hidden="true">
+            本机
+          </span>
         </div>
-      </aside>
+      </header>
 
       <main
         className="alpha-main"
@@ -800,39 +795,18 @@ function HydratedPreUserAlphaApp() {
           id="overview"
         >
           <div className="hero-copy">
-            <p className="eyebrow">LOCAL-FIRST · OPEN SOURCE</p>
+            <p className="eyebrow">开源 · 本地优先</p>
             <h1 id="hero-title">
               先看值得看的岗位<span aria-hidden="true">。</span>
             </h1>
             <p className="lede">
-              设定偏好，粘贴岗位。RoleFox 用透明规则排序，你来判断结果。
+              设置规则，粘贴岗位，得到一份可解释的优先级清单。
             </p>
-            <div className="hero-actions">
-              <button
-                className="hero-primary-button"
-                disabled={!canEdit}
-                onClick={loadSamples}
-                type="button"
-              >
-                加载合成示例 <span aria-hidden="true">↗</span>
-              </button>
-              <a className="hero-secondary-link" href="#rules">
-                开始设置 <span aria-hidden="true">↓</span>
-              </a>
-            </div>
-            <ul className="hero-signals" aria-label="工具边界">
-              <li>浏览器本地运行</li>
-              <li>规则完全可解释</li>
-              <li>零外部求职动作</li>
-            </ul>
           </div>
 
           <section className="release-meta" aria-labelledby="local-view-title">
             <div className="hero-status-head">
-              <span className="alpha-badge">v0.1.0-alpha.2</span>
-              <span className="runtime-status">
-                <i aria-hidden="true" /> LOCAL ONLY
-              </span>
+              <span className="alpha-badge">v0.1.0-alpha.3</span>
             </div>
             <div className="hero-score-row">
               <div>
@@ -867,17 +841,18 @@ function HydratedPreUserAlphaApp() {
           </section>
         </header>
 
-        <section className="disclosure" aria-labelledby="disclosure-title">
-          <span className="disclosure-icon" aria-hidden="true">
-            ◉
-          </span>
-          <div>
-            <h2 id="disclosure-title">你的数据，只在这台浏览器里</h2>
-            <p>
-              这个开源 Alpha 没有账号、服务器存储或云同步，也不会扫描、投递、回复、连接邮箱/日历或调用 AI Provider。清除浏览器数据前请先导出备份。
-            </p>
-          </div>
-        </section>
+        <details className="disclosure">
+          <summary>
+            <span className="disclosure-icon" aria-hidden="true" />
+            <strong>隐私与安全边界</strong>
+            <span className="disclosure-hint">
+              查看完整边界 <i aria-hidden="true">＋</i>
+            </span>
+          </summary>
+          <p>
+            这个开源 Alpha 没有账号、服务器存储或云同步，也不会扫描、投递、回复、连接邮箱/日历或调用 AI Provider。清除浏览器数据前请先导出备份。
+          </p>
+        </details>
 
         {recovery ? (
           <section className="recovery-panel" role="alert">
@@ -918,12 +893,13 @@ function HydratedPreUserAlphaApp() {
           </div>
         ) : null}
 
+        <div className="workbench-grid">
         <div className="two-column-grid">
           <section className="panel" id="rules" aria-labelledby="rules-title">
             <div className="section-heading compact">
               <div>
-                <p className="eyebrow">01 · DEFINE</p>
-                <h2 id="rules-title">定义筛选偏好</h2>
+                <p className="eyebrow">01 / 筛选规则</p>
+                <h2 id="rules-title">设置筛选偏好</h2>
               </div>
               <span className={`completion-chip ${rulesConfigured ? "complete" : ""}`}>
                 {rulesConfigured ? "已配置" : "待配置"}
@@ -1015,7 +991,7 @@ function HydratedPreUserAlphaApp() {
           <section className="panel" id="job-entry" aria-labelledby="job-entry-title">
             <div className="section-heading compact">
               <div>
-                <p className="eyebrow">02 · ADD</p>
+                <p className="eyebrow">02 / 添加岗位</p>
                 <h2 id="job-entry-title">添加岗位</h2>
               </div>
               <span className="privacy-chip">仅手动输入</span>
@@ -1142,11 +1118,23 @@ function HydratedPreUserAlphaApp() {
         <section className="results-section" id="results" aria-labelledby="results-title">
           <div className="section-heading">
             <div>
-              <p className="eyebrow">03 · CALIBRATE</p>
-              <h2 id="results-title">这份排序符合你的判断吗？</h2>
+              <p className="eyebrow">03 / 判断结果</p>
+              <h2 id="results-title">排序结果</h2>
               <p>分数只用于排序，不代表真实适合度，更不会触发任何外部动作。</p>
             </div>
-            <span className="result-count">{scoredJobs.length} 个岗位</span>
+            <div className="result-toolbar">
+              {scoredJobs.length > 0 ? (
+                <button
+                  className="secondary-button"
+                  disabled={!canEdit}
+                  onClick={loadSamples}
+                  type="button"
+                >
+                  加载示例
+                </button>
+              ) : null}
+              <span className="result-count">{scoredJobs.length} 个岗位</span>
+            </div>
           </div>
 
           {scoredJobs.length === 0 ? (
@@ -1261,10 +1249,11 @@ function HydratedPreUserAlphaApp() {
             </div>
           )}
         </section>
+        </div>
 
         <section className="data-panel" id="data-controls" aria-labelledby="data-title">
           <div>
-            <p className="eyebrow">YOUR DATA</p>
+            <p className="eyebrow">本地数据</p>
             <h2 id="data-title">导出、备份或彻底清除</h2>
             <p>
               完整备份包含你输入的规则和岗位；无原文汇总只含数量、分数区间和选择统计。
@@ -1309,7 +1298,7 @@ function HydratedPreUserAlphaApp() {
 
         <section className="feedback-panel" aria-labelledby="feedback-title">
           <div>
-            <p className="eyebrow">OPEN SOURCE LOOP</p>
+            <p className="eyebrow">开源反馈</p>
             <h2 id="feedback-title">告诉我们哪里可以更好</h2>
             <p>
               GitHub Issue 是公开的。请勿提交简历、岗位正文、联系人、邮箱、聊天记录或任何其他个人数据；只描述问题类型和你期望的行为。
@@ -1334,7 +1323,7 @@ function HydratedPreUserAlphaApp() {
               </span>
               <span>
                 <strong>RoleFox</strong>
-                <small>v0.1.0-alpha.2 · Apache-2.0</small>
+                <small>v0.1.0-alpha.3 · Apache-2.0</small>
               </span>
             </div>
             <nav aria-label="开源项目资源" className="project-links">
