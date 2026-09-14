@@ -4,11 +4,11 @@
 
 > An open-source, browser-local tool for deciding which jobs are worth a closer look.
 
-RoleFox **v0.1.0-alpha.2** is a UI follow-up to the first public release, v0.1.0-alpha.1. Define a target role, location, and keywords; add jobs manually or in batches; review deterministic scores, hard exclusions, and inspectable reasons; then record your own interested / not-interested decisions. Data stays in the current browser by default.
+RoleFox **v0.1.0-alpha.3** completely rebuilds the Alpha.2 interface and information architecture as the Quiet Workbench. Define a target role, location, and keywords; add jobs manually or in batches; review deterministic scores, hard exclusions, and inspectable reasons; then record your own interested / not-interested decisions. Data stays in the current browser by default.
 
-[Try it online](https://anncyw-cm.github.io/rolefox/) · [Synthetic examples](examples/fake-job-board/README.md) · [Release notes](releases/v0.1.0-alpha.2.md) · [Share feedback](https://github.com/AnnCYW-cm/rolefox/issues/new?template=alpha-feedback.yml)
+[Try it online](https://anncyw-cm.github.io/rolefox/) · [Synthetic examples](examples/fake-job-board/README.md) · [Release notes](releases/v0.1.0-alpha.3.md) · [Share feedback](https://github.com/AnnCYW-cm/rolefox/issues/new?template=alpha-feedback.yml)
 
-Alpha.2 refreshes only the visual design, information architecture, responsive layout, and accessibility interactions. It adds no product capabilities and remains an open-source, browser-local tool.
+Alpha.3 uses a restrained warm-gray-and-white palette with fox-orange accents, a flat top bar, a desktop configuration rail beside a continuous results list, and a mobile first screen that reaches the core workflow sooner. It changes no capability, scoring behavior, browser-local data schema, or safety boundary. Alpha.2 remains an immutable historical release.
 
 ## 3–5 minute quickstart
 
@@ -19,13 +19,13 @@ Alpha.2 refreshes only the visual design, information architecture, responsive l
 
 Start with synthetic or fully redacted data. GitHub issues are public: do not post resumes, real job descriptions, company names, contact details, private links, or other personal information.
 
-The v0.1.0-alpha.2 interface and repository example tutorial are currently in Chinese. This English README translates the main controls; an English interface is not part of this Alpha.
+The v0.1.0-alpha.3 interface and repository example tutorial are currently in Chinese. This English README translates the main controls; an English interface is not part of this Alpha.
 
 You can also use the [copy-and-paste synthetic rules and jobs](examples/fake-job-board/README.md) to test batch input.
 
 ## What this Alpha does
 
-| Capability | v0.1.0-alpha.2 status |
+| Capability | v0.1.0-alpha.3 status |
 | --- | --- |
 | Target rules | Target role, location, preferred keywords, and hard exclusions |
 | Job input | Manual entry or batch paste using `title \| company \| location \| description` |
@@ -73,13 +73,14 @@ pnpm check
 
 The Pre-W1 Spec Manifest, Scope Catalog, Evidence, Gate Registry, checkpoints, and trusted-signature verification remain intact. Gate 1 intentionally remains **`BLOCKED`** because no real-user research evidence has been collected. Synthetic examples or the fact that the Alpha is online must not be used to manufacture a PASS.
 
-This does not block v0.1.0-alpha.2 as a narrowly scoped open-source tool. Gate 1 is used only to decide whether and how to invest in the next productization phase. W1 in the accepted Autopilot baseline must not start until real interviews, rules replay, a Gate 1 PASS, and a trusted checkpoint all exist. Run `pnpm verification:check` to validate registry structure; the research-readiness command `pnpm verification:ready` should currently fail closed.
+This does not block v0.1.0-alpha.3 as a narrowly scoped open-source tool. Gate 1 is used only to decide whether and how to invest in the next productization phase. W1 in the accepted Autopilot baseline must not start until real interviews, rules replay, a Gate 1 PASS, and a trusted checkpoint all exist. Run `pnpm verification:check` to validate registry structure; the research-readiness command `pnpm verification:ready` should currently fail closed.
 
 Possible next-phase work includes onboarding, a candidate fact store, a persistent database, file and link import, deduplication, AI assistance, workflows, and compliant connectors. First-release feedback and Gate 1 evidence—not this release—will determine that scope.
 
 ## Docs and participation
 
-- [v0.1.0-alpha.2 release notes](releases/v0.1.0-alpha.2.md)
+- [v0.1.0-alpha.3 release notes](releases/v0.1.0-alpha.3.md)
+- [v0.1.0-alpha.2 historical release notes](releases/v0.1.0-alpha.2.md)
 - [v0.1.0-alpha.1 first-public-release record](releases/v0.1.0-alpha.1.md)
 - [Synthetic rule and job examples](examples/fake-job-board/README.md)
 - [Current open-source release strategy](OPEN_SOURCE_ALPHA.md)

@@ -53,12 +53,29 @@ afterEach(async () => {
 });
 
 describe("RoleFox open-source Alpha interface", () => {
+  it("renders the compact workbench instead of a marketing-style hero", async () => {
+    await renderApp();
+
+    expect(container.querySelector(".workbench-grid")).not.toBeNull();
+    expect(container.querySelector(".results-section")).not.toBeNull();
+    expect(container.querySelector(".hero-primary-button")).toBeNull();
+    expect(
+      container.querySelectorAll("nav[aria-label='页面内导航'] a"),
+    ).toHaveLength(3);
+
+    const disclosure = container.querySelector<HTMLDetailsElement>(
+      "details.disclosure",
+    );
+    expect(disclosure).not.toBeNull();
+    expect(disclosure?.open).toBe(false);
+  });
+
   it("publishes the release identity, project resources, and local-only boundary", async () => {
     await renderApp();
 
     expect(container.textContent).not.toContain("不是 v0.1");
-    expect(container.textContent).toContain("v0.1.0-alpha.2 · Apache-2.0");
-    expect(container.textContent).toContain("你的数据，只在这台浏览器里");
+    expect(container.textContent).toContain("v0.1.0-alpha.3 · Apache-2.0");
+    expect(container.textContent).toContain("隐私与安全边界");
     expect(container.textContent).toContain("不会扫描、投递、回复");
 
     const expectedLinks = new Map([

@@ -4,6 +4,25 @@ All notable public changes to RoleFox are recorded here. Release status refers o
 
 ## Unreleased
 
+## [0.1.0-alpha.3](releases/v0.1.0-alpha.3.md) - 2026-09-14
+
+Complete Quiet Workbench UI and information-architecture rebuild of v0.1.0-alpha.2. This release keeps the same browser-local job-triage capabilities, stored-data schema, and safety boundary.
+
+### Changed
+
+- Replaced the marketing-style full-height sidebar and oversized hero composition with a restrained warm-gray-and-white workspace, fox-orange accents, and a flat top bar.
+- Reorganized the desktop experience into a configuration rail beside a continuous results list, with flatter panels, clearer hierarchy, and denser job rows.
+- Reduced first-screen chrome and vertical stacking on smaller screens so the core rules, job-entry, and results workflow appears sooner on mobile.
+- Consolidated local-only status and privacy detail without weakening the existing disclosure, recovery, export, destructive-action, keyboard, or screen-reader behavior.
+
+### Compatibility and scope
+
+- Did not change scoring, rules, synthetic examples, job input, calibration, export, restore, clearing, or any other product capability.
+- Kept the existing browser-local data schema and storage behavior; Alpha.1 and Alpha.2 local data require no migration and remain readable.
+- Did not add accounts, server storage, cloud sync, collection, AI, connectors, generated materials, applications, messages, mailbox access, calendar access, or other external actions.
+- Kept Pre-W1 Gate 1 `BLOCKED`; this redesign is not research evidence and changes no verification state.
+- Preserved v0.1.0-alpha.2 as an immutable historical release. Alpha.3 does not rewrite its tag, release notes, or changelog record.
+
 ## [0.1.0-alpha.2](releases/v0.1.0-alpha.2.md) - 2026-09-14
 
 UI follow-up to the first public Alpha. This release keeps the same browser-local job-triage capabilities and safety boundary as v0.1.0-alpha.1.
