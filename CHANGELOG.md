@@ -4,6 +4,26 @@ All notable public changes to RoleFox are recorded here. Release status refers o
 
 ## Unreleased
 
+## [0.1.0-alpha.5](releases/v0.1.0-alpha.5.md) - 2026-09-14
+
+Quiet Utility / Quiet Intelligence visual and responsive-interface rebuild of v0.1.0-alpha.4. This release keeps the same browser-local job-triage capabilities, stored-data schema, storage key, and safety boundary.
+
+### Changed
+
+- Replaced Signal Desk's orange-and-lime accents and black console surfaces with a unified light-neutral system and one restrained indigo accent.
+- Replaced serif display type, clipped corners, hard rules, and heavy frames with an all-sans-serif type stack, rounded surfaces, light borders, and quieter spacing and hierarchy.
+- Made result cards more compact and integrated rank into the score block for faster scanning without changing score values or ordering.
+- Removed the fixed mobile bottom dock while preserving results-first DOM, keyboard, and visual ordering when jobs exist.
+- Kept key button targets touch-safe and long titles, companies, locations, reasons, and concerns resilient at narrow widths.
+
+### Compatibility and scope
+
+- Did not change scoring, rules, synthetic examples, job input, calibration, export, restore, clearing, or any other product capability.
+- Kept the existing storage key, browser-local data schema, and validation behavior; Alpha.1 through Alpha.4 local data require no migration.
+- Did not add accounts, server storage, cloud sync, collection, AI, connectors, generated materials, applications, messages, mailbox access, calendar access, or other external actions.
+- Kept Pre-W1 Gate 1 `BLOCKED_NOT_STARTED`; this redesign is not research evidence and does not block the narrowly scoped open-source Alpha release.
+- Preserved v0.1.0-alpha.4 as an immutable historical release. Alpha.5 does not rewrite its tag, release notes, changelog record, or verification lineage.
+
 ## [0.1.0-alpha.4](releases/v0.1.0-alpha.4.md) - 2026-09-14
 
 Signal Desk visual and responsive-interface rebuild of v0.1.0-alpha.3. This release keeps the same browser-local job-triage capabilities, stored-data schema, and safety boundary.

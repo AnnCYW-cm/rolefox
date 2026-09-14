@@ -4,11 +4,11 @@
 
 > An open-source, browser-local tool for deciding which jobs are worth a closer look.
 
-RoleFox **v0.1.0-alpha.4** is an open-source, browser-local job-triage tool. Define a target role, location, and keywords; add jobs manually or in batches; review deterministic scores, hard exclusions, and inspectable reasons; then record your own interested / not-interested decisions. Data stays in the current browser by default.
+RoleFox **v0.1.0-alpha.5** is an open-source, browser-local job-triage tool. Define a target role, location, and keywords; add jobs manually or in batches; review deterministic scores, hard exclusions, and inspectable reasons; then record your own interested / not-interested decisions. Data stays in the current browser by default.
 
-[Try it online](https://anncyw-cm.github.io/rolefox/) · [Synthetic examples](examples/fake-job-board/README.md) · [Release notes](releases/v0.1.0-alpha.4.md) · [Share feedback](https://github.com/AnnCYW-cm/rolefox/issues/new?template=alpha-feedback.yml)
+[Try it online](https://anncyw-cm.github.io/rolefox/) · [Synthetic examples](examples/fake-job-board/README.md) · [Release notes](releases/v0.1.0-alpha.5.md) · [Share feedback](https://github.com/AnnCYW-cm/rolefox/issues/new?template=alpha-feedback.yml)
 
-Alpha.4 rebuilds the Alpha.3 Quiet Workbench as a more distinctive Signal Desk. Cool graphite, mist white, and electric fox orange form an editorial workspace; a geometric negative-space fox mark, hard rules, and clipped corners replace generic rounded cards. Desktop pairs a configuration rail with a continuous opportunity ledger, while mobile adds bottom task navigation and shows results first when jobs exist. It changes no capability, scoring behavior, browser-local data schema, or safety boundary. Alpha.3 remains an immutable historical release.
+Alpha.5 completely rebuilds the Alpha.4 Signal Desk as **Quiet Utility / Quiet Intelligence**. A light neutral system, one indigo accent, an all-sans-serif type stack, rounded surfaces, and light borders replace the orange-and-lime palette, black console, clipped corners, serif display type, and fixed mobile dock. Results are more compact and rank is integrated into the score block. When jobs exist, mobile still presents results first in matching DOM, keyboard, and visual order. Capabilities, scoring, the data schema, storage key, and safety boundary are unchanged; Alpha.1–Alpha.4 data require no migration, and Alpha.4 remains an immutable historical release.
 
 ## 3–5 minute quickstart
 
@@ -19,13 +19,13 @@ Alpha.4 rebuilds the Alpha.3 Quiet Workbench as a more distinctive Signal Desk. 
 
 Start with synthetic or fully redacted data. GitHub issues are public: do not post resumes, real job descriptions, company names, contact details, private links, or other personal information.
 
-The v0.1.0-alpha.4 interface and repository example tutorial are currently in Chinese. This English README translates the main controls; an English interface is not part of this Alpha.
+The v0.1.0-alpha.5 interface and repository example tutorial are currently in Chinese. This English README translates the main controls; an English interface is not part of this Alpha.
 
 You can also use the [copy-and-paste synthetic rules and jobs](examples/fake-job-board/README.md) to test batch input.
 
 ## What this Alpha does
 
-| Capability | v0.1.0-alpha.4 status |
+| Capability | v0.1.0-alpha.5 status |
 | --- | --- |
 | Target rules | Target role, location, preferred keywords, and hard exclusions |
 | Job input | Manual entry or batch paste using `title \| company \| location \| description` |
@@ -71,15 +71,16 @@ pnpm check
 
 ## Verification Gate and the next phase
 
-The Pre-W1 Spec Manifest, Scope Catalog, Evidence, Gate Registry, checkpoints, and trusted-signature verification remain intact. Gate 1 intentionally remains **`BLOCKED`** because no real-user research evidence has been collected. Synthetic examples or the fact that the Alpha is online must not be used to manufacture a PASS.
+The Pre-W1 Spec Manifest, Scope Catalog, Evidence, Gate Registry, checkpoints, and trusted-signature verification remain intact. Gate 1 intentionally remains **`BLOCKED_NOT_STARTED`** because no real-user research evidence has been collected. Synthetic examples or the fact that the Alpha is online must not be used to manufacture a PASS.
 
-This does not block v0.1.0-alpha.4 as a narrowly scoped open-source tool. Gate 1 is used only to decide whether and how to invest in the next productization phase. W1 in the accepted Autopilot baseline must not start until real interviews, rules replay, a Gate 1 PASS, and a trusted checkpoint all exist. Run `pnpm verification:check` to validate registry structure; the research-readiness command `pnpm verification:ready` should currently fail closed.
+This does not block v0.1.0-alpha.5 as a narrowly scoped open-source tool. Gate 1 is currently **`BLOCKED_NOT_STARTED`** and is used only to decide whether and how to invest in the next productization phase. W1 in the accepted Autopilot baseline must not start until real interviews, rules replay, a Gate 1 PASS, and a trusted checkpoint all exist. Run `pnpm verification:check` to validate registry structure; the research-readiness command `pnpm verification:ready` should currently fail closed.
 
 Possible next-phase work includes onboarding, a candidate fact store, a persistent database, file and link import, deduplication, AI assistance, workflows, and compliant connectors. First-release feedback and Gate 1 evidence—not this release—will determine that scope.
 
 ## Docs and participation
 
-- [v0.1.0-alpha.4 release notes](releases/v0.1.0-alpha.4.md)
+- [v0.1.0-alpha.5 release notes](releases/v0.1.0-alpha.5.md)
+- [v0.1.0-alpha.4 historical release notes](releases/v0.1.0-alpha.4.md)
 - [v0.1.0-alpha.3 historical release notes](releases/v0.1.0-alpha.3.md)
 - [v0.1.0-alpha.2 historical release notes](releases/v0.1.0-alpha.2.md)
 - [v0.1.0-alpha.1 first-public-release record](releases/v0.1.0-alpha.1.md)
