@@ -1,7 +1,7 @@
 {
   "schema_version": "rolefox.current-candidate-scope.v1",
-  "candidate_scope_manifest_id": "candidate_6f71ae69d361160581beb0f83da1fb908dbc95493f72ce9a0c5e173b15647d1d",
-  "manifest_digest": "6f71ae69d361160581beb0f83da1fb908dbc95493f72ce9a0c5e173b15647d1d",
-  "path": "verification/candidate-scopes/candidate_6f71ae69d361160581beb0f83da1fb908dbc95493f72ce9a0c5e173b15647d1d.json",
-  "readiness": "PENDING_PRODUCT_OWNER_APPROVAL"
+  "candidate_scope_manifest_id": "candidate_27d81f1970283f4f571af68a798f42108794360ed39b195b2098f34c1881e5c5",
+  "manifest_digest": "27d81f1970283f4f571af68a798f42108794360ed39b195b2098f34c1881e5c5",
+  "path": "verification/candidate-scopes/candidate_27d81f1970283f4f571af68a798f42108794360ed39b195b2098f34c1881e5c5.json",
+  "readiness": "APPROVED_FOR_PROTOCOL_BOUND_COLLECTION"
 }
