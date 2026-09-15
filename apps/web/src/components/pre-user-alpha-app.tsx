@@ -86,9 +86,16 @@ function FoxMark() {
       viewBox="0 0 64 64"
     >
       <path
-        className="fox-glyph"
-        fillRule="evenodd"
-        d="M10 11 27 20 32 17 37 20 54 11 49 35 41 49 32 56 23 49 15 35ZM23 24h20v6H30v5h9v6h-9v6h-7Z"
+        className="fox-glyph fox-glyph-silhouette"
+        d="M8 8 24 18 32 13 40 18 56 8 51 38 42 52 32 59 22 52 13 38 8 8Z"
+      />
+      <path
+        className="fox-glyph fox-glyph-signal"
+        d="m17 20 9 7 6-4 6 4 9-7-4 16-7 8-4 4-4-4-7-8-4-16Z"
+      />
+      <path
+        className="fox-glyph fox-glyph-cut"
+        d="m25 35 7 5 7-5-3 8-4 3-4-3-3-8Z"
       />
     </svg>
   );
@@ -968,7 +975,7 @@ function HydratedPreUserAlphaApp() {
           </span>
           <span>
             <strong>RoleFox</strong>
-            <small>开源 · 本地判断</small>
+            <small>Open-source decision ledger</small>
           </span>
         </div>
 
@@ -1016,19 +1023,19 @@ function HydratedPreUserAlphaApp() {
           id="overview"
         >
           <div className="hero-copy">
-            <p className="eyebrow">本地优先 · 开源工具</p>
+            <p className="eyebrow">Local-first · Open source</p>
             <h1 id="hero-title">
-              <span>把岗位排成</span>
-              <span className="hero-accent">清晰的优先级。</span>
+              <span>把机会，</span>
+              <span className="hero-accent">排出先后。</span>
             </h1>
             <p className="lede">
-              设定规则、录入岗位、得到有依据的排序。所有数据只保存在当前浏览器。
+              设定自己的规则，把散乱岗位变成一份有依据、可复查的选择清单。
             </p>
           </div>
 
           <section className="release-meta" aria-labelledby="local-view-title">
             <div className="hero-status-head">
-              <span className="alpha-badge">v0.1.0-alpha.5</span>
+              <span className="alpha-badge">v0.1.0-alpha.6</span>
               <span className="hero-mode">仅在本机</span>
             </div>
             <div className="hero-score-row">
@@ -1433,7 +1440,7 @@ function HydratedPreUserAlphaApp() {
               </span>
               <span>
                 <strong>RoleFox</strong>
-                <small>v0.1.0-alpha.5 · Apache-2.0</small>
+                <small>v0.1.0-alpha.6 · Apache-2.0</small>
               </span>
             </div>
             <nav aria-label="开源项目资源" className="project-links">
