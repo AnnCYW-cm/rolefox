@@ -4,6 +4,27 @@ All notable public changes to RoleFox are recorded here. Release status refers o
 
 ## Unreleased
 
+## [0.1.0-alpha.6](releases/v0.1.0-alpha.6.md) - 2026-09-15
+
+Fox Ledger visual and responsive-interface rebuild of v0.1.0-alpha.5. This release keeps the same browser-local job-triage capabilities, stored-data schema, storage key, and safety boundary.
+
+### Changed
+
+- Replaced the generic light SaaS palette with warm paper, near-black ink, and one restrained fox-orange editorial accent.
+- Replaced the gradient app tile with a bold geometric fox mark and introduced a display-serif / utilitarian-sans type hierarchy without remote font requests.
+- Removed glass navigation, pill clusters, soft shadows, hover lift, and nested rounded-card surfaces from the core interface.
+- Rebuilt the result area as a continuous opportunity ledger with rule dividers, typographic score columns, and inline expanded reasoning.
+- Unified the rule and job-entry surfaces into one editing rail while preserving results-first DOM, keyboard, and visual ordering when jobs exist.
+- Kept task navigation visible at intermediate and mobile widths, and verified the interface in real browsers at 1440, 820, 390, and 320px.
+
+### Compatibility and scope
+
+- Did not change scoring, rules, synthetic examples, job input, calibration, export, restore, clearing, or any other product capability.
+- Kept the existing storage key, browser-local data schema, and validation behavior; Alpha.1 through Alpha.5 local data require no migration.
+- Did not add accounts, server storage, cloud sync, collection, AI, connectors, generated materials, applications, messages, mailbox access, calendar access, or other external actions.
+- Kept Pre-W1 Gate 1 `BLOCKED_NOT_STARTED`; this redesign is not research evidence and does not block the narrowly scoped open-source Alpha release.
+- Preserved v0.1.0-alpha.5 as an immutable historical release. Alpha.6 does not rewrite its tag, release notes, changelog record, or verification lineage.
+
 ## [0.1.0-alpha.5](releases/v0.1.0-alpha.5.md) - 2026-09-14
 
 Quiet Utility / Quiet Intelligence visual and responsive-interface rebuild of v0.1.0-alpha.4. This release keeps the same browser-local job-triage capabilities, stored-data schema, storage key, and safety boundary.
