@@ -67,6 +67,17 @@ async function click(element: HTMLElement): Promise<void> {
   });
 }
 
+async function flushAnimationFrames(): Promise<void> {
+  await act(
+    () =>
+      new Promise<void>((resolve) => {
+        window.requestAnimationFrame(() => {
+          window.requestAnimationFrame(() => resolve());
+        });
+      }),
+  );
+}
+
 async function setControlValue(
   control: HTMLInputElement | HTMLTextAreaElement,
   value: string,
@@ -164,9 +175,11 @@ describe("RoleFox open-source Alpha interface", () => {
   it("loads synthetic jobs, records calibration locally, and restores it on remount", async () => {
     await renderApp();
     await click(buttonWithText("加载合成示例"));
+    await flushAnimationFrames();
 
     const cards = container.querySelectorAll(".job-card");
     expect(cards.length).toBeGreaterThan(0);
+    expect(document.activeElement?.id).toBe("results-title");
 
     const firstDecision = container.querySelector<HTMLButtonElement>(
       ".decision-group .decision-button",
@@ -323,6 +336,8 @@ describe("RoleFox open-source Alpha interface", () => {
     );
     expect(dialog).not.toBeNull();
     expect(document.activeElement?.textContent?.trim()).toBe("取消");
+    expect(document.documentElement.style.overflow).toBe("hidden");
+    expect(document.body.style.position).toBe("fixed");
 
     await act(async () => {
       dialog!.dispatchEvent(
@@ -332,5 +347,7 @@ describe("RoleFox open-source Alpha interface", () => {
 
     expect(container.querySelector("[role='alertdialog']")).toBeNull();
     expect(document.activeElement).toBe(deleteButton);
+    expect(document.documentElement.style.overflow).toBe("");
+    expect(document.body.style.position).toBe("");
   });
 });

@@ -85,17 +85,25 @@ function FoxMark() {
       focusable="false"
       viewBox="0 0 64 64"
     >
+      <rect
+        className="fox-glyph fox-glyph-surface"
+        height="60"
+        rx="18"
+        width="60"
+        x="2"
+        y="2"
+      />
       <path
         className="fox-glyph fox-glyph-silhouette"
-        d="M8 8 24 18 32 13 40 18 56 8 51 38 42 52 32 59 22 52 13 38 8 8Z"
+        d="m13 15 12 6 7-4 7 4 12-6-3 23-8 11-8 5-8-5-8-11-3-23Z"
       />
       <path
         className="fox-glyph fox-glyph-signal"
-        d="m17 20 9 7 6-4 6 4 9-7-4 16-7 8-4 4-4-4-7-8-4-16Z"
+        d="m20 24 7 5 5-3 5 3 7-5-3 12-6 7-3 3-3-3-6-7-3-12Z"
       />
       <path
         className="fox-glyph fox-glyph-cut"
-        d="m25 35 7 5 7-5-3 8-4 3-4-3-3-8Z"
+        d="m26 36 6 4 6-4-2 7-4 3-4-3-2-7Z"
       />
     </svg>
   );
@@ -426,33 +434,35 @@ function ResultsSection({
                 }`}
                 key={job.id}
               >
-                <div className="score-block">
-                  <span aria-hidden="true" className="score-rank">
-                    {String(index + 1).padStart(2, "0")}
-                  </span>
-                  <span className="sr-only">排序第 {index + 1}</span>
-                  <strong>{score.score}</strong>
-                  <span>规则分</span>
-                </div>
                 <div className="job-content">
                   <div className="job-title-line">
+                    <span aria-hidden="true" className="score-rank">
+                      #{String(index + 1).padStart(2, "0")}
+                    </span>
+                    <span className="sr-only">排序第 {index + 1}</span>
                     <div>
                       <h3>{job.title}</h3>
                       <p>
                         {job.company} · {job.location || "地点未填写"}
                       </p>
                     </div>
-                    <span
-                      className={`score-label ${
-                        score.eligible
-                          ? score.label === "推荐关注"
-                            ? "recommended"
-                            : "review"
-                          : "blocked"
-                      }`}
-                    >
-                      {score.label}
-                    </span>
+                    <div className="job-signal">
+                      <span
+                        className={`score-label ${
+                          score.eligible
+                            ? score.label === "推荐关注"
+                              ? "recommended"
+                              : "review"
+                            : "blocked"
+                        }`}
+                      >
+                        {score.label}
+                      </span>
+                      <span className="score-block">
+                        <strong>{score.score}</strong>
+                        <span>分</span>
+                      </span>
+                    </div>
                   </div>
                   {job.description ? (
                     <p className="job-description">{job.description}</p>
@@ -594,6 +604,66 @@ function HydratedPreUserAlphaApp() {
   const modalOpen =
     showClearConfirmation || Boolean(pendingDeleteJobId) || Boolean(pendingRestore);
 
+  useEffect(() => {
+    if (!modalOpen) {
+      return;
+    }
+
+    const root = document.documentElement;
+    const body = document.body;
+    const scrollY = window.scrollY;
+    const scrollbarWidth = window.innerWidth - root.clientWidth;
+    const previous = {
+      rootOverflow: root.style.overflow,
+      bodyOverflow: body.style.overflow,
+      bodyPosition: body.style.position,
+      bodyTop: body.style.top,
+      bodyWidth: body.style.width,
+      bodyPaddingRight: body.style.paddingRight,
+    };
+
+    root.style.overflow = "hidden";
+    body.style.overflow = "hidden";
+    body.style.position = "fixed";
+    body.style.top = `-${scrollY}px`;
+    body.style.width = "100%";
+    if (scrollbarWidth > 0) {
+      body.style.paddingRight = `${scrollbarWidth}px`;
+    }
+
+    return () => {
+      root.style.overflow = previous.rootOverflow;
+      body.style.overflow = previous.bodyOverflow;
+      body.style.position = previous.bodyPosition;
+      body.style.top = previous.bodyTop;
+      body.style.width = previous.bodyWidth;
+      body.style.paddingRight = previous.bodyPaddingRight;
+      if (scrollY > 0) {
+        window.scrollTo(0, scrollY);
+      }
+    };
+  }, [modalOpen]);
+
+  function focusResultsAfterFirstAdd(wasEmpty: boolean): void {
+    if (!wasEmpty) {
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        const title = document.getElementById("results-title");
+        title?.focus({ preventScroll: true });
+        const reduceMotion =
+          typeof window.matchMedia === "function" &&
+          window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        title?.scrollIntoView?.({
+          behavior: reduceMotion ? "auto" : "smooth",
+          block: "start",
+        });
+      });
+    });
+  }
+
   function rememberDialogTrigger(element?: HTMLElement | null): void {
     setDialogReturnFocusTo(
       element ??
@@ -677,6 +747,7 @@ function HydratedPreUserAlphaApp() {
       return false;
     }
 
+    const wasEmpty = state.jobs.length === 0;
     const createdAt = new Date().toISOString();
     const newJobs: AlphaJob[] = drafts.map((draft, index) => ({
       id:
@@ -705,6 +776,7 @@ function HydratedPreUserAlphaApp() {
     }
     setJobError("");
     setNotice(`已在当前浏览器中加入 ${drafts.length} 个岗位。`);
+    focusResultsAfterFirstAdd(wasEmpty);
     return true;
   }
 
@@ -735,6 +807,7 @@ function HydratedPreUserAlphaApp() {
   }
 
   function loadSamples(): void {
+    const wasEmpty = state.jobs.length === 0;
     const hasSamples = state.jobs.some((job) =>
       job.id.startsWith("sample_job_"),
     );
@@ -778,6 +851,7 @@ function HydratedPreUserAlphaApp() {
           ? "已在当前浏览器中加载合成规则和示例岗位。"
           : "已在当前浏览器中加载合成示例岗位，并保留你的规则。",
     );
+    focusResultsAfterFirstAdd(wasEmpty && !hasSamples);
   }
 
   function setDecision(jobId: string, decision: CalibrationDecision): void {
@@ -975,7 +1049,7 @@ function HydratedPreUserAlphaApp() {
           </span>
           <span>
             <strong>RoleFox</strong>
-            <small>Open-source decision ledger</small>
+            <small>本地岗位决策</small>
           </span>
         </div>
 
@@ -1006,8 +1080,12 @@ function HydratedPreUserAlphaApp() {
             </strong>
             <span>无账号 · 无云同步</span>
           </div>
-          <span className="mobile-storage-label" aria-hidden="true">
-            本机
+          <span className="mobile-storage-label">
+            {storageMode === "ready"
+              ? "本机就绪"
+              : storageMode === "loading"
+                ? "读取中"
+                : "已锁定"}
           </span>
         </div>
       </header>
@@ -1016,6 +1094,7 @@ function HydratedPreUserAlphaApp() {
         className={`alpha-main ${scoredJobs.length > 0 ? "has-results" : "is-empty"}`}
         id="main-content"
         inert={modalOpen ? true : undefined}
+        tabIndex={-1}
       >
         <header
           aria-labelledby="hero-title"
@@ -1023,19 +1102,18 @@ function HydratedPreUserAlphaApp() {
           id="overview"
         >
           <div className="hero-copy">
-            <p className="eyebrow">Local-first · Open source</p>
+            <p className="eyebrow">本地岗位决策台</p>
             <h1 id="hero-title">
-              <span>把机会，</span>
-              <span className="hero-accent">排出先后。</span>
+              <span>把求职选择，</span>
+              <span className="hero-accent">变得清楚。</span>
             </h1>
             <p className="lede">
-              设定自己的规则，把散乱岗位变成一份有依据、可复查的选择清单。
+              用自己的规则筛选岗位，把真正值得看的机会放在前面。
             </p>
           </div>
 
           <section className="release-meta" aria-labelledby="local-view-title">
             <div className="hero-status-head">
-              <span className="alpha-badge">v0.1.0-alpha.6</span>
               <span className="hero-mode">仅在本机</span>
             </div>
             <div className="hero-score-row">
@@ -1074,9 +1152,9 @@ function HydratedPreUserAlphaApp() {
         <details className="disclosure">
           <summary>
             <span className="disclosure-icon" aria-hidden="true" />
-            <strong>本地模式 · 数据不离开浏览器</strong>
+            <strong>仅保存在此设备</strong>
             <span className="disclosure-hint">
-              查看完整边界 <i aria-hidden="true">⌄</i>
+              了解隐私边界 <i aria-hidden="true">⌄</i>
             </span>
           </summary>
           <p>
@@ -1132,7 +1210,7 @@ function HydratedPreUserAlphaApp() {
             <div className="section-heading compact">
               <div>
                 <p className="eyebrow">筛选规则</p>
-                <h2 id="rules-title">设置筛选偏好</h2>
+                <h2 id="rules-title">你想找什么</h2>
               </div>
               <span className={`completion-chip ${rulesConfigured ? "complete" : ""}`}>
                 {rulesConfigured ? "已配置" : "待配置"}
@@ -1239,7 +1317,7 @@ function HydratedPreUserAlphaApp() {
             <div className="section-heading compact">
               <div>
                 <p className="eyebrow">添加岗位</p>
-                <h2 id="job-entry-title">添加岗位</h2>
+                <h2 id="job-entry-title">把岗位放进来</h2>
               </div>
               <span className="privacy-chip">仅手动输入</span>
             </div>
@@ -1369,7 +1447,7 @@ function HydratedPreUserAlphaApp() {
         <section className="data-panel" id="data-controls" aria-labelledby="data-title">
           <div>
             <p className="eyebrow">本地数据</p>
-            <h2 id="data-title">导出、备份或彻底清除</h2>
+            <h2 id="data-title">管理本机数据</h2>
             <p>
               完整备份包含你输入的规则和岗位；无原文汇总只含数量、分数区间和选择统计。
             </p>
@@ -1415,7 +1493,7 @@ function HydratedPreUserAlphaApp() {
         <section className="feedback-panel" aria-labelledby="feedback-title">
           <div>
             <p className="eyebrow">开源反馈</p>
-            <h2 id="feedback-title">告诉我们哪里可以更好</h2>
+            <h2 id="feedback-title">一起把它做得更好</h2>
             <p>
               GitHub Issue 是公开的。请勿提交简历、岗位正文、联系人、邮箱、聊天记录或任何其他个人数据；只描述问题类型和你期望的行为。
             </p>

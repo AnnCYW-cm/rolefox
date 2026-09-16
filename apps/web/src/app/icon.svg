@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
   <title>RoleFox</title>
-  <rect width="64" height="64" fill="#fbf8f1"/>
-  <path d="M8 8 24 18 32 13 40 18 56 8 51 38 42 52 32 59 22 52 13 38 8 8Z" fill="#171714"/>
-  <path d="m17 20 9 7 6-4 6 4 9-7-4 16-7 8-4 4-4-4-7-8-4-16Z" fill="#e4572e"/>
-  <path d="m25 35 7 5 7-5-3 8-4 3-4-3-3-8Z" fill="#fbf8f1"/>
+  <rect width="64" height="64" rx="18" fill="#15171a"/>
+  <path d="m13 15 12 6 7-4 7 4 12-6-3 23-8 11-8 5-8-5-8-11-3-23Z" fill="#fff"/>
+  <path d="m20 24 7 5 5-3 5 3 7-5-3 12-6 7-3 3-3-3-6-7-3-12Z" fill="#d84320"/>
+  <path d="m26 36 6 4 6-4-2 7-4 3-4-3-2-7Z" fill="#15171a"/>
 </svg>
