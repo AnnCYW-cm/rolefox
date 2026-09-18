@@ -4,6 +4,27 @@ All notable public changes to RoleFox are recorded here. Release status refers o
 
 ## Unreleased
 
+## [0.1.0-alpha.7](releases/v0.1.0-alpha.7.md) - 2026-09-17
+
+Clear Signal visual and responsive-interface rebuild of v0.1.0-alpha.6. This release keeps the same browser-local job-triage capabilities, stored-data schema, storage key, and safety boundary.
+
+### Changed
+
+- Replaced Fox Ledger's warm-paper editorial treatment with a cool-white, graphite, and scarce fox-orange visual system focused on clarity and scanning.
+- Consolidated product identity, task navigation, and browser-local status into a single 64px app bar.
+- Organized the primary workflow around a continuous result ledger and a dedicated input dock, reducing first-screen chrome around the work itself.
+- Removed stacked-card composition and floating shadows from the core workspace, using spacing, typography, and restrained rules to express structure.
+- Removed ultra-small interface text and strengthened the readable type hierarchy without changing the underlying content or decisions.
+- Kept deployed-browser viewport review as an explicit post-publication verification item rather than claiming it before the live Alpha.7 build exists.
+
+### Compatibility and scope
+
+- Did not change scoring, rules, synthetic examples, job input, calibration, export, restore, clearing, or any other product capability.
+- Kept the existing storage key, browser-local data schema, and validation behavior; Alpha.1 through Alpha.6 local data require no migration.
+- Did not add accounts, server storage, cloud sync, collection, AI, connectors, generated materials, applications, messages, mailbox access, calendar access, or other external actions.
+- Kept Pre-W1 Gate 1 `BLOCKED_NOT_STARTED`; this redesign is not research evidence and does not block the narrowly scoped open-source Alpha release.
+- Preserved v0.1.0-alpha.6 as an immutable historical release. Alpha.7 does not rewrite its tag, release notes, changelog record, or verification lineage.
+
 ## [0.1.0-alpha.6](releases/v0.1.0-alpha.6.md) - 2026-09-15
 
 Fox Ledger visual and responsive-interface rebuild of v0.1.0-alpha.5. This release keeps the same browser-local job-triage capabilities, stored-data schema, storage key, and safety boundary.

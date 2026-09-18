@@ -40,6 +40,12 @@ Alpha.2 的标签、版本说明和发布时的范围陈述作为历史记录保
 
 这次重做仍只改变品牌表达、视觉、信息编排和交互呈现。业务能力、评分与排序、规则、合成样例、岗位输入、校准、导出、恢复、删除、清除、失败关闭行为、存储键、浏览器本地数据 schema、校验规则和安全边界均未改变，Alpha.1–Alpha.5 数据无需迁移。Alpha.5 的标签、版本说明、Changelog 记录与 verification lineage 保持不可变。Alpha.6 不构成用户研究证据，Pre-W1 Gate 1 继续保持 `BLOCKED_NOT_STARTED`。
 
+### Alpha.7 是 Clear Signal / 明亮信号工作台重做
+
+**v0.1.0-alpha.7** 将 Alpha.6 的 Fox Ledger 完整重构为 Clear Signal / 明亮信号工作台：以冷白、石墨和稀缺狐橙建立更现代、清楚的产品界面，用单层 app bar 组织品牌、任务导航与本机状态，在桌面上形成结果账本与输入坞的主从关系，并将用户可读文字保持在至少 12px。移动端将任务导航放在主内容末尾，让 DOM、键盘与视觉顺序一致，也避免悬浮底栏遮挡内容。
+
+这次重做仍只改变品牌表达、视觉、信息编排和交互呈现。业务能力、评分与排序、规则、合成样例、岗位输入、校准、导出、恢复、删除、清除、失败关闭行为、存储键、浏览器本地数据 schema、校验规则和安全边界均未改变，Alpha.1–Alpha.6 数据无需迁移。Alpha.6 的标签、版本说明、Changelog 记录与 verification lineage 保持不可变。Alpha.7 不构成用户研究证据，Pre-W1 Gate 1 继续保持 `BLOCKED_NOT_STARTED`。
+
 ### 后续阶段再做产品形态
 
 下一阶段可能评估引导配置、候选人事实库、持久化数据库、文件与链接导入、去重、AI 辅助、工作流、合规连接器、安装包、自托管服务和跨设备使用。它们是方向，不是本 Alpha 的承诺；范围由首版反馈和真实用户研究决定。
@@ -97,6 +103,12 @@ This rebuild still changes brand expression, visual design, information arrangem
 **v0.1.0-alpha.6** completely rebuilds Alpha.5 as Fox Ledger. Warm paper, near-black ink, and one restrained fox-orange accent create an editorial decision ledger. A solid geometric fox and a display-serif / utilitarian-sans hierarchy replace the gradient app tile, glass navigation, pill clusters, soft shadows, hover lift, and nested rounded cards. Jobs become continuous rows divided by rules; rank and rule score share a narrow score column, expanded reasoning reads as an orange editorial note, and rules and job entry share one editing rail. Task navigation remains visible at intermediate widths. The implementation was reviewed in real browsers at 1440, 820, 390, and 320px.
 
 This rebuild still changes brand expression, visual design, information arrangement, and interaction presentation only. Product capabilities, scoring and ordering, rules, synthetic examples, job input, calibration, export, restore, deletion, clearing, fail-closed behavior, the storage key, browser-local data schema, validation rules, and safety boundary are unchanged. Alpha.1–Alpha.5 data require no migration. The Alpha.5 tag, release notes, changelog record, and verification lineage remain immutable. Alpha.6 is not user-research evidence; Pre-W1 Gate 1 remains `BLOCKED_NOT_STARTED`.
+
+### Alpha.7 is the Clear Signal rebuild
+
+**v0.1.0-alpha.7** completely rebuilds the Alpha.6 Fox Ledger as Clear Signal. Cool white, graphite, and scarce fox-orange accents create a clearer modern product workspace. A single-layer app bar organizes identity, task navigation, and local status; desktop establishes a primary results ledger beside a secondary input dock; and readable interface copy has a 12px minimum. Mobile places task navigation at the end of main content so its DOM, keyboard, and visual order align without a floating dock covering content.
+
+This rebuild still changes brand expression, visual design, information arrangement, and interaction presentation only. Product capabilities, scoring and ordering, rules, synthetic examples, job input, calibration, export, restore, deletion, clearing, fail-closed behavior, the storage key, browser-local data schema, validation rules, and safety boundary are unchanged. Alpha.1–Alpha.6 data require no migration. The Alpha.6 tag, release notes, changelog record, and verification lineage remain immutable. Alpha.7 is not user-research evidence; Pre-W1 Gate 1 remains `BLOCKED_NOT_STARTED`.
 
 ### Productize in a later phase
 

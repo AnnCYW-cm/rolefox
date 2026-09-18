@@ -120,9 +120,38 @@ describe("RoleFox open-source Alpha interface", () => {
     expect(container.querySelector(".workbench-grid")).not.toBeNull();
     expect(container.querySelector(".results-section")).not.toBeNull();
     expect(container.querySelector(".hero-primary-button")).toBeNull();
+
+    const desktopNav = container.querySelector<HTMLElement>(
+      "nav.page-nav--desktop[aria-label='页面内导航']",
+    );
+    const mobileNav = container.querySelector<HTMLElement>(
+      "nav.page-nav--mobile[aria-label='移动页面内导航']",
+    );
+    const main = container.querySelector<HTMLElement>("main#main-content");
+
+    expect(desktopNav?.querySelectorAll("a")).toHaveLength(3);
+    expect(mobileNav?.querySelectorAll("a")).toHaveLength(3);
     expect(
-      container.querySelectorAll("nav[aria-label='页面内导航'] a"),
-    ).toHaveLength(3);
+      Array.from(desktopNav?.querySelectorAll("a") ?? []).map((link) => ({
+        href: link.getAttribute("href"),
+        label: link.getAttribute("aria-label"),
+      })),
+    ).toEqual([
+      { href: "#results", label: "判断结果" },
+      { href: "#rules", label: "目标规则" },
+      { href: "#job-entry", label: "添加岗位" },
+    ]);
+    expect(
+      Array.from(mobileNav?.querySelectorAll("a") ?? []).map((link) => ({
+        href: link.getAttribute("href"),
+        label: link.getAttribute("aria-label"),
+      })),
+    ).toEqual([
+      { href: "#results", label: "判断结果" },
+      { href: "#rules", label: "目标规则" },
+      { href: "#job-entry", label: "添加岗位" },
+    ]);
+    expect(main?.lastElementChild).toBe(mobileNav);
 
     const disclosure = container.querySelector<HTMLDetailsElement>(
       "details.disclosure",
@@ -135,7 +164,7 @@ describe("RoleFox open-source Alpha interface", () => {
     await renderApp();
 
     expect(container.textContent).not.toContain("不是 v0.1");
-    expect(container.textContent).toContain("v0.1.0-alpha.6 · Apache-2.0");
+    expect(container.textContent).toContain("v0.1.0-alpha.7 · Apache-2.0");
     const boundaryDisclosure = container.querySelector("details.disclosure");
     expect(boundaryDisclosure?.textContent).toContain(
       "没有账号、服务器存储或云同步",
@@ -199,6 +228,21 @@ describe("RoleFox open-source Alpha interface", () => {
     expect(
       container.querySelectorAll(".decision-button[aria-pressed='true']"),
     ).toHaveLength(1);
+  });
+
+  it("focuses the results heading after the first manually added job", async () => {
+    await renderApp();
+
+    await setControlValue(controlWithLabel("目标职位 *"), "产品经理");
+    await setControlValue(controlWithLabel("目标地点 *"), "远程");
+    await click(buttonWithText("保存并重新评分"));
+    await setControlValue(controlWithLabel("职位 *"), "AI 产品经理");
+    await setControlValue(controlWithLabel("公司 *"), "Example Labs");
+    await click(buttonWithText("添加并评分"));
+    await flushAnimationFrames();
+
+    expect(container.querySelectorAll(".job-card")).toHaveLength(1);
+    expect(document.activeElement?.id).toBe("results-title");
   });
 
   it("saves normalized rules to the versioned local state", async () => {
@@ -326,6 +370,7 @@ describe("RoleFox open-source Alpha interface", () => {
   it("exposes an accessible delete confirmation and returns focus on Escape", async () => {
     await renderApp();
     await click(buttonWithText("加载合成示例"));
+    await flushAnimationFrames();
 
     const deleteButton = buttonWithText("删除本地记录");
     deleteButton.focus();

@@ -109,6 +109,31 @@ function FoxMark() {
   );
 }
 
+function PageNav({ className, label }: { className: string; label: string }) {
+  return (
+    <nav aria-label={label} className={`page-nav ${className}`}>
+      <a aria-label="判断结果" href="#results">
+        <span className="nav-label-full">判断结果</span>
+        <span aria-hidden="true" className="nav-label-short">
+          结果
+        </span>
+      </a>
+      <a aria-label="目标规则" href="#rules">
+        <span className="nav-label-full">目标规则</span>
+        <span aria-hidden="true" className="nav-label-short">
+          规则
+        </span>
+      </a>
+      <a aria-label="添加岗位" href="#job-entry">
+        <span className="nav-label-full">添加岗位</span>
+        <span aria-hidden="true" className="nav-label-short">
+          岗位
+        </span>
+      </a>
+    </nav>
+  );
+}
+
 function rulesToForm(rules: AlphaRules) {
   return {
     targetRole: rules.targetRole,
@@ -362,6 +387,7 @@ function ResultsSection({
   onDelete,
   onDecision,
   onLoadSamples,
+  rulesConfigured,
   scoredJobs,
 }: {
   canEdit: boolean;
@@ -369,6 +395,7 @@ function ResultsSection({
   onDelete: (jobId: string) => void;
   onDecision: (jobId: string, decision: CalibrationDecision) => void;
   onLoadSamples: () => void;
+  rulesConfigured: boolean;
   scoredJobs: ReturnType<typeof scoreAndSortJobs>;
 }) {
   return (
@@ -379,7 +406,6 @@ function ResultsSection({
     >
       <div className="section-heading">
         <div>
-          <p className="eyebrow">判断结果</p>
           <h2 id="results-title" tabIndex={-1}>
             机会排序
           </h2>
@@ -409,15 +435,27 @@ function ResultsSection({
             </svg>
           </span>
           <h3>还没有岗位</h3>
-          <p>先配置规则并手工添加岗位，或者加载完全合成的示例。</p>
-          <button
-            className="sample-button"
-            disabled={!canEdit}
-            onClick={onLoadSamples}
-            type="button"
-          >
-            加载合成示例
-          </button>
+          <p>
+            {rulesConfigured
+              ? "添加第一个岗位，开始按你的规则排序。"
+              : "先配置你想找什么，再添加岗位；也可以载入合成示例快速体验。"}
+          </p>
+          <div className="empty-actions">
+            <a
+              className="primary-button"
+              href={rulesConfigured ? "#job-entry" : "#rules"}
+            >
+              {rulesConfigured ? "添加第一个岗位" : "先配置规则"}
+            </a>
+            <button
+              className="secondary-button"
+              disabled={!canEdit}
+              onClick={onLoadSamples}
+              type="button"
+            >
+              加载合成示例
+            </button>
+          </div>
         </div>
       ) : (
         <div className="job-list">
@@ -447,6 +485,10 @@ function ResultsSection({
                       </p>
                     </div>
                     <div className="job-signal">
+                      <span className="score-block">
+                        <strong>{score.score}</strong>
+                        <span>分</span>
+                      </span>
                       <span
                         className={`score-label ${
                           score.eligible
@@ -457,10 +499,6 @@ function ResultsSection({
                         }`}
                       >
                         {score.label}
-                      </span>
-                      <span className="score-block">
-                        <strong>{score.score}</strong>
-                        <span>分</span>
                       </span>
                     </div>
                   </div>
@@ -1024,6 +1062,7 @@ function HydratedPreUserAlphaApp() {
       onDelete={requestDeleteConfirmation}
       onDecision={setDecision}
       onLoadSamples={loadSamples}
+      rulesConfigured={rulesConfigured}
       scoredJobs={scoredJobs}
     />
   );
@@ -1053,32 +1092,19 @@ function HydratedPreUserAlphaApp() {
           </span>
         </div>
 
-        <nav aria-label="页面内导航">
-          <a aria-label="目标规则" href="#rules">
-            <span className="nav-label-full">目标规则</span>
-            <span aria-hidden="true" className="nav-label-short">规则</span>
-          </a>
-          <a aria-label="添加岗位" href="#job-entry">
-            <span className="nav-label-full">添加岗位</span>
-            <span aria-hidden="true" className="nav-label-short">岗位</span>
-          </a>
-          <a aria-label="判断结果" href="#results">
-            <span className="nav-label-full">判断结果</span>
-            <span aria-hidden="true" className="nav-label-short">结果</span>
-          </a>
-        </nav>
+        <PageNav className="page-nav--desktop" label="页面内导航" />
 
         <div className="sidebar-status" aria-live="polite">
           <span className={`status-dot ${storageMode}`} aria-hidden="true" />
           <div>
             <strong>
               {storageMode === "ready"
-                ? "浏览器存储可用"
+                ? "仅保存在此设备"
                 : storageMode === "loading"
                   ? "正在读取本地数据"
                   : "本地数据已锁定"}
             </strong>
-            <span>无账号 · 无云同步</span>
+            <span>无账号 · 无云端</span>
           </div>
           <span className="mobile-storage-label">
             {storageMode === "ready"
@@ -1102,20 +1128,14 @@ function HydratedPreUserAlphaApp() {
           id="overview"
         >
           <div className="hero-copy">
-            <p className="eyebrow">本地岗位决策台</p>
-            <h1 id="hero-title">
-              <span>把求职选择，</span>
-              <span className="hero-accent">变得清楚。</span>
-            </h1>
+            <p className="eyebrow">个人机会工作台</p>
+            <h1 id="hero-title">把求职选择变得清楚</h1>
             <p className="lede">
               用自己的规则筛选岗位，把真正值得看的机会放在前面。
             </p>
           </div>
 
           <section className="release-meta" aria-labelledby="local-view-title">
-            <div className="hero-status-head">
-              <span className="hero-mode">仅在本机</span>
-            </div>
             <div className="hero-score-row">
               <div>
                 <strong>{eligibleCount}</strong>
@@ -1204,12 +1224,11 @@ function HydratedPreUserAlphaApp() {
         <div
           className={`workbench-grid ${scoredJobs.length > 0 ? "has-results" : "is-empty"}`}
         >
-        {scoredJobs.length > 0 ? resultsSection : null}
+        {resultsSection}
         <div className="two-column-grid">
           <section className="panel" id="rules" aria-labelledby="rules-title">
             <div className="section-heading compact">
               <div>
-                <p className="eyebrow">筛选规则</p>
                 <h2 id="rules-title">你想找什么</h2>
               </div>
               <span className={`completion-chip ${rulesConfigured ? "complete" : ""}`}>
@@ -1316,7 +1335,6 @@ function HydratedPreUserAlphaApp() {
           <section className="panel" id="job-entry" aria-labelledby="job-entry-title">
             <div className="section-heading compact">
               <div>
-                <p className="eyebrow">添加岗位</p>
                 <h2 id="job-entry-title">把岗位放进来</h2>
               </div>
               <span className="privacy-chip">仅手动输入</span>
@@ -1440,13 +1458,11 @@ function HydratedPreUserAlphaApp() {
           </section>
         </div>
 
-        {scoredJobs.length === 0 ? resultsSection : null}
         </div>
 
         <div className="colophon-grid">
         <section className="data-panel" id="data-controls" aria-labelledby="data-title">
           <div>
-            <p className="eyebrow">本地数据</p>
             <h2 id="data-title">管理本机数据</h2>
             <p>
               完整备份包含你输入的规则和岗位；无原文汇总只含数量、分数区间和选择统计。
@@ -1492,7 +1508,6 @@ function HydratedPreUserAlphaApp() {
 
         <section className="feedback-panel" aria-labelledby="feedback-title">
           <div>
-            <p className="eyebrow">开源反馈</p>
             <h2 id="feedback-title">一起把它做得更好</h2>
             <p>
               GitHub Issue 是公开的。请勿提交简历、岗位正文、联系人、邮箱、聊天记录或任何其他个人数据；只描述问题类型和你期望的行为。
@@ -1518,7 +1533,7 @@ function HydratedPreUserAlphaApp() {
               </span>
               <span>
                 <strong>RoleFox</strong>
-                <small>v0.1.0-alpha.6 · Apache-2.0</small>
+                <small>v0.1.0-alpha.7 · Apache-2.0</small>
               </span>
             </div>
             <nav aria-label="开源项目资源" className="project-links">
@@ -1541,6 +1556,8 @@ function HydratedPreUserAlphaApp() {
             <span>不会产生外部求职动作</span>
           </div>
         </footer>
+
+        <PageNav className="page-nav--mobile" label="移动页面内导航" />
       </main>
 
       {showClearConfirmation ? (
