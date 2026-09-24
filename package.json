@@ -1,6 +1,6 @@
 {
   "name": "rolefox",
-  "version": "0.1.0-alpha.7",
+  "version": "0.1.0-alpha.8",
   "private": true,
   "type": "module",
   "description": "An open-source, browser-local job triage and preference-calibration tool with explainable scoring.",
@@ -27,9 +27,13 @@
     "lint": "pnpm -r --if-present lint",
     "typecheck": "pnpm build:packages && pnpm --filter @rolefox/web typecheck",
     "test": "vitest run && pnpm verification:test",
+    "test:e2e": "pnpm --filter @rolefox/web build && pnpm test:e2e:run",
+    "test:e2e:run": "playwright test",
+    "test:e2e:pages": "playwright test --grep @pages-smoke",
     "check": "pnpm docs:check && pnpm verification:check && pnpm lint && pnpm typecheck && pnpm --filter @rolefox/web build && pnpm test"
   },
   "devDependencies": {
+    "@playwright/test": "1.63.0",
     "ajv": "8.17.1",
     "ajv-formats": "3.0.1",
     "jsdom": "22.1.0",

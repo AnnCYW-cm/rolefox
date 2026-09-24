@@ -3,12 +3,12 @@
   "manifest_version": "v0.1-bootstrap-1",
   "canonicalization": "rolefox-canonical-digest-v1",
   "algorithm": "sha256",
-  "normative_set_digest": "124bb79ca9bf6db3e586628ebf60ef6cacd88f8ad600cb0df2adbf067f18ed46",
+  "normative_set_digest": "4b0edd5e29aa5c447258ad20e33a380af876ffca4de0be24704ead8f813efdc9",
   "normative_file_count": 30,
   "verification_toolchain": {
     "algorithm": "sha256",
     "canonicalization": "rolefox-canonical-digest-v1",
-    "digest": "685a0660d572d8a1c5745381db86bdbd2aac0fd3cba27960b201f826e5392257",
+    "digest": "44bfcbe579d63ba82b4f8a027e40033438d3367850d4dc7aedecff8ba0223856",
     "files": [
       {
         "path": ".github/workflows/ci.yml",
@@ -23,7 +23,7 @@
       {
         "path": "package.json",
         "bytes": 2128,
-        "sha256": "329a33293c0938538994b5ce7f0d1940a8d70d024d17d150f5bd2026a67f3fd3"
+        "sha256": "9edfb75028edf8cd0ec2662b1b6d19d19ec4291a470e0fc92d6715513106fb31"
       },
       {
         "path": "pnpm-lock.yaml",
@@ -155,8 +155,8 @@
   "inventory": [
     {
       "path": "README.en.md",
-      "bytes": 9017,
-      "sha256": "bacb53c9f2769dcccd4396297ce45f6749a0f0eb761bb88120f3b954f859b62e",
+      "bytes": 8939,
+      "sha256": "b56243b78f669576c824951a614bbcc0908d9049a5141ca52ebf16e96510e672",
       "authority_status": "ACCEPTED",
       "included_in_normative_set": true,
       "status_source": "Pre-W1 normative classification declared by scripts/verification/config.mjs",
@@ -164,8 +164,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 7992,
-      "sha256": "54ba355c72cec6f73b5d0dc14d22e9fe1558f72ea0596d7d031576da73fb3512",
+      "bytes": 7918,
+      "sha256": "2b491621298d9cc84a36581b1fb8b37b37953cc285fd20874c95d6a246039ca6",
       "authority_status": "ACCEPTED",
       "included_in_normative_set": true,
       "status_source": "Pre-W1 normative classification declared by scripts/verification/config.mjs",
@@ -428,5 +428,5 @@
     "tool": "scripts/verification/bootstrap-pre-w1.mjs",
     "deterministic_inputs": true
   },
-  "manifest_digest": "08bb213bc7b01e6235f44f002040928e3b371aaca5970b39dde6742ac6a6e65f"
+  "manifest_digest": "c239e3cfa45f8be05899577f4236bcc0bf59aa4596e63557ed5938f3ba00a711"
 }
