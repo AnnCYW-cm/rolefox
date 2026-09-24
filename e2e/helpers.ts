@@ -1,6 +1,6 @@
 import { expect, type Locator, type Page } from "@playwright/test";
 
-export const RELEASE_VERSION = "v0.1.0-alpha.7";
+export const RELEASE_VERSION = "v0.1.0-alpha.8";
 
 export async function openFreshRoleFox(page: Page): Promise<void> {
   // A relative URL preserves a GitHub Pages-style base path supplied through

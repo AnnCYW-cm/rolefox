@@ -3192,7 +3192,7 @@ function HydratedPreUserAlphaApp() {
               </span>
               <span>
                 <strong>RoleFox</strong>
-                <small>v0.1.0-alpha.7 · Apache-2.0</small>
+                <small>v0.1.0-alpha.8 · Apache-2.0</small>
               </span>
             </div>
             <nav aria-label="开源项目资源" className="project-links">

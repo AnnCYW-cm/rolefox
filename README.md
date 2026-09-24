@@ -4,11 +4,11 @@
 
 > 一个在浏览器本地运行、帮助你判断“哪些岗位值得看”的开源工具。
 
-RoleFox **v0.1.0-alpha.7** 是一款浏览器本地的开源岗位判断工具：设置目标职位、地点和关键词，手工、批量或从本地文件放入岗位，获得确定性评分、硬排除结果与可复查理由，再用“感兴趣 / 不感兴趣”记录自己的判断。数据默认只保存在当前浏览器。
+RoleFox **v0.1.0-alpha.8** 是一款浏览器本地的开源岗位判断工具：设置目标职位、地点和关键词，手工、批量或从本地文件放入岗位，获得确定性评分、硬排除结果与可复查理由，再用“感兴趣 / 不感兴趣”记录自己的判断。数据默认只保存在当前浏览器。
 
-[在线体验](https://anncyw-cm.github.io/rolefox/) · [合成样例](examples/fake-job-board/README.md) · [版本说明](releases/v0.1.0-alpha.7.md) · [提交反馈](https://github.com/AnnCYW-cm/rolefox/issues/new?template=alpha-feedback.yml)
+[在线体验](https://anncyw-cm.github.io/rolefox/) · [合成样例](examples/fake-job-board/README.md) · [版本说明](releases/v0.1.0-alpha.8.md) · [提交反馈](https://github.com/AnnCYW-cm/rolefox/issues/new?template=alpha-feedback.yml)
 
-Alpha.7 将 Alpha.6 的 Fox Ledger 重构为 **Clear Signal / 明亮信号工作台**，并把完整的本地复核流程纳入同一版本：CSV/JSON 预览导入、精确与疑似重复检查、岗位编辑、搜索与六种筛选，以及包含当前判断依据的“感兴趣清单”JSON 导出。确定性评分、版本化数据 schema、存储键与无外部动作的安全边界没有改变，Alpha.1–Alpha.6 数据无需迁移；Alpha.6 作为已经发布的历史版本保持不可变。
+Alpha.8 沿用 Alpha.7 的 **Clear Signal / 明亮信号工作台**和完整浏览器本地复核流程，并为这些已发布工作流加入可复现的 Chromium E2E 验证。完整浏览器测试现在会阻断 CI 与 Alpha 发布，GitHub Pages 部署后还会执行线上路径 smoke test；产品能力、确定性评分、版本化数据 schema、存储键与无外部动作的安全边界均未改变，Alpha.1–Alpha.7 数据无需迁移；Alpha.7 作为已经发布的历史版本保持不可变。
 
 ## 3–5 分钟快速上手
 
@@ -23,7 +23,7 @@ Alpha.7 将 Alpha.6 的 Fox Ledger 重构为 **Clear Signal / 明亮信号工作
 
 ## 这个 Alpha 能做什么
 
-| 能力 | v0.1.0-alpha.7 状态 |
+| 能力 | v0.1.0-alpha.8 状态 |
 | --- | --- |
 | 目标规则 | 设置目标职位、地点、加分词和硬排除词 |
 | 岗位输入 | 手工添加、按 `职位 \| 公司 \| 地点 \| 描述` 批量粘贴，或本地预览导入 CSV/JSON |
@@ -81,13 +81,14 @@ pnpm test:e2e
 
 Pre-W1 的 Spec Manifest、Scope Catalog、Evidence、Gate Registry、checkpoint 和可信签名验证仍然保留。当前 Gate 1 按设计保持 **`BLOCKED_NOT_STARTED`**，因为尚未收集真实用户研究证据；不要用合成样例或上线事实伪造 PASS。
 
-这不阻止 v0.1.0-alpha.7 作为范围明确的开源工具发布。Gate 1 当前为 **`BLOCKED_NOT_STARTED`**，只用于判断是否、以及如何投入下一阶段产品化工作；在真实访谈、规则回放、Gate 1 PASS 和可信 checkpoint 全部成立前，不启动 Accepted Autopilot 基线中的 W1。查看结构完整性可运行 `pnpm verification:check`；要求研究就绪的 `pnpm verification:ready` 当前应失败关闭。
+这不阻止 v0.1.0-alpha.8 作为范围明确的开源工具发布。Gate 1 当前为 **`BLOCKED_NOT_STARTED`**，只用于判断是否、以及如何投入下一阶段产品化工作；在真实访谈、规则回放、Gate 1 PASS 和可信 checkpoint 全部成立前，不启动 Accepted Autopilot 基线中的 W1。查看结构完整性可运行 `pnpm verification:check`；要求研究就绪的 `pnpm verification:ready` 当前应失败关闭。
 
 下一阶段可能包括引导配置、候选人事实库、持久化数据库、链接导入、跨来源去重、AI 辅助、工作流和合规连接器。具体范围将由首版反馈和 Gate 1 证据决定，不是本次发布承诺。
 
 ## 文档与参与
 
-- [v0.1.0-alpha.7 版本说明](releases/v0.1.0-alpha.7.md)
+- [v0.1.0-alpha.8 版本说明](releases/v0.1.0-alpha.8.md)
+- [v0.1.0-alpha.7 历史版本说明](releases/v0.1.0-alpha.7.md)
 - [v0.1.0-alpha.6 历史版本说明](releases/v0.1.0-alpha.6.md)
 - [v0.1.0-alpha.5 历史版本说明](releases/v0.1.0-alpha.5.md)
 - [v0.1.0-alpha.4 历史版本说明](releases/v0.1.0-alpha.4.md)

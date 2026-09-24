@@ -203,7 +203,7 @@ describe("RoleFox open-source Alpha interface", () => {
     await renderApp();
 
     expect(container.textContent).not.toContain("不是 v0.1");
-    expect(container.textContent).toContain("v0.1.0-alpha.7 · Apache-2.0");
+    expect(container.textContent).toContain("v0.1.0-alpha.8 · Apache-2.0");
     const footer = container.querySelector("footer.alpha-footer");
     expect(footer?.textContent).toContain("没有账号、服务器存储或云同步");
     expect(footer?.textContent).toContain("不会扫描、投递、回复");

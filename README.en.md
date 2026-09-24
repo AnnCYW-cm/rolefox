@@ -4,11 +4,11 @@
 
 > An open-source, browser-local tool for deciding which jobs are worth a closer look.
 
-RoleFox **v0.1.0-alpha.7** is an open-source, browser-local job-triage tool. Define a target role, location, and keywords; add jobs manually, in batches, or from local files; review deterministic scores, hard exclusions, and inspectable reasons; then record your own interested / not-interested decisions. Data stays in the current browser by default.
+RoleFox **v0.1.0-alpha.8** is an open-source, browser-local job-triage tool. Define a target role, location, and keywords; add jobs manually, in batches, or from local files; review deterministic scores, hard exclusions, and inspectable reasons; then record your own interested / not-interested decisions. Data stays in the current browser by default.
 
-[Try it online](https://anncyw-cm.github.io/rolefox/) · [Synthetic examples](examples/fake-job-board/README.md) · [Release notes](releases/v0.1.0-alpha.7.md) · [Share feedback](https://github.com/AnnCYW-cm/rolefox/issues/new?template=alpha-feedback.yml)
+[Try it online](https://anncyw-cm.github.io/rolefox/) · [Synthetic examples](examples/fake-job-board/README.md) · [Release notes](releases/v0.1.0-alpha.8.md) · [Share feedback](https://github.com/AnnCYW-cm/rolefox/issues/new?template=alpha-feedback.yml)
 
-Alpha.7 rebuilds Alpha.6's Fox Ledger as **Clear Signal** and brings the complete local review workflow into the same release: CSV/JSON import preview, exact- and possible-duplicate checks, job editing, search with six filters, and an interested-jobs JSON export containing the current evaluation evidence. Deterministic scoring, the versioned data schema, storage key, and no-external-action safety boundary are unchanged; Alpha.1–Alpha.6 data require no migration, and Alpha.6 remains an immutable historical release.
+Alpha.8 keeps Alpha.7's **Clear Signal** interface and complete browser-local review workflow while adding reproducible Chromium E2E verification for those shipped behaviors. The full browser suite now gates CI and tagged Alpha releases, and GitHub Pages runs a post-deployment path smoke test. Product behavior, deterministic scoring, the versioned data schema, storage key, and no-external-action safety boundary are unchanged; Alpha.1–Alpha.7 data require no migration, and Alpha.7 remains an immutable historical release.
 
 ## 3–5 minute quickstart
 
@@ -19,13 +19,13 @@ Alpha.7 rebuilds Alpha.6's Fox Ledger as **Clear Signal** and brings the complet
 
 Start with synthetic or fully redacted data. GitHub issues are public: do not post resumes, real job descriptions, company names, contact details, private links, or other personal information.
 
-The v0.1.0-alpha.7 interface and repository example tutorial are currently in Chinese. This English README translates the main controls; an English interface is not part of this Alpha.
+The v0.1.0-alpha.8 interface and repository example tutorial are currently in Chinese. This English README translates the main controls; an English interface is not part of this Alpha.
 
 You can also use the [copy-and-paste synthetic rules and jobs](examples/fake-job-board/README.md) to test batch input.
 
 ## What this Alpha does
 
-| Capability | v0.1.0-alpha.7 status |
+| Capability | v0.1.0-alpha.8 status |
 | --- | --- |
 | Target rules | Target role, location, preferred keywords, and hard exclusions |
 | Job input | Manual entry, batch paste using `title \| company \| location \| description`, or local CSV/JSON preview import |
@@ -83,13 +83,14 @@ On a clean Linux environment without Chromium system libraries, use `pnpm exec p
 
 The Pre-W1 Spec Manifest, Scope Catalog, Evidence, Gate Registry, checkpoints, and trusted-signature verification remain intact. Gate 1 intentionally remains **`BLOCKED_NOT_STARTED`** because no real-user research evidence has been collected. Synthetic examples or the fact that the Alpha is online must not be used to manufacture a PASS.
 
-This does not block v0.1.0-alpha.7 as a narrowly scoped open-source tool. Gate 1 is currently **`BLOCKED_NOT_STARTED`** and is used only to decide whether and how to invest in the next productization phase. W1 in the accepted Autopilot baseline must not start until real interviews, rules replay, a Gate 1 PASS, and a trusted checkpoint all exist. Run `pnpm verification:check` to validate registry structure; the research-readiness command `pnpm verification:ready` should currently fail closed.
+This does not block v0.1.0-alpha.8 as a narrowly scoped open-source tool. Gate 1 is currently **`BLOCKED_NOT_STARTED`** and is used only to decide whether and how to invest in the next productization phase. W1 in the accepted Autopilot baseline must not start until real interviews, rules replay, a Gate 1 PASS, and a trusted checkpoint all exist. Run `pnpm verification:check` to validate registry structure; the research-readiness command `pnpm verification:ready` should currently fail closed.
 
 Possible next-phase work includes onboarding, a candidate fact store, a persistent database, link import, cross-source deduplication, AI assistance, workflows, and compliant connectors. First-release feedback and Gate 1 evidence—not this release—will determine that scope.
 
 ## Docs and participation
 
-- [v0.1.0-alpha.7 release notes](releases/v0.1.0-alpha.7.md)
+- [v0.1.0-alpha.8 release notes](releases/v0.1.0-alpha.8.md)
+- [v0.1.0-alpha.7 historical release notes](releases/v0.1.0-alpha.7.md)
 - [v0.1.0-alpha.6 historical release notes](releases/v0.1.0-alpha.6.md)
 - [v0.1.0-alpha.5 historical release notes](releases/v0.1.0-alpha.5.md)
 - [v0.1.0-alpha.4 historical release notes](releases/v0.1.0-alpha.4.md)

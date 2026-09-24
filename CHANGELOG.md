@@ -4,6 +4,28 @@ All notable public changes to RoleFox are recorded here. Release status refers o
 
 ## Unreleased
 
+## [0.1.0-alpha.8](releases/v0.1.0-alpha.8.md) - 2026-09-24
+
+Browser-verification and release-reliability release. This version adds repeatable Chromium coverage for the existing Alpha.7 product workflow and makes that coverage a required part of CI, tagged releases, and the deployed GitHub Pages check without changing product capabilities, UI, data, or safety behavior.
+
+### Added
+
+- Added seven Playwright Chromium journeys covering the initial privacy and version boundary, search and all six filters, manual entry with persisted decisions and edits, CSV duplicate review, JSON import preview, interested-jobs export, and full backup / clear / restore persistence.
+- Added a Node-based static-export harness so local and automated browser checks exercise the same generated site that is packaged for release.
+- Added retained HTML reports, traces, screenshots, and test-result artifacts when an automated browser run fails.
+
+### Changed
+
+- Made the full browser E2E suite a required CI and tagged-release gate after the existing repository checks.
+- Added a post-deployment GitHub Pages smoke test against the deployed base path, including the live version and browser-local privacy boundary.
+
+### Compatibility and scope
+
+- Kept the Alpha.7 product workflow, UI, deterministic scoring, stored-data schema, storage key, validation behavior, and no-external-action safety boundary unchanged; Alpha.1–Alpha.7 local data require no migration.
+- Did not add accounts, server storage, cloud sync, automatic scraping, background collection, AI, connectors, generated materials, applications, messages, mailbox access, calendar access, or other external actions.
+- Kept Pre-W1 Gate 1 `BLOCKED_NOT_STARTED`; automated browser verification is release evidence for the existing open-source tool, not user-research evidence for later productization.
+- Preserved v0.1.0-alpha.7 as an immutable historical release. Alpha.8 does not rewrite its tag, release notes, changelog record, or verification lineage.
+
 ## [0.1.0-alpha.7](releases/v0.1.0-alpha.7.md) - 2026-09-23
 
 Clear Signal interface rebuild and local-review workflow release. This version combines the new workspace with safer file import, duplicate review, job editing, search and filtering, and a focused interested-jobs export while keeping deterministic scoring, the stored-data schema, storage key, and no-external-action boundary intact.

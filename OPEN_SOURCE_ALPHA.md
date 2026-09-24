@@ -48,6 +48,12 @@ Alpha.2 的标签、版本说明和发布时的范围陈述作为历史记录保
 
 新增能力不改变确定性评分、版本化数据 schema、存储键或无外部动作的安全边界；文件不会上传，也没有账号、服务端、AI 或招聘平台连接。Alpha.1–Alpha.6 数据无需迁移，Alpha.6 的标签、版本说明、Changelog 记录与 verification lineage 保持不可变。Alpha.7 不构成用户研究证据，Pre-W1 Gate 1 继续保持 `BLOCKED_NOT_STARTED`，且该 Gate 不阻止这一窄范围开源 Alpha 发布。
 
+### Alpha.8 增加浏览器验证与发布可靠性
+
+**v0.1.0-alpha.8** 沿用 Alpha.7 的 Clear Signal 界面和全部产品流程，只为现有开源工具增加可重复的浏览器端到端验证。七条 Playwright Chromium 流程覆盖首屏版本与隐私边界、搜索和六类筛选、手工新增与刷新持久化、人工决定与岗位编辑、CSV 重复预览、JSON 导入预览、感兴趣清单下载，以及完整备份、清空、恢复与再次刷新。Node 静态 export harness 让本地与自动化检查都针对实际打包的静态站点运行。
+
+完整浏览器套件现在同时阻断 CI 和正式标签发布；GitHub Pages 部署完成后还会针对实际 base path 执行线上 smoke test。失败运行会保留 HTML 报告、trace、截图和测试结果，便于定位发布问题。Alpha.8 不新增产品能力，不改变 UI、确定性评分、数据 schema、存储键、存储行为、校验规则或安全边界，Alpha.1–Alpha.7 数据无需迁移。Alpha.7 的标签、版本说明、Changelog 记录与 verification lineage 保持不可变。自动浏览器验证不是用户研究，Pre-W1 Gate 1 继续保持 `BLOCKED_NOT_STARTED`。
+
 ### 后续阶段再做产品形态
 
 下一阶段可能评估引导配置、候选人事实库、持久化数据库、链接导入、跨来源去重、AI 辅助、工作流、合规连接器、安装包、自托管服务和跨设备使用。它们是方向，不是本 Alpha 的承诺；范围由首版反馈和真实用户研究决定。
@@ -113,6 +119,12 @@ This rebuild still changes brand expression, visual design, information arrangem
 The same formal release adds the complete local review workflow: CSV/JSON job files are previewed in the current browser before a confirmed write; exact duplicates are blocked while possible duplicates are labeled and skipped by default; existing jobs can be edited and rescored; results can be searched by title, company, location, or description and switched among all, undecided, recommended, interested, not interested, and excluded filters; and the user can explicitly export an interested-jobs JSON file containing job text and the current evaluation evidence. Job-import files, backup-restore files, and serialized local state have a 15 MB safety limit, with over-limit reads or writes refused without overwriting existing data.
 
 These additions do not change deterministic scoring, the versioned data schema, storage key, or no-external-action safety boundary. Files are never uploaded, and there are still no accounts, servers, AI calls, or job-platform connections. Alpha.1–Alpha.6 data require no migration. The Alpha.6 tag, release notes, changelog record, and verification lineage remain immutable. Alpha.7 is not user-research evidence; Pre-W1 Gate 1 remains `BLOCKED_NOT_STARTED`, and that Gate does not block this narrowly scoped open-source Alpha release.
+
+### Alpha.8 adds browser verification and release reliability
+
+**v0.1.0-alpha.8** keeps Alpha.7's Clear Signal interface and complete product workflow and adds repeatable end-to-end browser verification for the existing open-source tool. Seven Playwright Chromium journeys cover the initial version and privacy boundary, search and all six filters, manual entry and reload persistence, decisions and job editing, CSV duplicate preview, JSON import preview, interested-jobs download, and full backup, clearing, restore, and another reload. A Node static-export harness makes both local and automated checks exercise the static site that is actually packaged.
+
+The full browser suite now gates both CI and formal tagged releases, while GitHub Pages runs a post-deployment smoke test against the live base path. Failed runs retain an HTML report, trace, screenshots, and test results for diagnosis. Alpha.8 adds no product capability and changes no UI, deterministic scoring, data schema, storage key, storage behavior, validation rule, or safety boundary; Alpha.1–Alpha.7 data require no migration. The Alpha.7 tag, release notes, changelog record, and verification lineage remain immutable. Automated browser verification is not user research, so Pre-W1 Gate 1 remains `BLOCKED_NOT_STARTED`.
 
 ### Productize in a later phase
 

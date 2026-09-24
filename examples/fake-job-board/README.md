@@ -1,6 +1,6 @@
 # 完全合成的岗位示例
 
-本目录提供一组可公开使用的合成岗位，用于体验 RoleFox `0.1.0-alpha.7` 的浏览器本地岗位判断与偏好校准。样例随 `0.1.0-alpha.1` 首次公开发布，并由 Alpha.2–Alpha.7 沿用。Alpha.7 将 Alpha.6 的 UI 重做为 Clear Signal / 明亮信号工作台，并新增 CSV/JSON 预览导入、重复检查、岗位编辑、搜索与六种筛选，以及感兴趣清单导出；评分、数据 schema、存储键和无外部动作的安全边界没有改变，Alpha.1–Alpha.6 数据无需迁移。公司、职位和描述均为虚构内容，不对应真实招聘机会，也不能用于联系、申请或推断任何真实组织。
+本目录提供一组可公开使用的合成岗位，用于体验 RoleFox `0.1.0-alpha.8` 的浏览器本地岗位判断与偏好校准。样例随 `0.1.0-alpha.1` 首次公开发布，并由 Alpha.2–Alpha.8 沿用。Alpha.8 只增加七条 Playwright Chromium 自动浏览器流程、Node 静态 export harness、CI / 发布 E2E gate、Pages 部署后 smoke test 和失败报告，产品操作继续完整沿用 Alpha.7：Clear Signal / 明亮信号工作台、CSV/JSON 预览导入、重复检查、岗位编辑、搜索与六种筛选，以及感兴趣清单导出均未改变。评分、数据 schema、存储键和无外部动作的安全边界也没有变化，Alpha.1–Alpha.7 数据无需迁移。公司、职位和描述均为虚构内容，不对应真实招聘机会，也不能用于联系、申请或推断任何真实组织。
 
 Alpha.6 的历史说明保持不变：Alpha.6 只将 Alpha.5 的 UI 完整重做为 Fox Ledger，没有修改样例、功能、评分、数据 schema、存储键或安全边界，Alpha.1–Alpha.5 数据无需迁移。Alpha.5 仍是不可变的历史发布。
 
