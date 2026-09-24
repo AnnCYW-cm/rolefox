@@ -3,7 +3,7 @@
   "manifest_version": "v0.1-bootstrap-1",
   "canonicalization": "rolefox-canonical-digest-v1",
   "algorithm": "sha256",
-  "normative_set_digest": "2cebe9d89da2485957b91b3de3e258b2c081a70d32c772cd3011b9519c3bb3f0",
+  "normative_set_digest": "d17ceb0490876a6ad3de8838c4ba2e24e0ff59d21111ab5172e35902ade46c78",
   "normative_file_count": 30,
   "verification_toolchain": {
     "algorithm": "sha256",
@@ -155,8 +155,8 @@
   "inventory": [
     {
       "path": "README.en.md",
-      "bytes": 8374,
-      "sha256": "ca03d79819f1aece3bc7b47e9bd2626173f12044497cba358dbdea84489e5497",
+      "bytes": 8425,
+      "sha256": "fb7e3d7e0c47f3ffa59dc1019e3530ae1d883ff3a2a81b1eda2ea49fa4878047",
       "authority_status": "ACCEPTED",
       "included_in_normative_set": true,
       "status_source": "Pre-W1 normative classification declared by scripts/verification/config.mjs",
@@ -164,8 +164,8 @@
     },
     {
       "path": "README.md",
-      "bytes": 7396,
-      "sha256": "028483f9076aad2598aafeb46118c6b6accdbdda2c96ff15bf11c30ca036be12",
+      "bytes": 7394,
+      "sha256": "cc20323ce82818faba2d059d2d2b85bbed6e7d97e9392cc5b145ed0bb7f57a54",
       "authority_status": "ACCEPTED",
       "included_in_normative_set": true,
       "status_source": "Pre-W1 normative classification declared by scripts/verification/config.mjs",
@@ -428,5 +428,5 @@
     "tool": "scripts/verification/bootstrap-pre-w1.mjs",
     "deterministic_inputs": true
   },
-  "manifest_digest": "f1845377f8d21407cf39c573370ca2d985dac985295d51f28c11e0259bbdba8b"
+  "manifest_digest": "c65903aab16eb2bae3f31bdb59f067760f3178986db9da227302803e7e8702ba"
 }

@@ -40,9 +40,17 @@ Alpha.2 的标签、版本说明和发布时的范围陈述作为历史记录保
 
 这次重做仍只改变品牌表达、视觉、信息编排和交互呈现。业务能力、评分与排序、规则、合成样例、岗位输入、校准、导出、恢复、删除、清除、失败关闭行为、存储键、浏览器本地数据 schema、校验规则和安全边界均未改变，Alpha.1–Alpha.5 数据无需迁移。Alpha.5 的标签、版本说明、Changelog 记录与 verification lineage 保持不可变。Alpha.6 不构成用户研究证据，Pre-W1 Gate 1 继续保持 `BLOCKED_NOT_STARTED`。
 
+### Alpha.7 合并 Clear Signal 与本地复核能力
+
+**v0.1.0-alpha.7** 将 Alpha.6 的 Fox Ledger 完整重构为 Clear Signal / 明亮信号工作台：以冷白、石墨和稀缺狐橙建立更现代、清楚的产品界面，用单层 app bar 组织品牌、任务导航与本机状态，在桌面上形成结果账本与输入坞的主从关系，并将用户可读文字保持在至少 12px。移动端将任务导航放在主内容末尾，让 DOM、键盘与视觉顺序一致，也避免悬浮底栏遮挡内容。
+
+同一个正式版本还加入完整的本地复核流程：CSV/JSON 岗位文件先在当前浏览器预览再确认写入；精确重复被拦截，疑似重复被标记并默认跳过；已有岗位可编辑和重新评分；结果可按职位、公司、地点或描述搜索，并在全部、待决定、推荐、感兴趣、不感兴趣和已排除六种筛选间切换；用户可主动导出包含岗位原文与当前判断依据的“感兴趣清单”JSON。岗位导入文件、备份恢复文件和序列化本地状态均有 15 MB 安全上限，超限时拒绝读取或写入而不覆盖已有数据。
+
+新增能力不改变确定性评分、版本化数据 schema、存储键或无外部动作的安全边界；文件不会上传，也没有账号、服务端、AI 或招聘平台连接。Alpha.1–Alpha.6 数据无需迁移，Alpha.6 的标签、版本说明、Changelog 记录与 verification lineage 保持不可变。Alpha.7 不构成用户研究证据，Pre-W1 Gate 1 继续保持 `BLOCKED_NOT_STARTED`，且该 Gate 不阻止这一窄范围开源 Alpha 发布。
+
 ### 后续阶段再做产品形态
 
-下一阶段可能评估引导配置、候选人事实库、持久化数据库、文件与链接导入、去重、AI 辅助、工作流、合规连接器、安装包、自托管服务和跨设备使用。它们是方向，不是本 Alpha 的承诺；范围由首版反馈和真实用户研究决定。
+下一阶段可能评估引导配置、候选人事实库、持久化数据库、链接导入、跨来源去重、AI 辅助、工作流、合规连接器、安装包、自托管服务和跨设备使用。它们是方向，不是本 Alpha 的承诺；范围由首版反馈和真实用户研究决定。
 
 Pre-W1 Gate 1 继续保持 `BLOCKED_NOT_STARTED`。没有近期活跃用户时可以先发布本 Alpha 获取反馈，但上线和合成数据不能替代真实研究。Gate 1 只决定是否、以及如何启动后续产品化 W1，不是本 Alpha 的发布许可。
 
@@ -98,9 +106,17 @@ This rebuild still changes brand expression, visual design, information arrangem
 
 This rebuild still changes brand expression, visual design, information arrangement, and interaction presentation only. Product capabilities, scoring and ordering, rules, synthetic examples, job input, calibration, export, restore, deletion, clearing, fail-closed behavior, the storage key, browser-local data schema, validation rules, and safety boundary are unchanged. Alpha.1–Alpha.5 data require no migration. The Alpha.5 tag, release notes, changelog record, and verification lineage remain immutable. Alpha.6 is not user-research evidence; Pre-W1 Gate 1 remains `BLOCKED_NOT_STARTED`.
 
+### Alpha.7 combines Clear Signal with local review capabilities
+
+**v0.1.0-alpha.7** completely rebuilds the Alpha.6 Fox Ledger as Clear Signal. Cool white, graphite, and scarce fox-orange accents create a clearer modern product workspace. A single-layer app bar organizes identity, task navigation, and local status; desktop establishes a primary results ledger beside a secondary input dock; and readable interface copy has a 12px minimum. Mobile places task navigation at the end of main content so its DOM, keyboard, and visual order align without a floating dock covering content.
+
+The same formal release adds the complete local review workflow: CSV/JSON job files are previewed in the current browser before a confirmed write; exact duplicates are blocked while possible duplicates are labeled and skipped by default; existing jobs can be edited and rescored; results can be searched by title, company, location, or description and switched among all, undecided, recommended, interested, not interested, and excluded filters; and the user can explicitly export an interested-jobs JSON file containing job text and the current evaluation evidence. Job-import files, backup-restore files, and serialized local state have a 15 MB safety limit, with over-limit reads or writes refused without overwriting existing data.
+
+These additions do not change deterministic scoring, the versioned data schema, storage key, or no-external-action safety boundary. Files are never uploaded, and there are still no accounts, servers, AI calls, or job-platform connections. Alpha.1–Alpha.6 data require no migration. The Alpha.6 tag, release notes, changelog record, and verification lineage remain immutable. Alpha.7 is not user-research evidence; Pre-W1 Gate 1 remains `BLOCKED_NOT_STARTED`, and that Gate does not block this narrowly scoped open-source Alpha release.
+
 ### Productize in a later phase
 
-A later phase may evaluate onboarding, a candidate fact store, persistent storage, file and link import, deduplication, AI assistance, workflows, compliant connectors, installers, self-hosted services, and cross-device use. These are directions, not Alpha promises; first-release feedback and real-user research will decide the scope.
+A later phase may evaluate onboarding, a candidate fact store, persistent storage, link import, cross-source deduplication, AI assistance, workflows, compliant connectors, installers, self-hosted services, and cross-device use. These are directions, not Alpha promises; first-release feedback and real-user research will decide the scope.
 
 Pre-W1 Gate 1 remains `BLOCKED_NOT_STARTED`. Publishing this Alpha before an active user base exists is valid, but publication and synthetic data cannot replace real research. Gate 1 decides only whether and how to start the later productization W1; it is not permission to publish this Alpha.
 
