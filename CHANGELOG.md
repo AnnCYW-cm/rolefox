@@ -4,9 +4,18 @@ All notable public changes to RoleFox are recorded here. Release status refers o
 
 ## Unreleased
 
-## [0.1.0-alpha.7](releases/v0.1.0-alpha.7.md) - 2026-09-17
+## [0.1.0-alpha.7](releases/v0.1.0-alpha.7.md) - 2026-09-23
 
-Clear Signal visual and responsive-interface rebuild of v0.1.0-alpha.6. This release keeps the same browser-local job-triage capabilities, stored-data schema, storage key, and safety boundary.
+Clear Signal interface rebuild and local-review workflow release. This version combines the new workspace with safer file import, duplicate review, job editing, search and filtering, and a focused interested-jobs export while keeping deterministic scoring, the stored-data schema, storage key, and no-external-action boundary intact.
+
+### Added
+
+- Added browser-local CSV/JSON job import with a preview step before any selected record is written.
+- Added exact-duplicate checks against existing jobs and within an import file, plus possible-duplicate warnings for matching title, company, and location with different descriptions.
+- Added job editing with duplicate review and immediate deterministic rescoring after a saved change.
+- Added title, company, location, and description search with six result filters: all, undecided, recommended, interested, not interested, and excluded.
+- Added an interested-jobs JSON export containing job text, the current score and label, eligibility, reasons, and concerns.
+- Added a 15 MB safety limit for job-import and backup-restore files and for serialized browser-local state. Over-limit reads or writes are refused without overwriting existing local data.
 
 ### Changed
 
@@ -15,14 +24,12 @@ Clear Signal visual and responsive-interface rebuild of v0.1.0-alpha.6. This rel
 - Organized the primary workflow around a continuous result ledger and a dedicated input dock, reducing first-screen chrome around the work itself.
 - Removed stacked-card composition and floating shadows from the core workspace, using spacing, typography, and restrained rules to express structure.
 - Removed ultra-small interface text and strengthened the readable type hierarchy without changing the underlying content or decisions.
-- Kept deployed-browser viewport review as an explicit post-publication verification item rather than claiming it before the live Alpha.7 build exists.
 
 ### Compatibility and scope
 
-- Did not change scoring, rules, synthetic examples, job input, calibration, export, restore, clearing, or any other product capability.
-- Kept the existing storage key, browser-local data schema, and validation behavior; Alpha.1 through Alpha.6 local data require no migration.
-- Did not add accounts, server storage, cloud sync, collection, AI, connectors, generated materials, applications, messages, mailbox access, calendar access, or other external actions.
-- Kept Pre-W1 Gate 1 `BLOCKED_NOT_STARTED`; this redesign is not research evidence and does not block the narrowly scoped open-source Alpha release.
+- Kept deterministic scoring and ordering, rules, synthetic examples, calibration decisions, the versioned storage schema, storage key, and validation model compatible with Alpha.1–Alpha.6 data; no migration is required.
+- Did not add accounts, server storage, cloud sync, automatic scraping or background collection, AI, connectors, generated materials, applications, messages, mailbox access, calendar access, or other external actions.
+- Kept Pre-W1 Gate 1 `BLOCKED_NOT_STARTED`; the interface and workflow changes are not research evidence, and that Gate does not block the narrowly scoped open-source Alpha release.
 - Preserved v0.1.0-alpha.6 as an immutable historical release. Alpha.7 does not rewrite its tag, release notes, changelog record, or verification lineage.
 
 ## [0.1.0-alpha.6](releases/v0.1.0-alpha.6.md) - 2026-09-15

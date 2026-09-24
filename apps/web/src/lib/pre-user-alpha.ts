@@ -50,6 +50,23 @@ export interface BatchParseResult {
   errors: BatchParseError[];
 }
 
+export type JobImportFormat = "csv" | "json";
+
+export type ImportCandidateKind =
+  | "new"
+  | "exact_duplicate"
+  | "possible_duplicate"
+  | "within_file_duplicate";
+
+export interface ImportCandidateAnalysis {
+  index: number;
+  draft: JobDraft;
+  kind: ImportCandidateKind;
+  fingerprint: string;
+  duplicateOfJobId?: string;
+  duplicateOfDraftIndex?: number;
+}
+
 export interface JobScore {
   jobId: string;
   eligible: boolean;
@@ -58,6 +75,19 @@ export interface JobScore {
   reasons: string[];
   concerns: string[];
   matchedIncludeKeywords: string[];
+  excludedBy: string[];
+}
+
+export type CalibrationMismatchKind =
+  | "missed_interest"
+  | "rejected_recommendation";
+
+export interface CalibrationMismatch {
+  jobId: string;
+  decision: CalibrationDecision;
+  kind: CalibrationMismatchKind;
+  score: number;
+  label: JobScore["label"];
   excludedBy: string[];
 }
 
@@ -324,13 +354,24 @@ export function loadAlphaState(storage: StorageLike): StorageLoadResult {
 export function saveAlphaState(
   storage: StorageLike,
   state: AlphaState,
-): { ok: true } | { ok: false; reason: string } {
+):
+  | { ok: true }
+  | { ok: false; code: "over_limit" | "storage_error"; reason: string } {
   try {
-    storage.setItem(ALPHA_STORAGE_KEY, serializeAlphaState(state));
+    const serialized = serializeAlphaState(state);
+    if (serialized.length > MAX_STORED_STATE_LENGTH) {
+      return {
+        ok: false,
+        code: "over_limit",
+        reason: "本地状态超过 15 MB 安全存储上限。",
+      };
+    }
+    storage.setItem(ALPHA_STORAGE_KEY, serialized);
     return { ok: true };
   } catch (error) {
     return {
       ok: false,
+      code: "storage_error",
       reason:
         error instanceof Error
           ? error.message
@@ -416,6 +457,495 @@ export function parseBatchJobs(value: string): BatchParseResult {
   });
 
   return { jobs, errors };
+}
+
+type JobField = keyof JobDraft;
+
+interface CsvRecord {
+  cells: string[];
+  line: number;
+}
+
+const MAX_CSV_COLUMNS = 64;
+
+const JOB_FIELDS: readonly JobField[] = [
+  "title",
+  "company",
+  "location",
+  "description",
+];
+
+const CSV_HEADER_ALIASES: Record<JobField, readonly string[]> = {
+  title: [
+    "title",
+    "job title",
+    "job_title",
+    "职位",
+    "职位名称",
+    "岗位",
+    "岗位名称",
+  ],
+  company: ["company", "company name", "company_name", "公司", "公司名称"],
+  location: [
+    "location",
+    "job location",
+    "job_location",
+    "地点",
+    "工作地点",
+    "办公地点",
+  ],
+  description: [
+    "description",
+    "job description",
+    "job_description",
+    "jd",
+    "描述",
+    "职位描述",
+    "岗位描述",
+  ],
+};
+
+const normalizeImportText = (value: string): string => value.trim();
+
+const normalizeCsvHeader = (value: string): string =>
+  value.normalize("NFKC").trim().replace(/\s+/g, " ").toLocaleLowerCase("en-US");
+
+const CSV_HEADER_LOOKUP = new Map<string, JobField>(
+  JOB_FIELDS.flatMap((field) =>
+    CSV_HEADER_ALIASES[field].map((alias) => [normalizeCsvHeader(alias), field]),
+  ),
+);
+
+function parseCsvRecords(raw: string):
+  | { ok: true; records: CsvRecord[] }
+  | { ok: false; error: BatchParseError } {
+  const input = raw.startsWith("\uFEFF") ? raw.slice(1) : raw;
+  const records: CsvRecord[] = [];
+  let cells: string[] = [];
+  let field = "";
+  let line = 1;
+  let recordLine = 1;
+  let state: "start" | "unquoted" | "quoted" | "after_quote" = "start";
+
+  const finishRecord = (): BatchParseError | null => {
+    const completed = [...cells, field];
+    if (
+      cells.length > 0 ||
+      completed.some((cell) => cell.trim().length > 0)
+    ) {
+      records.push({ cells: completed, line: recordLine });
+      if (records.length > MAX_ALPHA_JOBS + 1) {
+        return {
+          line: 0,
+          message: `一次最多导入 ${MAX_ALPHA_JOBS} 行岗位。`,
+        };
+      }
+    }
+    cells = [];
+    field = "";
+    state = "start";
+    return null;
+  };
+
+  const finishField = (): BatchParseError | null => {
+    cells.push(field);
+    field = "";
+    state = "start";
+    return cells.length >= MAX_CSV_COLUMNS
+      ? {
+          line: recordLine,
+          message: `CSV 每行最多支持 ${MAX_CSV_COLUMNS} 列。`,
+        }
+      : null;
+  };
+
+  const append = (value: string): BatchParseError | null => {
+    field += value;
+    return field.length > MAX_TEXT_LENGTH
+      ? { line: recordLine, message: "单个字段内容过长。" }
+      : null;
+  };
+
+  for (let index = 0; index < input.length; index += 1) {
+    const character = input[index];
+    const nextCharacter = input[index + 1];
+
+    if (state === "quoted") {
+      if (character === '"' && nextCharacter === '"') {
+        const error = append('"');
+        if (error) {
+          return { ok: false, error };
+        }
+        index += 1;
+      } else if (character === '"') {
+        state = "after_quote";
+      } else if (character === "\r" || character === "\n") {
+        const error = append("\n");
+        if (error) {
+          return { ok: false, error };
+        }
+        if (character === "\r" && nextCharacter === "\n") {
+          index += 1;
+        }
+        line += 1;
+      } else {
+        const error = append(character);
+        if (error) {
+          return { ok: false, error };
+        }
+      }
+      continue;
+    }
+
+    if (state === "after_quote") {
+      if (character === ",") {
+        const error = finishField();
+        if (error) {
+          return { ok: false, error };
+        }
+      } else if (character === "\r" || character === "\n") {
+        const error = finishRecord();
+        if (error) {
+          return { ok: false, error };
+        }
+        if (character === "\r" && nextCharacter === "\n") {
+          index += 1;
+        }
+        line += 1;
+        recordLine = line;
+      } else if (character !== " " && character !== "\t") {
+        return {
+          ok: false,
+          error: {
+            line: recordLine,
+            message: "引号字段结束后存在无法解析的内容。",
+          },
+        };
+      }
+      continue;
+    }
+
+    if (character === ",") {
+      const error = finishField();
+      if (error) {
+        return { ok: false, error };
+      }
+    } else if (character === "\r" || character === "\n") {
+      const error = finishRecord();
+      if (error) {
+        return { ok: false, error };
+      }
+      if (character === "\r" && nextCharacter === "\n") {
+        index += 1;
+      }
+      line += 1;
+      recordLine = line;
+    } else if (character === '"') {
+      if (state !== "start" || field.length > 0) {
+        return {
+          ok: false,
+          error: {
+            line: recordLine,
+            message: "未加引号的字段中不能包含双引号。",
+          },
+        };
+      }
+      state = "quoted";
+    } else {
+      state = "unquoted";
+      const error = append(character);
+      if (error) {
+        return { ok: false, error };
+      }
+    }
+  }
+
+  if (state === "quoted") {
+    return {
+      ok: false,
+      error: { line: recordLine, message: "引号字段未闭合。" },
+    };
+  }
+
+  if (cells.length > 0 || field.length > 0 || state === "after_quote") {
+    const error = finishRecord();
+    if (error) {
+      return { ok: false, error };
+    }
+  }
+
+  return { ok: true, records };
+}
+
+function parseCsvJobImport(raw: string): BatchParseResult {
+  const parsed = parseCsvRecords(raw);
+  if (!parsed.ok) {
+    return { jobs: [], errors: [parsed.error] };
+  }
+
+  const [header, ...records] = parsed.records;
+  if (!header) {
+    return {
+      jobs: [],
+      errors: [{ line: 1, message: "CSV 文件缺少表头。" }],
+    };
+  }
+
+  const columnIndexes = new Map<JobField, number>();
+  for (const [index, cell] of header.cells.entries()) {
+    const field = CSV_HEADER_LOOKUP.get(normalizeCsvHeader(cell));
+    if (!field) {
+      continue;
+    }
+    if (columnIndexes.has(field)) {
+      return {
+        jobs: [],
+        errors: [{ line: header.line, message: `CSV 表头重复定义 ${field} 列。` }],
+      };
+    }
+    columnIndexes.set(field, index);
+  }
+
+  const missingHeaders = JOB_FIELDS.filter((field) => !columnIndexes.has(field));
+  if (missingHeaders.length > 0) {
+    return {
+      jobs: [],
+      errors: [
+        {
+          line: header.line,
+          message: `CSV 表头缺少：${missingHeaders.join("、")}。`,
+        },
+      ],
+    };
+  }
+
+  if (records.length > MAX_ALPHA_JOBS) {
+    return {
+      jobs: [],
+      errors: [
+        { line: 0, message: `一次最多导入 ${MAX_ALPHA_JOBS} 行岗位。` },
+      ],
+    };
+  }
+
+  const jobs: JobDraft[] = [];
+  const errors: BatchParseError[] = [];
+  for (const record of records) {
+    if (record.cells.length > header.cells.length) {
+      errors.push({
+        line: record.line,
+        message: "CSV 数据行的列数超过表头，请为含逗号的字段加上双引号。",
+      });
+      continue;
+    }
+    const values = Object.fromEntries(
+      JOB_FIELDS.map((field) => [
+        field,
+        normalizeImportText(record.cells[columnIndexes.get(field)!] ?? ""),
+      ]),
+    ) as unknown as JobDraft;
+
+    if (Object.values(values).some((value) => value.length > MAX_TEXT_LENGTH)) {
+      errors.push({ line: record.line, message: "单个字段内容过长。" });
+      continue;
+    }
+    if (!values.title || !values.company) {
+      errors.push({ line: record.line, message: "职位和公司不能为空。" });
+      continue;
+    }
+    jobs.push(values);
+  }
+
+  return { jobs, errors };
+}
+
+function parseJsonJobImport(raw: string): BatchParseResult {
+  const source = raw.startsWith("\uFEFF") ? raw.slice(1) : raw;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(source) as unknown;
+  } catch {
+    return {
+      jobs: [],
+      errors: [{ line: 0, message: "导入内容不是有效 JSON。" }],
+    };
+  }
+
+  const entries = Array.isArray(parsed)
+    ? parsed
+    : isRecord(parsed) && Array.isArray(parsed.jobs)
+      ? parsed.jobs
+      : null;
+  if (!entries) {
+    return {
+      jobs: [],
+      errors: [{ line: 0, message: "JSON 必须是岗位数组或包含 jobs 数组的对象。" }],
+    };
+  }
+  if (entries.length > MAX_ALPHA_JOBS) {
+    return {
+      jobs: [],
+      errors: [
+        { line: 0, message: `一次最多导入 ${MAX_ALPHA_JOBS} 行岗位。` },
+      ],
+    };
+  }
+
+  const jobs: JobDraft[] = [];
+  const errors: BatchParseError[] = [];
+  entries.forEach((entry, index) => {
+    const line = index + 1;
+    if (
+      !isRecord(entry) ||
+      !JOB_FIELDS.every((field) => typeof entry[field] === "string")
+    ) {
+      errors.push({
+        line,
+        message: "每个岗位的 title、company、location、description 都必须是字符串。",
+      });
+      return;
+    }
+    if (
+      JOB_FIELDS.some(
+        (field) => (entry[field] as string).length > MAX_TEXT_LENGTH,
+      )
+    ) {
+      errors.push({ line, message: "单个字段内容过长。" });
+      return;
+    }
+
+    const draft = Object.fromEntries(
+      JOB_FIELDS.map((field) => [
+        field,
+        normalizeImportText(entry[field] as string),
+      ]),
+    ) as unknown as JobDraft;
+    if (!draft.title || !draft.company) {
+      errors.push({ line, message: "职位和公司不能为空。" });
+      return;
+    }
+    jobs.push(draft);
+  });
+
+  return { jobs, errors };
+}
+
+export function parseJobImport(
+  raw: string,
+  format: JobImportFormat,
+): BatchParseResult {
+  if (raw.length > MAX_STORED_STATE_LENGTH) {
+    return {
+      jobs: [],
+      errors: [{ line: 0, message: "导入内容超过 15 MB 安全读取上限。" }],
+    };
+  }
+  return format === "csv"
+    ? parseCsvJobImport(raw)
+    : parseJsonJobImport(raw);
+}
+
+const normalizeFingerprintField = (value: string): string =>
+  value
+    .normalize("NFKC")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLocaleLowerCase("zh-CN");
+
+function createJobIdentityFingerprint(job: JobDraft | AlphaJob): string {
+  return JSON.stringify([
+    normalizeFingerprintField(job.title),
+    normalizeFingerprintField(job.company),
+    normalizeFingerprintField(job.location),
+  ]);
+}
+
+export function normalizeJobFingerprint(job: JobDraft | AlphaJob): string {
+  return JSON.stringify([
+    normalizeFingerprintField(job.title),
+    normalizeFingerprintField(job.company),
+    normalizeFingerprintField(job.location),
+    normalizeFingerprintField(job.description),
+  ]);
+}
+
+export function analyzeImportCandidates(
+  drafts: readonly JobDraft[],
+  existingJobs: readonly AlphaJob[],
+): ImportCandidateAnalysis[] {
+  const existingByFingerprint = new Map<string, string>();
+  const existingByIdentity = new Map<string, string>();
+  for (const job of existingJobs) {
+    const fingerprint = normalizeJobFingerprint(job);
+    const identity = createJobIdentityFingerprint(job);
+    if (!existingByFingerprint.has(fingerprint)) {
+      existingByFingerprint.set(fingerprint, job.id);
+    }
+    if (!existingByIdentity.has(identity)) {
+      existingByIdentity.set(identity, job.id);
+    }
+  }
+
+  const seenFingerprints = new Map<string, number>();
+  const seenIdentities = new Map<string, number>();
+  return drafts.map((draft, index) => {
+    const fingerprint = normalizeJobFingerprint(draft);
+    const identity = createJobIdentityFingerprint(draft);
+    const duplicateOfDraftIndex = seenFingerprints.get(fingerprint);
+    const exactExistingJobId = existingByFingerprint.get(fingerprint);
+    const possibleExistingJobId = existingByIdentity.get(identity);
+    const possibleDraftIndex = seenIdentities.get(identity);
+
+    let analysis: ImportCandidateAnalysis;
+    if (duplicateOfDraftIndex !== undefined) {
+      analysis = {
+        index,
+        draft: { ...draft },
+        kind: "within_file_duplicate",
+        fingerprint,
+        duplicateOfDraftIndex,
+      };
+    } else if (exactExistingJobId) {
+      analysis = {
+        index,
+        draft: { ...draft },
+        kind: "exact_duplicate",
+        fingerprint,
+        duplicateOfJobId: exactExistingJobId,
+      };
+    } else if (possibleExistingJobId) {
+      analysis = {
+        index,
+        draft: { ...draft },
+        kind: "possible_duplicate",
+        fingerprint,
+        duplicateOfJobId: possibleExistingJobId,
+      };
+    } else if (possibleDraftIndex !== undefined) {
+      analysis = {
+        index,
+        draft: { ...draft },
+        kind: "possible_duplicate",
+        fingerprint,
+        duplicateOfDraftIndex: possibleDraftIndex,
+      };
+    } else {
+      analysis = {
+        index,
+        draft: { ...draft },
+        kind: "new",
+        fingerprint,
+      };
+    }
+
+    if (!seenFingerprints.has(fingerprint)) {
+      seenFingerprints.set(fingerprint, index);
+    }
+    if (!seenIdentities.has(identity)) {
+      seenIdentities.set(identity, index);
+    }
+    return analysis;
+  });
 }
 
 function contains(haystack: string, needle: string): boolean {
@@ -554,6 +1084,38 @@ export function scoreAndSortJobs(
         right.score.score - left.score.score ||
         left.job.id.localeCompare(right.job.id),
     );
+}
+
+export function deriveCalibrationMismatches(
+  scoredJobs: ReadonlyArray<{ job: AlphaJob; score: JobScore }>,
+  feedback: Readonly<Record<string, CalibrationDecision>>,
+): CalibrationMismatch[] {
+  const mismatches: CalibrationMismatch[] = [];
+
+  for (const { job, score } of scoredJobs) {
+    const decision = feedback[job.id];
+    const kind: CalibrationMismatchKind | null =
+      decision === "interested" && score.label !== "推荐关注"
+        ? "missed_interest"
+        : decision === "not_interested" && score.label === "推荐关注"
+          ? "rejected_recommendation"
+          : null;
+
+    if (!decision || !kind) {
+      continue;
+    }
+
+    mismatches.push({
+      jobId: job.id,
+      decision,
+      kind,
+      score: score.score,
+      label: score.label,
+      excludedBy: [...score.excludedBy],
+    });
+  }
+
+  return mismatches;
 }
 
 const average = (values: number[]): number | null =>

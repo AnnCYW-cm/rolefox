@@ -4,11 +4,11 @@
 
 > An open-source, browser-local tool for deciding which jobs are worth a closer look.
 
-RoleFox **v0.1.0-alpha.7** is an open-source, browser-local job-triage tool. Define a target role, location, and keywords; add jobs manually or in batches; review deterministic scores, hard exclusions, and inspectable reasons; then record your own interested / not-interested decisions. Data stays in the current browser by default.
+RoleFox **v0.1.0-alpha.7** is an open-source, browser-local job-triage tool. Define a target role, location, and keywords; add jobs manually, in batches, or from local files; review deterministic scores, hard exclusions, and inspectable reasons; then record your own interested / not-interested decisions. Data stays in the current browser by default.
 
 [Try it online](https://anncyw-cm.github.io/rolefox/) · [Synthetic examples](examples/fake-job-board/README.md) · [Release notes](releases/v0.1.0-alpha.7.md) · [Share feedback](https://github.com/AnnCYW-cm/rolefox/issues/new?template=alpha-feedback.yml)
 
-Alpha.7 rebuilds Alpha.6's Fox Ledger as **Clear Signal**. Cool white, graphite, and a scarce fox-orange accent establish a clearer hierarchy; a single 64px app bar, a continuous result ledger, and an input dock organize the core workflow while stacked cards, floating shadows, and ultra-small text are removed. Capabilities, scoring, the data schema, storage key, and safety boundary are unchanged; Alpha.1–Alpha.6 data require no migration, and Alpha.6 remains an immutable historical release.
+Alpha.7 rebuilds Alpha.6's Fox Ledger as **Clear Signal** and brings the complete local review workflow into the same release: CSV/JSON import preview, exact- and possible-duplicate checks, job editing, search with six filters, and an interested-jobs JSON export containing the current evaluation evidence. Deterministic scoring, the versioned data schema, storage key, and no-external-action safety boundary are unchanged; Alpha.1–Alpha.6 data require no migration, and Alpha.6 remains an immutable historical release.
 
 ## 3–5 minute quickstart
 
@@ -28,11 +28,13 @@ You can also use the [copy-and-paste synthetic rules and jobs](examples/fake-job
 | Capability | v0.1.0-alpha.7 status |
 | --- | --- |
 | Target rules | Target role, location, preferred keywords, and hard exclusions |
-| Job input | Manual entry or batch paste using `title \| company \| location \| description` |
+| Job input | Manual entry, batch paste using `title \| company \| location \| description`, or local CSV/JSON preview import |
+| Duplicate checks | During file import and job editing, blocks exact duplicates against existing jobs or within the file and flags same-title/company/location records with different descriptions as possible duplicates |
 | Local evaluation | Deterministic scoring, sorting, reasons, concerns, and hard exclusions |
-| Human calibration | Interested / not-interested decisions stored locally |
-| Data control | Browser-local persistence, full JSON backup and restore, a no-text aggregate, per-job deletion, and full clearing |
-| Safe defaults | No external actions; failed storage reads or restore validation lock editing to prevent accidental overwrite |
+| Review management | Search title, company, location, or description; switch among all, undecided, recommended, interested, not interested, and excluded filters; edit a job and rescore it |
+| Human calibration | Interested / not-interested decisions stored locally, with explicit rule-calibration actions |
+| Data control | Browser-local persistence, full JSON backup and restore, interested-jobs export, no-text aggregate, per-job deletion, and full clearing |
+| Safe defaults | No external actions; writes are refused when serialized local state exceeds 15 MB; failed storage reads or restore validation lock editing to prevent accidental overwrite |
 
 Scores are explainable local rule results. They are not AI recommendations and do not predict job quality, hiring outcomes, or career fit.
 
@@ -45,8 +47,11 @@ Those capabilities belong to a later productization phase. The repository's doma
 ## Data and privacy
 
 - Rules, jobs, and calibration choices are kept in the current browser's `localStorage`; there is no account or server copy.
+- CSV/JSON job files are read and previewed only in the current browser; they are never uploaded, and no job record is written before confirmation.
+- Job-import files, backup-restore files, and serialized local state have a 15 MB safety limit; over-limit reads or writes are refused without overwriting existing local data.
 - Clearing site data also removes local records, so export a full backup first.
 - A full export can contain personal or job-search information you entered. Treat it as a private file.
+- The interested-jobs export contains job text, current scores, and evaluation evidence. Treat it as a private file too.
 - The no-text aggregate includes counts, score bands, decision statistics, and rule shape only—not rule text, job content, companies, or locations.
 - RoleFox does not solve CAPTCHAs, bypass access controls or platform safeguards, or optimize for indiscriminate bulk applications.
 
@@ -75,7 +80,7 @@ The Pre-W1 Spec Manifest, Scope Catalog, Evidence, Gate Registry, checkpoints, a
 
 This does not block v0.1.0-alpha.7 as a narrowly scoped open-source tool. Gate 1 is currently **`BLOCKED_NOT_STARTED`** and is used only to decide whether and how to invest in the next productization phase. W1 in the accepted Autopilot baseline must not start until real interviews, rules replay, a Gate 1 PASS, and a trusted checkpoint all exist. Run `pnpm verification:check` to validate registry structure; the research-readiness command `pnpm verification:ready` should currently fail closed.
 
-Possible next-phase work includes onboarding, a candidate fact store, a persistent database, file and link import, deduplication, AI assistance, workflows, and compliant connectors. First-release feedback and Gate 1 evidence—not this release—will determine that scope.
+Possible next-phase work includes onboarding, a candidate fact store, a persistent database, link import, cross-source deduplication, AI assistance, workflows, and compliant connectors. First-release feedback and Gate 1 evidence—not this release—will determine that scope.
 
 ## Docs and participation
 

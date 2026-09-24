@@ -12,18 +12,23 @@ import {
 import {
   ALPHA_STORAGE_KEY,
   MAX_ALPHA_JOBS,
+  MAX_STORED_STATE_LENGTH,
   MAX_TEXT_LENGTH,
   SAMPLE_JOB_DRAFTS,
   SAMPLE_RULES,
+  analyzeImportCandidates,
   createAnonymousAlphaFeedback,
   createEmptyAlphaState,
+  deriveCalibrationMismatches,
   loadAlphaState,
   parseBatchJobs,
+  parseJobImport,
   parseKeywordInput,
   parseStoredAlphaState,
   removeAlphaState,
   saveAlphaState,
   scoreAndSortJobs,
+  scoreJob,
   serializeAlphaState,
   type AlphaJob,
   type AlphaRules,
@@ -31,14 +36,41 @@ import {
   type BatchParseError,
   type CalibrationDecision,
   type JobDraft,
+  type ImportCandidateAnalysis,
 } from "../lib/pre-user-alpha";
 
 type StorageMode = "loading" | "ready" | "locked";
+
+type ReviewFilter =
+  | "all"
+  | "undecided"
+  | "recommended"
+  | "interested"
+  | "not_interested"
+  | "excluded";
 
 interface RecoveryState {
   message: string;
   raw?: string;
 }
+
+interface StagedJobImport {
+  fileName: string;
+  format: "csv" | "json";
+  candidates: ImportCandidateAnalysis[];
+  errors: BatchParseError[];
+  selectedIndexes: number[];
+}
+
+interface LastCalibration {
+  jobId: string;
+  previousRules: AlphaRules;
+  summary: string;
+}
+
+type CalibrationRulePlan =
+  | { ok: true; rules: AlphaRules; summary: string }
+  | { ok: false; reason: string };
 
 const subscribeToHydration = () => () => undefined;
 const getClientHydrationSnapshot = () => true;
@@ -109,28 +141,128 @@ function FoxMark() {
   );
 }
 
-function PageNav({ className, label }: { className: string; label: string }) {
+type AgentPhase =
+  | "blocked"
+  | "needs-rules"
+  | "needs-input"
+  | "needs-decision"
+  | "complete";
+
+const AGENT_PHASE_COPY: Record<
+  AgentPhase,
+  { label: string; title: string; description: string }
+> = {
+  blocked: {
+    label: "只读保护",
+    title: "本地任务已暂停",
+    description: "RoleFox 无法安全读取或写入本地数据，请先处理下方的恢复提示。",
+  },
+  "needs-rules": {
+    label: "需要目标",
+    title: "先给 Agent 一份任务简报",
+    description: "设置目标职位、地点和关键词，RoleFox 才能给出可复查的判断。",
+  },
+  "needs-input": {
+    label: "已就绪",
+    title: "任务上下文已准备好",
+    description: "放入一个岗位后，RoleFox 会立即在本机完成硬条件筛选、排序和依据生成。",
+  },
+  "needs-decision": {
+    label: "等待你判断",
+    title: "本地评估已完成",
+    description: "自动评分已经结束；感兴趣与否始终由你决定，Agent 不会替你操作。",
+  },
+  complete: {
+    label: "本轮完成",
+    title: "所有发现都已由你确认",
+    description: "你可以继续加入岗位，或展开任一结果复查规则命中和风险提示。",
+  },
+};
+
+function AgentRunStatus({
+  agentPhase,
+  decidedCount,
+  eligibleCount,
+  jobCount,
+  rulesConfigured,
+  taskName,
+  updatedAt,
+}: {
+  agentPhase: AgentPhase;
+  decidedCount: number;
+  eligibleCount: number;
+  jobCount: number;
+  rulesConfigured: boolean;
+  taskName: string;
+  updatedAt: string;
+}) {
+  const copy = AGENT_PHASE_COPY[agentPhase];
+  const pendingCount = Math.max(jobCount - decidedCount, 0);
+  const updatedTime = new Date(updatedAt).toLocaleTimeString("zh-CN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+
   return (
-    <nav aria-label={label} className={`page-nav ${className}`}>
-      <a aria-label="判断结果" href="#results">
-        <span className="nav-label-full">判断结果</span>
-        <span aria-hidden="true" className="nav-label-short">
-          结果
-        </span>
-      </a>
-      <a aria-label="目标规则" href="#rules">
-        <span className="nav-label-full">目标规则</span>
-        <span aria-hidden="true" className="nav-label-short">
-          规则
-        </span>
-      </a>
-      <a aria-label="添加岗位" href="#job-entry">
-        <span className="nav-label-full">添加岗位</span>
-        <span aria-hidden="true" className="nav-label-short">
-          岗位
-        </span>
-      </a>
-    </nav>
+    <section
+      aria-labelledby="agent-run-title"
+      className={`agent-run-status phase-${agentPhase}`}
+      data-agent-phase={agentPhase}
+    >
+      <div className="agent-run-copy">
+        <div className="agent-identity-line">
+          <span>01 / 本地判断 Agent</span>
+          <span className="agent-phase-label">{copy.label}</span>
+        </div>
+        <h1 id="agent-run-title">{taskName}</h1>
+        <p>
+          <strong>{copy.title}</strong>
+          <span>{copy.description}</span>
+        </p>
+      </div>
+
+      <div className="run-receipt" aria-label="本轮执行摘要">
+        <div className="run-receipt-copy">
+          <span>{jobCount === 0 ? "下一步" : `当前状态 · ${updatedTime}`}</span>
+          <strong>
+            {jobCount === 0
+              ? rulesConfigured
+                ? "等待岗位输入"
+                : "等待任务目标"
+              : `已分析 ${jobCount} 个 · ${eligibleCount} 个通过硬规则 · ${pendingCount} 个待决定`}
+          </strong>
+        </div>
+        {jobCount > 0 ? (
+          <ol className="run-trace" aria-label="真实执行阶段">
+            <li className={rulesConfigured ? "done" : "current"}>
+              <span aria-hidden="true" />
+              读取上下文
+            </li>
+            <li
+              className={
+                jobCount > 0 ? "done" : rulesConfigured ? "current" : ""
+              }
+            >
+              <span aria-hidden="true" />
+              硬条件筛选
+            </li>
+            <li
+              className={
+                jobCount > 0
+                  ? pendingCount > 0
+                    ? "current"
+                    : "done"
+                  : ""
+              }
+            >
+              <span aria-hidden="true" />
+              人工确认
+            </li>
+          </ol>
+        ) : null}
+      </div>
+    </section>
   );
 }
 
@@ -151,8 +283,12 @@ function createJobId(prefix: string, index = 0): string {
   return `${prefix}_${Date.now()}_${index}`;
 }
 
-function downloadText(filename: string, content: string): void {
-  const blob = new Blob([content], { type: "application/json;charset=utf-8" });
+function downloadText(
+  filename: string,
+  content: string,
+  mimeType = "application/json;charset=utf-8",
+): void {
+  const blob = new Blob([content], { type: mimeType });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
@@ -264,6 +400,173 @@ function DecisionButton({
     >
       {interested ? "感兴趣" : "不感兴趣"}
     </button>
+  );
+}
+
+function CalibrationPanel({
+  canEdit,
+  decision,
+  draft,
+  error,
+  impactCount,
+  job,
+  onApplyAddedExclusion,
+  onApplyRemovedExclusions,
+  onDraftChange,
+  onEditRules,
+  onToggleExclusion,
+  score,
+  selectedExclusions,
+}: {
+  canEdit: boolean;
+  decision: CalibrationDecision;
+  draft: string;
+  error: string;
+  impactCount: number | null;
+  job: AlphaJob;
+  onApplyAddedExclusion: () => void;
+  onApplyRemovedExclusions: () => void;
+  onDraftChange: (value: string) => void;
+  onEditRules: () => void;
+  onToggleExclusion: (keyword: string) => void;
+  score: ReturnType<typeof scoreJob>;
+  selectedExclusions: string[];
+}) {
+  const isRejectedRecommendation =
+    decision === "not_interested" && score.label === "推荐关注";
+  const isMissedInterest =
+    decision === "interested" && score.label !== "推荐关注";
+
+  if (!isRejectedRecommendation && !isMissedInterest) {
+    return null;
+  }
+
+  const canRemoveExclusions =
+    isMissedInterest && !score.eligible && score.excludedBy.length > 0;
+  const titleId = `calibration-title-${job.id}`;
+  const errorId = `calibration-error-${job.id}`;
+
+  return (
+    <section
+      aria-labelledby={titleId}
+      aria-live="polite"
+      className="calibration-alert"
+    >
+      <div className="calibration-alert-header">
+        <span aria-hidden="true">↳</span>
+        <div>
+          <strong id={titleId}>你的选择和当前规则不一致</strong>
+          <p className="calibration-alert-copy">
+            {canRemoveExclusions
+              ? `你标记了感兴趣，但“${score.excludedBy.join("、")}”触发了硬排除。`
+              : isRejectedRecommendation
+                ? "你标记了不感兴趣，但当前规则把它列为推荐关注。"
+                : `你标记了感兴趣，但当前判断只有 ${score.score} 分。`}
+          </p>
+        </div>
+      </div>
+
+      {canRemoveExclusions ? (
+        <>
+          <fieldset
+            aria-describedby={error ? errorId : undefined}
+            className="calibration-choice-list"
+          >
+            <legend>选择要从硬排除规则中移除的词</legend>
+            {score.excludedBy.map((keyword) => (
+              <label className="calibration-choice" key={keyword}>
+                <input
+                  checked={selectedExclusions.includes(keyword)}
+                  disabled={!canEdit}
+                  onChange={() => onToggleExclusion(keyword)}
+                  type="checkbox"
+                />
+                <span>{keyword}</span>
+              </label>
+            ))}
+          </fieldset>
+          {error ? (
+            <p className="field-error" id={errorId} role="alert">
+              {error}
+            </p>
+          ) : null}
+          <p className="calibration-note">
+            影响预览：这会修改全局规则，并改变当前 {impactCount ?? 0}{" "}
+            个岗位的判断。
+          </p>
+          <div className="calibration-actions">
+            <button
+              className="primary-button"
+              disabled={!canEdit}
+              onClick={onApplyRemovedExclusions}
+              type="button"
+            >
+              移除并重新判断
+            </button>
+          </div>
+        </>
+      ) : isRejectedRecommendation ? (
+        <>
+          <p className="calibration-note">
+            输入一个在岗位原文中出现、能解释你拒绝原因的词或短语。RoleFox
+            只会在你确认后把它加入硬排除规则。
+          </p>
+          <div className="calibration-input-row">
+            <label>
+              <span className="sr-only">新增硬排除词</span>
+              <input
+                aria-describedby={error ? errorId : undefined}
+                aria-invalid={Boolean(error)}
+                disabled={!canEdit}
+                maxLength={100}
+                onChange={(event) => onDraftChange(event.target.value)}
+                placeholder="例如：外呼、纯佣金"
+                value={draft}
+              />
+            </label>
+            <button
+              className="primary-button"
+              disabled={!canEdit}
+              onClick={onApplyAddedExclusion}
+              type="button"
+            >
+              加入排除词并重算
+            </button>
+          </div>
+          {error ? (
+            <p className="field-error" id={errorId} role="alert">
+              {error}
+            </p>
+          ) : null}
+          <p className="calibration-note">
+            {impactCount === null
+              ? "输入后会先在本机检查它是否命中岗位，并预览影响范围。"
+              : `影响预览：这会修改全局规则，并改变当前 ${impactCount} 个岗位的判断。`}
+          </p>
+        </>
+      ) : (
+        <>
+          <p className="calibration-note">
+            RoleFox 不会猜测你为何感兴趣。你可以补充加分词或调整目标，保存后再重新判断。
+          </p>
+          <div className="calibration-actions">
+            <button
+              className="secondary-button"
+              disabled={!canEdit}
+              onClick={onEditRules}
+              type="button"
+            >
+              检查判断简报
+            </button>
+          </div>
+        </>
+      )}
+
+      <p className="calibration-note">
+        不会自动学习或改分；只有你确认保存的规则才会影响后续判断。
+        应用后可在本次页面内撤销，刷新页面后撤销入口会结束。
+      </p>
+    </section>
   );
 }
 
@@ -382,22 +685,134 @@ function ConfirmationDialog({
 }
 
 function ResultsSection({
+  calibrationDrafts,
+  calibrationErrors,
+  calibrationSelections,
   canEdit,
   feedback,
+  getCalibrationImpact,
+  editJobError,
+  editJobForm,
+  editPossibleDuplicateConfirmed,
+  editingJobId,
+  interestedCount,
+  onApplyAddedExclusion,
+  onApplyRemovedExclusions,
+  onCalibrationDraftChange,
   onDelete,
   onDecision,
-  onLoadSamples,
+  onCancelEditJob,
+  onEditJob,
+  onEditJobChange,
+  onEditRules,
+  onExportShortlist,
+  onSaveEditedJob,
+  onToggleCalibrationExclusion,
   rulesConfigured,
   scoredJobs,
 }: {
+  calibrationDrafts: Record<string, string>;
+  calibrationErrors: Record<string, string>;
+  calibrationSelections: Record<string, string[]>;
   canEdit: boolean;
   feedback: AlphaState["feedback"];
+  getCalibrationImpact: (
+    jobId: string,
+    action: "add_exclusion" | "remove_exclusions",
+  ) => number | null;
+  editJobError: string;
+  editJobForm: JobDraft;
+  editPossibleDuplicateConfirmed: boolean;
+  editingJobId: string | null;
+  interestedCount: number;
+  onApplyAddedExclusion: (jobId: string) => void;
+  onApplyRemovedExclusions: (jobId: string) => void;
+  onCalibrationDraftChange: (jobId: string, value: string) => void;
   onDelete: (jobId: string) => void;
   onDecision: (jobId: string, decision: CalibrationDecision) => void;
-  onLoadSamples: () => void;
+  onCancelEditJob: () => void;
+  onEditJob: (job: AlphaJob) => void;
+  onEditJobChange: (field: keyof JobDraft, value: string) => void;
+  onEditRules: () => void;
+  onExportShortlist: () => void;
+  onSaveEditedJob: () => void;
+  onToggleCalibrationExclusion: (jobId: string, keyword: string) => void;
   rulesConfigured: boolean;
   scoredJobs: ReturnType<typeof scoreAndSortJobs>;
 }) {
+  const [reviewQuery, setReviewQuery] = useState("");
+  const [reviewFilter, setReviewFilter] = useState<ReviewFilter>("all");
+  const reviewSearchRef = useRef<HTMLInputElement>(null);
+  const recommendedCount = scoredJobs.filter(
+    ({ score }) => score.eligible && score.label === "推荐关注",
+  ).length;
+  const reviewCount = scoredJobs.filter(
+    ({ score }) => score.eligible && score.label !== "推荐关注",
+  ).length;
+  const excludedCount = scoredJobs.filter(({ score }) => !score.eligible).length;
+  const calibrationMismatchCount = deriveCalibrationMismatches(
+    scoredJobs,
+    feedback,
+  ).length;
+  const normalizeSearchText = (value: string) =>
+    value
+      .normalize("NFKC")
+      .trim()
+      .replace(/\s+/g, " ")
+      .toLocaleLowerCase("zh-CN");
+  const normalizedQuery = normalizeSearchText(reviewQuery);
+  const visibleJobs = scoredJobs.filter(({ job, score }) => {
+    const matchesQuery =
+      !normalizedQuery ||
+      [job.title, job.company, job.location, job.description].some((value) =>
+        normalizeSearchText(value).includes(normalizedQuery),
+      );
+    if (!matchesQuery) {
+      return false;
+    }
+
+    switch (reviewFilter) {
+      case "undecided":
+        return !feedback[job.id];
+      case "recommended":
+        return score.eligible && score.label === "推荐关注";
+      case "interested":
+        return feedback[job.id] === "interested";
+      case "not_interested":
+        return feedback[job.id] === "not_interested";
+      case "excluded":
+        return !score.eligible;
+      default:
+        return true;
+    }
+  });
+  const filterOptions: Array<{
+    value: ReviewFilter;
+    label: string;
+    count: number;
+  }> = [
+    { value: "all", label: "全部", count: scoredJobs.length },
+    {
+      value: "undecided",
+      label: "待决定",
+      count: scoredJobs.filter(({ job }) => !feedback[job.id]).length,
+    },
+    {
+      value: "recommended",
+      label: "推荐",
+      count: recommendedCount,
+    },
+    { value: "interested", label: "感兴趣", count: interestedCount },
+    {
+      value: "not_interested",
+      label: "不感兴趣",
+      count: scoredJobs.filter(
+        ({ job }) => feedback[job.id] === "not_interested",
+      ).length,
+    },
+    { value: "excluded", label: "已排除", count: excludedCount },
+  ];
+
   return (
     <section
       aria-labelledby="results-title"
@@ -406,63 +821,129 @@ function ResultsSection({
     >
       <div className="section-heading">
         <div>
+          <span className="context-kicker">04 / 复核清单</span>
           <h2 id="results-title" tabIndex={-1}>
-            机会排序
+            判断账页
           </h2>
-          <p>分数只用于排序，不代表真实适合度，更不会触发任何外部动作。</p>
+          <p>逐条复查规则命中、风险和原始输入，最后决定权始终在你。</p>
         </div>
         <div className="result-toolbar">
-          {scoredJobs.length > 0 ? (
-            <button
-              className="secondary-button"
-              disabled={!canEdit}
-              onClick={onLoadSamples}
-              type="button"
-            >
-              加载示例
-            </button>
-          ) : null}
-          <span className="result-count">{scoredJobs.length} 个岗位</span>
+          <span className="result-count" aria-live="polite">
+            {visibleJobs.length === scoredJobs.length
+              ? `${scoredJobs.length} 条发现`
+              : `${visibleJobs.length} / ${scoredJobs.length} 条发现`}
+          </span>
         </div>
       </div>
 
       {scoredJobs.length === 0 ? (
         <div className="empty-state">
-          <span aria-hidden="true" className="empty-state-mark">
-            <svg viewBox="0 0 48 48">
-              <path d="M8 9h11l5 8 5-8h11l-7 14v11l-9 6-9-6V23L8 9Z" />
-              <path d="M18 27h12M24 17v18" />
-            </svg>
+          <span aria-hidden="true" className="empty-agent-glyph">
+            04
           </span>
-          <h3>还没有岗位</h3>
+          <h3>
+            {rulesConfigured ? "把第一个岗位交给 RoleFox" : "先给 RoleFox 一份任务上下文"}
+          </h3>
           <p>
             {rulesConfigured
-              ? "添加第一个岗位，开始按你的规则排序。"
-              : "先配置你想找什么，再添加岗位；也可以载入合成示例快速体验。"}
+              ? "在下方 Composer 中粘贴岗位，RoleFox 会立即生成一份可复查的本地判断。"
+              : "设置目标职位、地点和规则后，每次判断都会以它们作为 Agent 记忆。"}
           </p>
-          <div className="empty-actions">
-            <a
-              className="primary-button"
-              href={rulesConfigured ? "#job-entry" : "#rules"}
-            >
-              {rulesConfigured ? "添加第一个岗位" : "先配置规则"}
-            </a>
-            <button
-              className="secondary-button"
-              disabled={!canEdit}
-              onClick={onLoadSamples}
-              type="button"
-            >
-              加载合成示例
-            </button>
-          </div>
         </div>
       ) : (
+        <>
+        <div className="agent-answer-summary" role="status">
+          <div>
+            <span>ROLEFOX MEMO · 04</span>
+            <p>
+              已按当前任务检查 {scoredJobs.length} 个岗位：{recommendedCount} 个推荐关注，
+              {reviewCount} 个需要复核，{excludedCount} 个触发硬排除。
+            </p>
+          </div>
+          <div className="answer-counts" aria-label="本轮结论统计">
+            <span className="recommended">{recommendedCount} 推荐</span>
+            <span className="review">{reviewCount} 复核</span>
+            <span className="excluded">{excludedCount} 排除</span>
+            {calibrationMismatchCount > 0 ? (
+              <span className="review">{calibrationMismatchCount} 待校准</span>
+            ) : null}
+          </div>
+        </div>
+        <div className="review-toolbar" aria-label="复核清单工具">
+          <label className="review-search">
+            <span className="sr-only">搜索岗位</span>
+            <input
+              id="review-search-input"
+              onChange={(event) => setReviewQuery(event.target.value)}
+              placeholder="搜索职位、公司、地点或描述"
+              ref={reviewSearchRef}
+              type="search"
+              value={reviewQuery}
+            />
+          </label>
+          <div className="review-filters" aria-label="筛选岗位" role="group">
+            {filterOptions.map((option) => (
+              <button
+                aria-pressed={reviewFilter === option.value}
+                className={`review-filter-button ${
+                  reviewFilter === option.value ? "active" : ""
+                }`}
+                key={option.value}
+                onClick={() => setReviewFilter(option.value)}
+                type="button"
+              >
+                {option.label} <span>{option.count}</span>
+              </button>
+            ))}
+          </div>
+          <button
+            className="shortlist-export"
+            disabled={interestedCount === 0}
+            onClick={onExportShortlist}
+            title={
+              interestedCount === 0
+                ? "先把至少一个岗位标记为感兴趣"
+                : `导出 ${interestedCount} 个感兴趣岗位及当前判断依据`
+            }
+            type="button"
+          >
+            导出感兴趣清单
+          </button>
+        </div>
+        {visibleJobs.length === 0 ? (
+          <div className="empty-state review-empty-state">
+            <h3>当前条件下没有岗位</h3>
+            <p>换一个搜索词或筛选条件，原始岗位不会被删除。</p>
+            <button
+              className="secondary-button"
+              onClick={() => {
+                setReviewQuery("");
+                setReviewFilter("all");
+                window.requestAnimationFrame(() => {
+                  window.requestAnimationFrame(() => reviewSearchRef.current?.focus());
+                });
+              }}
+              type="button"
+            >
+              清除搜索与筛选
+            </button>
+          </div>
+        ) : (
         <div className="job-list">
-          {scoredJobs.map(({ job, score }, index) => {
+          {visibleJobs.map(({ job, score }, visibleIndex) => {
             const currentDecision = feedback[job.id];
+            const primaryReason =
+              score.reasons.find(
+                (reason) =>
+                  reason !== "未命中任何硬排除词" &&
+                  reason !== "未设置额外加分词",
+              ) ??
+              score.concerns[0] ??
+              score.reasons[0] ??
+              "当前规则没有发现明确的命中项。";
             return (
               <article
+                aria-labelledby={`job-title-${job.id}`}
                 className={`job-card ${
                   score.eligible
                     ? score.label === "推荐关注"
@@ -470,16 +951,14 @@ function ResultsSection({
                       : "review"
                     : "excluded"
                 }`}
+                id={`job-${job.id}`}
                 key={job.id}
+                tabIndex={-1}
               >
                 <div className="job-content">
                   <div className="job-title-line">
-                    <span aria-hidden="true" className="score-rank">
-                      #{String(index + 1).padStart(2, "0")}
-                    </span>
-                    <span className="sr-only">排序第 {index + 1}</span>
                     <div>
-                      <h3>{job.title}</h3>
+                      <h3 id={`job-title-${job.id}`}>{job.title}</h3>
                       <p>
                         {job.company} · {job.location || "地点未填写"}
                       </p>
@@ -487,7 +966,7 @@ function ResultsSection({
                     <div className="job-signal">
                       <span className="score-block">
                         <strong>{score.score}</strong>
-                        <span>分</span>
+                        <span>/ 100</span>
                       </span>
                       <span
                         className={`score-label ${
@@ -502,14 +981,21 @@ function ResultsSection({
                       </span>
                     </div>
                   </div>
-                  {job.description ? (
-                    <p className="job-description">{job.description}</p>
-                  ) : null}
+                  <p className="job-primary-reason">
+                    <span>判断依据</span>
+                    {primaryReason}
+                  </p>
                   <details className="reason-details">
                     <summary>
                       依据 {score.reasons.length} · 留意 {score.concerns.length}
                       <span aria-hidden="true">⌄</span>
                     </summary>
+                    {job.description ? (
+                      <div className="source-brief">
+                        <h4>输入摘要</h4>
+                        <p>{job.description}</p>
+                      </div>
+                    ) : null}
                     <div className="reason-grid">
                       <div>
                         <h4>为什么排在这里</h4>
@@ -539,7 +1025,7 @@ function ResultsSection({
                   </details>
                   <div className="job-actions">
                     <div
-                      aria-label={`${job.title} 的校准选择`}
+                      aria-label={`${job.title} 的人工决策`}
                       className="decision-group"
                       role="group"
                     >
@@ -547,29 +1033,215 @@ function ResultsSection({
                         active={currentDecision === "interested"}
                         decision="interested"
                         disabled={!canEdit}
-                        onSelect={(decision) => onDecision(job.id, decision)}
+                        onSelect={(decision) => {
+                          const nextVisibleJob =
+                            visibleJobs[visibleIndex + 1]?.job ??
+                            visibleJobs[visibleIndex - 1]?.job;
+                          onDecision(job.id, decision);
+                          if (reviewFilter === "undecided") {
+                            window.requestAnimationFrame(() =>
+                              window.requestAnimationFrame(() =>
+                                (
+                                  document.getElementById(
+                                    nextVisibleJob
+                                      ? `job-${nextVisibleJob.id}`
+                                      : "results-title",
+                                  ) ?? document.getElementById("results-title")
+                                )?.focus({ preventScroll: true }),
+                              ),
+                            );
+                          }
+                        }}
                       />
                       <DecisionButton
                         active={currentDecision === "not_interested"}
                         decision="not_interested"
                         disabled={!canEdit}
-                        onSelect={(decision) => onDecision(job.id, decision)}
+                        onSelect={(decision) => {
+                          const nextVisibleJob =
+                            visibleJobs[visibleIndex + 1]?.job ??
+                            visibleJobs[visibleIndex - 1]?.job;
+                          onDecision(job.id, decision);
+                          if (reviewFilter === "undecided") {
+                            window.requestAnimationFrame(() =>
+                              window.requestAnimationFrame(() =>
+                                (
+                                  document.getElementById(
+                                    nextVisibleJob
+                                      ? `job-${nextVisibleJob.id}`
+                                      : "results-title",
+                                  ) ?? document.getElementById("results-title")
+                                )?.focus({ preventScroll: true }),
+                              ),
+                            );
+                          }
+                        }}
                       />
                     </div>
-                    <button
-                      className="text-button"
-                      disabled={!canEdit}
-                      onClick={() => onDelete(job.id)}
-                      type="button"
-                    >
-                      删除本地记录
-                    </button>
+                    <div className="job-record-actions">
+                      <button
+                        aria-controls={`edit-job-${job.id}`}
+                        aria-expanded={editingJobId === job.id}
+                        className="job-edit-button"
+                        disabled={!canEdit}
+                        id={`edit-job-button-${job.id}`}
+                        onClick={() => onEditJob(job)}
+                        type="button"
+                      >
+                        编辑岗位
+                      </button>
+                      <button
+                        className="text-button"
+                        disabled={!canEdit}
+                        onClick={() => onDelete(job.id)}
+                        type="button"
+                      >
+                        删除本地记录
+                      </button>
+                    </div>
                   </div>
+                  {editingJobId === job.id ? (
+                    <section
+                      aria-labelledby={`edit-job-title-${job.id}`}
+                      className="edit-job-panel"
+                      id={`edit-job-${job.id}`}
+                      onKeyDown={(event) => {
+                        if (event.key === "Escape") {
+                          event.preventDefault();
+                          onCancelEditJob();
+                        }
+                      }}
+                    >
+                      <div className="import-preview-header">
+                        <div>
+                          <span>本地记录</span>
+                          <h4 id={`edit-job-title-${job.id}`}>编辑岗位</h4>
+                        </div>
+                        <button
+                          className="text-button"
+                          onClick={onCancelEditJob}
+                          type="button"
+                        >
+                          取消编辑
+                        </button>
+                      </div>
+                      <div className="edit-job-grid">
+                        <label>
+                          <span>编辑职位 *</span>
+                          <input
+                            aria-describedby={editJobError ? `edit-job-error-${job.id}` : undefined}
+                            aria-invalid={Boolean(editJobError && !editJobForm.title.trim())}
+                            id={`edit-job-position-${job.id}`}
+                            maxLength={300}
+                            onChange={(event) =>
+                              onEditJobChange("title", event.target.value)
+                            }
+                            value={editJobForm.title}
+                          />
+                        </label>
+                        <label>
+                          <span>编辑公司 *</span>
+                          <input
+                            aria-describedby={editJobError ? `edit-job-error-${job.id}` : undefined}
+                            aria-invalid={Boolean(editJobError && !editJobForm.company.trim())}
+                            maxLength={300}
+                            onChange={(event) =>
+                              onEditJobChange("company", event.target.value)
+                            }
+                            value={editJobForm.company}
+                          />
+                        </label>
+                        <label>
+                          <span>编辑地点</span>
+                          <input
+                            maxLength={300}
+                            onChange={(event) =>
+                              onEditJobChange("location", event.target.value)
+                            }
+                            value={editJobForm.location}
+                          />
+                        </label>
+                        <label className="full-width">
+                          <span>编辑岗位描述</span>
+                          <textarea
+                            maxLength={MAX_TEXT_LENGTH}
+                            onChange={(event) =>
+                              onEditJobChange("description", event.target.value)
+                            }
+                            rows={4}
+                            value={editJobForm.description}
+                          />
+                        </label>
+                      </div>
+                      {editJobError ? (
+                        <p
+                          className="field-error"
+                          id={`edit-job-error-${job.id}`}
+                          role="alert"
+                        >
+                          {editJobError}
+                        </p>
+                      ) : null}
+                      <div className="import-actions">
+                        <button
+                          className="secondary-button"
+                          onClick={onCancelEditJob}
+                          type="button"
+                        >
+                          取消
+                        </button>
+                        <button
+                          className="primary-button"
+                          onClick={onSaveEditedJob}
+                          type="button"
+                        >
+                          {editPossibleDuplicateConfirmed
+                            ? "仍然保存并重算"
+                            : "保存修改并重算"}
+                        </button>
+                      </div>
+                    </section>
+                  ) : null}
+                  {currentDecision ? (
+                    <CalibrationPanel
+                      canEdit={canEdit}
+                      decision={currentDecision}
+                      draft={calibrationDrafts[job.id] ?? ""}
+                      error={calibrationErrors[job.id] ?? ""}
+                      impactCount={
+                        currentDecision === "not_interested"
+                          ? getCalibrationImpact(job.id, "add_exclusion")
+                          : score.excludedBy.length > 0
+                            ? getCalibrationImpact(job.id, "remove_exclusions")
+                            : null
+                      }
+                      job={job}
+                      onApplyAddedExclusion={() =>
+                        onApplyAddedExclusion(job.id)
+                      }
+                      onApplyRemovedExclusions={() =>
+                        onApplyRemovedExclusions(job.id)
+                      }
+                      onDraftChange={(value) =>
+                        onCalibrationDraftChange(job.id, value)
+                      }
+                      onEditRules={onEditRules}
+                      onToggleExclusion={(keyword) =>
+                        onToggleCalibrationExclusion(job.id, keyword)
+                      }
+                      score={score}
+                      selectedExclusions={
+                        calibrationSelections[job.id] ?? score.excludedBy
+                      }
+                    />
+                  ) : null}
                 </div>
               </article>
             );
           })}
         </div>
+        )}
+        </>
       )}
     </section>
   );
@@ -606,6 +1278,7 @@ function HydratedPreUserAlphaApp() {
     initialSession.recovery,
   );
   const [notice, setNotice] = useState("");
+  const [saveError, setSaveError] = useState("");
   const [rulesError, setRulesError] = useState("");
   const [jobError, setJobError] = useState("");
   const [batchErrors, setBatchErrors] = useState<BatchParseError[]>([]);
@@ -613,14 +1286,41 @@ function HydratedPreUserAlphaApp() {
   const [pendingDeleteJobId, setPendingDeleteJobId] = useState<string | null>(null);
   const [pendingRestore, setPendingRestore] = useState<AlphaState | null>(null);
   const [restoreError, setRestoreError] = useState("");
+  const [calibrationDrafts, setCalibrationDrafts] = useState<
+    Record<string, string>
+  >({});
+  const [calibrationErrors, setCalibrationErrors] = useState<
+    Record<string, string>
+  >({});
+  const [calibrationSelections, setCalibrationSelections] = useState<
+    Record<string, string[]>
+  >({});
+  const [lastCalibration, setLastCalibration] =
+    useState<LastCalibration | null>(null);
   const [ruleForm, setRuleForm] = useState(() =>
     rulesToForm(initialSession.state.rules),
   );
   const [jobForm, setJobForm] = useState<JobDraft>(EMPTY_JOB);
   const [batchInput, setBatchInput] = useState("");
+  const [stagedJobImport, setStagedJobImport] =
+    useState<StagedJobImport | null>(null);
+  const [jobImportError, setJobImportError] = useState("");
+  const [editingJobId, setEditingJobId] = useState<string | null>(null);
+  const [editJobForm, setEditJobForm] = useState<JobDraft>(EMPTY_JOB);
+  const [editJobError, setEditJobError] = useState("");
+  const [editPossibleDuplicateConfirmed, setEditPossibleDuplicateConfirmed] =
+    useState(false);
   const [dialogReturnFocusTo, setDialogReturnFocusTo] =
     useState<HTMLElement | null>(null);
+  const jobImportInputRef = useRef<HTMLInputElement>(null);
+  const jobImportRequestRef = useRef(0);
+  const restoreRequestRef = useRef(0);
   const [advancedRulesOpen, setAdvancedRulesOpen] = useState(
+    () =>
+      !initialSession.state.rules.targetRole.trim() ||
+      !initialSession.state.rules.targetLocation.trim(),
+  );
+  const [contextOpen, setContextOpen] = useState(
     () =>
       !initialSession.state.rules.targetRole.trim() ||
       !initialSession.state.rules.targetLocation.trim(),
@@ -631,14 +1331,38 @@ function HydratedPreUserAlphaApp() {
     [state.jobs, state.rules],
   );
   const eligibleCount = scoredJobs.filter((item) => item.score.eligible).length;
-  const interestedCount = Object.values(state.feedback).filter(
-    (decision) => decision === "interested",
-  ).length;
   const decidedCount = Object.keys(state.feedback).length;
+  const interestedCount = scoredJobs.filter(
+    ({ job }) => state.feedback[job.id] === "interested",
+  ).length;
   const canEdit = storageMode === "ready";
   const rulesConfigured = Boolean(
     state.rules.targetRole.trim() && state.rules.targetLocation.trim(),
   );
+  const draftRules: AlphaRules = {
+    targetRole: ruleForm.targetRole.trim(),
+    targetLocation: ruleForm.targetLocation.trim(),
+    includeKeywords: parseKeywordInput(ruleForm.includeKeywords),
+    excludeKeywords: parseKeywordInput(ruleForm.excludeKeywords),
+  };
+  const rulesDirty =
+    draftRules.targetRole !== state.rules.targetRole ||
+    draftRules.targetLocation !== state.rules.targetLocation ||
+    JSON.stringify(draftRules.includeKeywords) !==
+      JSON.stringify(state.rules.includeKeywords) ||
+    JSON.stringify(draftRules.excludeKeywords) !==
+      JSON.stringify(state.rules.excludeKeywords);
+  const undecidedCount = Math.max(state.jobs.length - decidedCount, 0);
+  const agentPhase: AgentPhase =
+    storageMode !== "ready"
+      ? "blocked"
+      : !rulesConfigured
+        ? "needs-rules"
+        : state.jobs.length === 0
+          ? "needs-input"
+          : undecidedCount > 0
+            ? "needs-decision"
+            : "complete";
   const modalOpen =
     showClearConfirmation || Boolean(pendingDeleteJobId) || Boolean(pendingRestore);
 
@@ -702,6 +1426,24 @@ function HydratedPreUserAlphaApp() {
     });
   }
 
+  function focusElementAfterFrames(id: string, fallbackId?: string): void {
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => {
+        const target =
+          document.getElementById(id) ??
+          (fallbackId ? document.getElementById(fallbackId) : null);
+        target?.focus({ preventScroll: true });
+        const reduceMotion =
+          typeof window.matchMedia === "function" &&
+          window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        target?.scrollIntoView?.({
+          behavior: reduceMotion ? "auto" : "smooth",
+          block: "start",
+        });
+      });
+    });
+  }
+
   function rememberDialogTrigger(element?: HTMLElement | null): void {
     setDialogReturnFocusTo(
       element ??
@@ -732,6 +1474,7 @@ function HydratedPreUserAlphaApp() {
     };
     const storageAccess = accessLocalStorage();
     if (!storageAccess.ok) {
+      setSaveError("");
       setRecovery({
         message: `无法访问浏览器本地存储：${storageAccess.reason}。编辑功能已锁定。`,
       });
@@ -741,6 +1484,13 @@ function HydratedPreUserAlphaApp() {
 
     const result = saveAlphaState(storageAccess.storage, nextState);
     if (!result.ok) {
+      if (result.code === "over_limit") {
+        setSaveError(
+          `${result.reason} 本次更改没有写入；请缩减岗位内容或导出后删除部分记录再重试。`,
+        );
+        return false;
+      }
+      setSaveError("");
       setRecovery({
         message: `保存失败：${result.reason}。为避免产生“已经保存”的错觉，编辑功能已锁定。`,
       });
@@ -748,6 +1498,7 @@ function HydratedPreUserAlphaApp() {
       return false;
     }
 
+    setSaveError("");
     setState(nextState);
     return true;
   }
@@ -766,12 +1517,21 @@ function HydratedPreUserAlphaApp() {
       includeKeywords: parseKeywordInput(ruleForm.includeKeywords),
       excludeKeywords: parseKeywordInput(ruleForm.excludeKeywords),
     };
+    const wasUnconfigured = !rulesConfigured;
     if (!updateState((current) => ({ ...current, rules }))) {
       return;
     }
     setRulesError("");
     setAdvancedRulesOpen(false);
+    setContextOpen(false);
+    setLastCalibration(null);
+    setCalibrationDrafts({});
+    setCalibrationErrors({});
+    setCalibrationSelections({});
     setNotice("目标规则已保存，现有岗位已在本地重新评分。");
+    if (wasUnconfigured && state.jobs.length === 0) {
+      focusElementAfterFrames("job-entry-title");
+    }
   }
 
   function appendJobs(drafts: JobDraft[], prefix = "job"): boolean {
@@ -844,6 +1604,259 @@ function HydratedPreUserAlphaApp() {
     }
   }
 
+  async function stageJobImport(file: File | undefined): Promise<void> {
+    const requestId = jobImportRequestRef.current + 1;
+    jobImportRequestRef.current = requestId;
+    setStagedJobImport(null);
+    setJobImportError("");
+    if (!file) {
+      return;
+    }
+    if (file.size > MAX_STORED_STATE_LENGTH) {
+      setStagedJobImport(null);
+      setJobImportError("文件超过 15 MB，未读取也未写入任何岗位。");
+      return;
+    }
+
+    const lowerName = file.name.toLocaleLowerCase("en-US");
+    const format = lowerName.endsWith(".csv")
+      ? "csv"
+      : lowerName.endsWith(".json")
+        ? "json"
+        : null;
+    if (!format) {
+      setStagedJobImport(null);
+      setJobImportError("只支持 .csv 或 .json 岗位文件。");
+      return;
+    }
+
+    let raw: string;
+    try {
+      raw = await file.text();
+    } catch {
+      if (requestId !== jobImportRequestRef.current) {
+        return;
+      }
+      setStagedJobImport(null);
+      setJobImportError("浏览器无法读取这个文件，当前岗位没有变化。");
+      return;
+    }
+
+    if (requestId !== jobImportRequestRef.current) {
+      return;
+    }
+
+    const parsed = parseJobImport(raw, format);
+    const candidates = analyzeImportCandidates(parsed.jobs, state.jobs);
+    setStagedJobImport({
+      fileName: file.name,
+      format,
+      candidates,
+      errors: parsed.errors,
+      selectedIndexes: candidates
+        .filter(({ kind }) => kind === "new")
+        .map(({ index }) => index),
+    });
+    if (parsed.errors.length > 0) {
+      setJobImportError("文件中存在格式问题；修正并重新选择文件前不会导入任何岗位。");
+    } else if (candidates.length === 0) {
+      setJobImportError("文件中没有可预览的岗位记录。");
+    }
+  }
+
+  function toggleImportCandidate(index: number): void {
+    setStagedJobImport((current) => {
+      if (!current) {
+        return current;
+      }
+      const selected = new Set(current.selectedIndexes);
+      if (selected.has(index)) {
+        selected.delete(index);
+      } else {
+        selected.add(index);
+      }
+      return { ...current, selectedIndexes: [...selected] };
+    });
+    setJobImportError("");
+  }
+
+  function cancelJobImport(): void {
+    jobImportRequestRef.current += 1;
+    setStagedJobImport(null);
+    setJobImportError("");
+    window.requestAnimationFrame(() => jobImportInputRef.current?.focus());
+  }
+
+  function confirmJobImport(): void {
+    if (!stagedJobImport) {
+      return;
+    }
+    if (stagedJobImport.errors.length > 0) {
+      setJobImportError("请先修正文件中的格式问题；本次不会部分导入。");
+      return;
+    }
+
+    const selectedSet = new Set(stagedJobImport.selectedIndexes);
+    const selectedDrafts = stagedJobImport.candidates
+      .filter(({ index }) => selectedSet.has(index))
+      .map(({ draft }) => draft);
+    if (selectedDrafts.length === 0) {
+      setJobImportError("请至少选择一个可导入岗位。");
+      return;
+    }
+
+    const refreshed = analyzeImportCandidates(
+      stagedJobImport.candidates.map(({ draft }) => draft),
+      state.jobs,
+    );
+    const selectionNeedsReview = refreshed.some(({ index, kind }) => {
+      if (!selectedSet.has(index)) {
+        return false;
+      }
+      const previousKind = stagedJobImport.candidates[index]?.kind;
+      return (
+        kind === "exact_duplicate" ||
+        kind === "within_file_duplicate" ||
+        (kind === "possible_duplicate" && previousKind === "new")
+      );
+    });
+    if (selectionNeedsReview) {
+      setStagedJobImport((current) =>
+        current
+          ? {
+              ...current,
+              candidates: refreshed,
+              selectedIndexes: current.selectedIndexes.filter((index) => {
+                const kind = refreshed[index]?.kind;
+                const previousKind = current.candidates[index]?.kind;
+                return (
+                  kind === "new" ||
+                  (kind === "possible_duplicate" &&
+                    previousKind === "possible_duplicate")
+                );
+              }),
+            }
+          : current,
+      );
+      setJobImportError(
+        "现有岗位在预览后发生变化，已重新检查并取消新发现的重复选择；请再次确认。",
+      );
+      return;
+    }
+
+    if (appendJobs(selectedDrafts, "import")) {
+      setStagedJobImport(null);
+      setJobImportError("");
+      setNotice(
+        `已从 ${stagedJobImport.fileName} 导入 ${selectedDrafts.length} 个岗位；重复项未写入。`,
+      );
+      focusElementAfterFrames("results-title");
+    }
+  }
+
+  function startEditingJob(job: AlphaJob): void {
+    setEditingJobId(job.id);
+    setEditJobForm({
+      title: job.title,
+      company: job.company,
+      location: job.location,
+      description: job.description,
+    });
+    setEditJobError("");
+    setEditPossibleDuplicateConfirmed(false);
+    focusElementAfterFrames(`edit-job-position-${job.id}`);
+  }
+
+  function changeEditedJob(field: keyof JobDraft, value: string): void {
+    setEditJobForm((current) => ({ ...current, [field]: value }));
+    setEditJobError("");
+    setEditPossibleDuplicateConfirmed(false);
+  }
+
+  function cancelEditingJob(): void {
+    const jobId = editingJobId;
+    setEditingJobId(null);
+    setEditJobForm(EMPTY_JOB);
+    setEditJobError("");
+    setEditPossibleDuplicateConfirmed(false);
+    if (jobId) {
+      focusElementAfterFrames(`edit-job-button-${jobId}`, `job-${jobId}`);
+    }
+  }
+
+  function saveEditedJob(): void {
+    if (!editingJobId) {
+      return;
+    }
+    if (!editJobForm.title.trim() || !editJobForm.company.trim()) {
+      setEditJobError("职位和公司不能为空。");
+      return;
+    }
+
+    const jobId = editingJobId;
+    const normalizedDraft: JobDraft = {
+      title: editJobForm.title.trim(),
+      company: editJobForm.company.trim(),
+      location: editJobForm.location.trim(),
+      description: editJobForm.description.trim(),
+    };
+    const duplicate = analyzeImportCandidates(
+      [normalizedDraft],
+      state.jobs.filter((job) => job.id !== jobId),
+    )[0];
+    if (duplicate?.kind === "exact_duplicate") {
+      setEditJobError("这条修改会与现有岗位完全重复，因此没有保存。");
+      setEditPossibleDuplicateConfirmed(false);
+      return;
+    }
+    if (
+      duplicate?.kind === "possible_duplicate" &&
+      !editPossibleDuplicateConfirmed
+    ) {
+      setEditJobError(
+        "已有相同职位、公司和地点但描述不同的岗位。请复查；若确实是另一条记录，再次点击“仍然保存并重算”。",
+      );
+      setEditPossibleDuplicateConfirmed(true);
+      return;
+    }
+    const saved = updateState((current) => ({
+      ...current,
+      jobs: current.jobs.map((job) =>
+        job.id === jobId
+          ? {
+              ...job,
+              ...normalizedDraft,
+            }
+          : job,
+      ),
+    }));
+    if (!saved) {
+      return;
+    }
+
+    setCalibrationDrafts((current) => {
+      const next = { ...current };
+      delete next[jobId];
+      return next;
+    });
+    setCalibrationErrors((current) => {
+      const next = { ...current };
+      delete next[jobId];
+      return next;
+    });
+    setCalibrationSelections((current) => {
+      const next = { ...current };
+      delete next[jobId];
+      return next;
+    });
+    setEditingJobId(null);
+    setEditJobForm(EMPTY_JOB);
+    setEditJobError("");
+    setEditPossibleDuplicateConfirmed(false);
+    setNotice("岗位已更新，并按当前已保存规则重新评分；原人工决定已保留。");
+    focusElementAfterFrames(`job-${jobId}`, "results-title");
+  }
+
   function loadSamples(): void {
     const wasEmpty = state.jobs.length === 0;
     const hasSamples = state.jobs.some((job) =>
@@ -881,6 +1894,7 @@ function HydratedPreUserAlphaApp() {
     if (shouldSetSampleRules) {
       setRuleForm(rulesToForm(SAMPLE_RULES));
       setAdvancedRulesOpen(false);
+      setContextOpen(false);
     }
     setNotice(
       hasSamples
@@ -893,7 +1907,8 @@ function HydratedPreUserAlphaApp() {
   }
 
   function setDecision(jobId: string, decision: CalibrationDecision): void {
-    updateState((current) => {
+    const toggledOff = state.feedback[jobId] === decision;
+    const saved = updateState((current) => {
       const feedback = { ...current.feedback };
       if (feedback[jobId] === decision) {
         delete feedback[jobId];
@@ -902,6 +1917,282 @@ function HydratedPreUserAlphaApp() {
       }
       return { ...current, feedback };
     });
+    if (!saved) {
+      return;
+    }
+
+    setCalibrationErrors((current) => {
+      const next = { ...current };
+      delete next[jobId];
+      return next;
+    });
+    if (toggledOff) {
+      setCalibrationDrafts((current) => {
+        const next = { ...current };
+        delete next[jobId];
+        return next;
+      });
+      setCalibrationSelections((current) => {
+        const next = { ...current };
+        delete next[jobId];
+        return next;
+      });
+    }
+  }
+
+  function setCalibrationError(jobId: string, message: string): void {
+    setCalibrationErrors((current) => ({ ...current, [jobId]: message }));
+  }
+
+  function setCalibrationDraft(jobId: string, value: string): void {
+    setCalibrationDrafts((current) => ({ ...current, [jobId]: value }));
+    setCalibrationError(jobId, "");
+  }
+
+  function toggleCalibrationExclusion(jobId: string, keyword: string): void {
+    const matched =
+      scoredJobs.find(({ job }) => job.id === jobId)?.score.excludedBy ?? [];
+    setCalibrationSelections((current) => {
+      const selected = current[jobId] ?? matched;
+      const nextSelection = selected.includes(keyword)
+        ? selected.filter((item) => item !== keyword)
+        : [...selected, keyword];
+      return { ...current, [jobId]: nextSelection };
+    });
+    setCalibrationError(jobId, "");
+  }
+
+  function editRulesFromCalibration(): void {
+    setContextOpen(true);
+    setAdvancedRulesOpen(true);
+    focusElementAfterFrames("rules-title");
+  }
+
+  function countChangedJudgments(nextRules: AlphaRules): number {
+    const before = new Map(
+      scoredJobs.map(({ job, score }) => [
+        job.id,
+        `${score.eligible}:${score.score}:${score.label}`,
+      ]),
+    );
+    return scoreAndSortJobs(state.jobs, nextRules).filter(
+      ({ job, score }) =>
+        before.get(job.id) !==
+        `${score.eligible}:${score.score}:${score.label}`,
+    ).length;
+  }
+
+  function buildRemovedExclusionsPlan(jobId: string): CalibrationRulePlan {
+    if (rulesDirty) {
+      return {
+        ok: false,
+        reason: "判断简报有未保存修改。请先保存，再应用这条校准。",
+      };
+    }
+
+    const scored = scoredJobs.find(({ job }) => job.id === jobId);
+    if (!scored || scored.score.excludedBy.length === 0) {
+      return {
+        ok: false,
+        reason: "当前岗位已没有可移除的命中排除词。",
+      };
+    }
+
+    const selected = calibrationSelections[jobId] ?? scored.score.excludedBy;
+    if (selected.length === 0) {
+      return { ok: false, reason: "请至少选择一个要移除的排除词。" };
+    }
+
+    const selectedKeys = new Set(
+      selected.map((keyword) => keyword.trim().toLocaleLowerCase("zh-CN")),
+    );
+    return {
+      ok: true,
+      rules: {
+        ...state.rules,
+        excludeKeywords: state.rules.excludeKeywords.filter(
+          (keyword) =>
+            !selectedKeys.has(keyword.trim().toLocaleLowerCase("zh-CN")),
+        ),
+      },
+      summary: `已移除排除词“${selected.join("、")}”`,
+    };
+  }
+
+  function buildAddedExclusionPlan(jobId: string): CalibrationRulePlan {
+    if (rulesDirty) {
+      return {
+        ok: false,
+        reason: "判断简报有未保存修改。请先保存，再应用这条校准。",
+      };
+    }
+
+    const parsed = parseKeywordInput(calibrationDrafts[jobId] ?? "");
+    if (parsed.length === 0) {
+      return {
+        ok: false,
+        reason: "请输入一个能解释此次选择的词或短语。",
+      };
+    }
+    if (parsed.length > 1) {
+      return {
+        ok: false,
+        reason: "一次只添加一个词或短语，便于复查影响。",
+      };
+    }
+
+    const [keyword] = parsed;
+    const comparisonKey = keyword.trim().toLocaleLowerCase("zh-CN");
+    const hasSameKeyword = (values: string[]) =>
+      values.some(
+        (current) =>
+          current.trim().toLocaleLowerCase("zh-CN") === comparisonKey,
+      );
+    if (hasSameKeyword(state.rules.excludeKeywords)) {
+      return {
+        ok: false,
+        reason: `“${keyword}”已经在硬排除规则中。`,
+      };
+    }
+
+    const targetRoleSignals = [
+      state.rules.targetRole,
+      ...state.rules.targetRole.split(/[\s/、,，;；·()（）-]+/),
+    ].filter(Boolean);
+    const targetLocationSignals = [
+      state.rules.targetLocation,
+      ...state.rules.targetLocation.split(/[\s/、,，;；·()（）-]+/),
+    ].filter(Boolean);
+    if (hasSameKeyword(state.rules.includeKeywords)) {
+      return {
+        ok: false,
+        reason: `“${keyword}”当前是加分词。请先在判断简报中处理这条冲突。`,
+      };
+    }
+    if (hasSameKeyword(targetRoleSignals)) {
+      return {
+        ok: false,
+        reason: `“${keyword}”与目标职位冲突。请先在判断简报中调整目标。`,
+      };
+    }
+    if (hasSameKeyword(targetLocationSignals)) {
+      return {
+        ok: false,
+        reason: `“${keyword}”与目标地点冲突。请先在判断简报中调整目标。`,
+      };
+    }
+    if (state.rules.excludeKeywords.length >= 100) {
+      return {
+        ok: false,
+        reason: "硬排除词已达到 100 个上限，请先在判断简报中整理规则。",
+      };
+    }
+
+    const job = state.jobs.find((candidate) => candidate.id === jobId);
+    if (!job) {
+      return { ok: false, reason: "找不到这条岗位记录，未修改规则。" };
+    }
+
+    const rules: AlphaRules = {
+      ...state.rules,
+      excludeKeywords: [...state.rules.excludeKeywords, keyword],
+    };
+    if (scoreJob(job, rules).eligible) {
+      return {
+        ok: false,
+        reason:
+          "这个词没有出现在岗位内容中，请使用职位、公司、地点或描述中的原文词语。",
+      };
+    }
+
+    return {
+      ok: true,
+      rules,
+      summary: `已新增排除词“${keyword}”`,
+    };
+  }
+
+  function getCalibrationImpact(
+    jobId: string,
+    action: "add_exclusion" | "remove_exclusions",
+  ): number | null {
+    const plan =
+      action === "add_exclusion"
+        ? buildAddedExclusionPlan(jobId)
+        : buildRemovedExclusionsPlan(jobId);
+    return plan.ok ? countChangedJudgments(plan.rules) : null;
+  }
+
+  function commitCalibratedRules(
+    jobId: string,
+    nextRules: AlphaRules,
+    summary: string,
+  ): void {
+    const changedCount = countChangedJudgments(nextRules);
+    const previousRules: AlphaRules = {
+      ...state.rules,
+      includeKeywords: [...state.rules.includeKeywords],
+      excludeKeywords: [...state.rules.excludeKeywords],
+    };
+    const saved = updateState((current) => ({ ...current, rules: nextRules }));
+    if (!saved) {
+      return;
+    }
+
+    setRuleForm(rulesToForm(nextRules));
+    setLastCalibration({ jobId, previousRules, summary });
+    setCalibrationErrors({});
+    setCalibrationSelections({});
+    setCalibrationDrafts({});
+    setNotice(`${summary}，${changedCount} 个岗位的判断发生变化。`);
+    focusElementAfterFrames(`job-${jobId}`);
+  }
+
+  function applyRemovedExclusions(jobId: string): void {
+    const plan = buildRemovedExclusionsPlan(jobId);
+    if (!plan.ok) {
+      setCalibrationError(jobId, plan.reason);
+      return;
+    }
+    commitCalibratedRules(jobId, plan.rules, plan.summary);
+  }
+
+  function applyAddedExclusion(jobId: string): void {
+    const plan = buildAddedExclusionPlan(jobId);
+    if (!plan.ok) {
+      setCalibrationError(jobId, plan.reason);
+      return;
+    }
+    commitCalibratedRules(jobId, plan.rules, plan.summary);
+  }
+
+  function undoLastCalibration(): void {
+    if (!lastCalibration) {
+      return;
+    }
+
+    const restoredRules = lastCalibration.previousRules;
+    const saved = updateState((current) => ({
+      ...current,
+      rules: restoredRules,
+    }));
+    if (!saved) {
+      return;
+    }
+
+    if (!rulesDirty) {
+      setRuleForm(rulesToForm(restoredRules));
+    }
+    setLastCalibration(null);
+    setCalibrationErrors({});
+    setCalibrationSelections({});
+    setCalibrationDrafts({});
+    setNotice(
+      rulesDirty
+        ? "已撤销最近一次规则校准；判断简报里的未保存编辑仍然保留。"
+        : "已撤销最近一次规则校准，全部岗位已按原规则重新判断。",
+    );
+    focusElementAfterFrames(`job-${lastCalibration.jobId}`, "results-title");
   }
 
   function removeJob(jobId: string): void {
@@ -915,12 +2206,36 @@ function HydratedPreUserAlphaApp() {
       };
     });
     if (saved) {
+      if (editingJobId === jobId) {
+        setEditingJobId(null);
+        setEditJobForm(EMPTY_JOB);
+        setEditJobError("");
+        setEditPossibleDuplicateConfirmed(false);
+      }
       setPendingDeleteJobId(null);
+      setCalibrationDrafts((current) => {
+        const next = { ...current };
+        delete next[jobId];
+        return next;
+      });
+      setCalibrationErrors((current) => {
+        const next = { ...current };
+        delete next[jobId];
+        return next;
+      });
+      setCalibrationSelections((current) => {
+        const next = { ...current };
+        delete next[jobId];
+        return next;
+      });
       setNotice("岗位及其本地校准选择已删除。");
     }
   }
 
   async function stageRestore(file: File | undefined): Promise<void> {
+    const requestId = restoreRequestRef.current + 1;
+    restoreRequestRef.current = requestId;
+    setPendingRestore(null);
     setRestoreError("");
     if (!file) {
       return;
@@ -934,7 +2249,14 @@ function HydratedPreUserAlphaApp() {
     try {
       raw = await file.text();
     } catch {
+      if (requestId !== restoreRequestRef.current) {
+        return;
+      }
       setRestoreError("浏览器无法读取这个文件，当前数据没有变化。");
+      return;
+    }
+
+    if (requestId !== restoreRequestRef.current) {
       return;
     }
 
@@ -957,6 +2279,7 @@ function HydratedPreUserAlphaApp() {
     if (!pendingRestore) {
       return;
     }
+    restoreRequestRef.current += 1;
 
     const restoredState = {
       ...pendingRestore,
@@ -974,6 +2297,13 @@ function HydratedPreUserAlphaApp() {
 
     const result = saveAlphaState(storageAccess.storage, restoredState);
     if (!result.ok) {
+      if (result.code === "over_limit") {
+        setPendingRestore(null);
+        setRestoreError(
+          `${result.reason} 当前数据没有被替换；请选择更小的备份文件。`,
+        );
+        return;
+      }
       setRecovery({
         message: `恢复写入失败：${result.reason}。当前数据没有被替换。`,
       });
@@ -988,16 +2318,36 @@ function HydratedPreUserAlphaApp() {
       !restoredState.rules.targetRole.trim() ||
         !restoredState.rules.targetLocation.trim(),
     );
+    setContextOpen(
+      !restoredState.rules.targetRole.trim() ||
+        !restoredState.rules.targetLocation.trim(),
+    );
     setJobForm(EMPTY_JOB);
     setBatchInput("");
     setBatchErrors([]);
+    setStagedJobImport(null);
+    setJobImportError("");
+    setEditingJobId(null);
+    setEditJobForm(EMPTY_JOB);
+    setEditJobError("");
+    setEditPossibleDuplicateConfirmed(false);
     setRulesError("");
     setJobError("");
     setRestoreError("");
+    setCalibrationDrafts({});
+    setCalibrationErrors({});
+    setCalibrationSelections({});
+    setLastCalibration(null);
     setRecovery(null);
+    setSaveError("");
     setStorageMode("ready");
     setPendingRestore(null);
     setNotice("本地导出已通过严格校验，并在确认后恢复到当前浏览器。");
+  }
+
+  function cancelRestore(): void {
+    restoreRequestRef.current += 1;
+    setPendingRestore(null);
   }
 
   function exportFullData(): void {
@@ -1018,6 +2368,42 @@ function HydratedPreUserAlphaApp() {
       JSON.stringify(aggregate, null, 2),
     );
     setNotice("匿名汇总已下载；其中不包含规则原文、岗位正文、公司或地点。");
+  }
+
+  function exportInterestedShortlist(): void {
+    const jobs = scoredJobs
+      .filter(({ job }) => state.feedback[job.id] === "interested")
+      .map(({ job, score }) => ({
+        title: job.title,
+        company: job.company,
+        location: job.location,
+        description: job.description,
+        score: score.score,
+        label: score.label,
+        eligible: score.eligible,
+        reasons: score.reasons,
+        concerns: score.concerns,
+      }));
+    if (jobs.length === 0) {
+      return;
+    }
+
+    downloadText(
+      `rolefox-interested-jobs-${todayForFilename()}.json`,
+      JSON.stringify(
+        {
+          schemaVersion: 1,
+          prototype: "rolefox-interested-jobs-export",
+          exportedAt: new Date().toISOString(),
+          jobs,
+        },
+        null,
+        2,
+      ),
+    );
+    setNotice(
+      `已导出 ${jobs.length} 个感兴趣岗位及当前评分依据；文件包含岗位原文，请妥善保管。`,
+    );
   }
 
   function resetLocalData(): void {
@@ -1041,15 +2427,27 @@ function HydratedPreUserAlphaApp() {
     setState(emptyState);
     setRuleForm(EMPTY_RULE_FORM);
     setAdvancedRulesOpen(true);
+    setContextOpen(true);
     setJobForm(EMPTY_JOB);
     setBatchInput("");
     setBatchErrors([]);
+    setStagedJobImport(null);
+    setJobImportError("");
+    setEditingJobId(null);
+    setEditJobForm(EMPTY_JOB);
+    setEditJobError("");
+    setEditPossibleDuplicateConfirmed(false);
     setRulesError("");
     setJobError("");
     setRestoreError("");
     setPendingRestore(null);
     setPendingDeleteJobId(null);
+    setCalibrationDrafts({});
+    setCalibrationErrors({});
+    setCalibrationSelections({});
+    setLastCalibration(null);
     setRecovery(null);
+    setSaveError("");
     setStorageMode("ready");
     setShowClearConfirmation(false);
     setNotice("当前浏览器中的 RoleFox Alpha 数据已清除。此操作无法撤销。");
@@ -1057,11 +2455,29 @@ function HydratedPreUserAlphaApp() {
 
   const resultsSection = (
     <ResultsSection
+      calibrationDrafts={calibrationDrafts}
+      calibrationErrors={calibrationErrors}
+      calibrationSelections={calibrationSelections}
       canEdit={canEdit}
       feedback={state.feedback}
+      getCalibrationImpact={getCalibrationImpact}
+      editJobError={editJobError}
+      editJobForm={editJobForm}
+      editPossibleDuplicateConfirmed={editPossibleDuplicateConfirmed}
+      editingJobId={editingJobId}
+      interestedCount={interestedCount}
+      onApplyAddedExclusion={applyAddedExclusion}
+      onApplyRemovedExclusions={applyRemovedExclusions}
+      onCalibrationDraftChange={setCalibrationDraft}
       onDelete={requestDeleteConfirmation}
       onDecision={setDecision}
-      onLoadSamples={loadSamples}
+      onCancelEditJob={cancelEditingJob}
+      onEditJob={startEditingJob}
+      onEditJobChange={changeEditedJob}
+      onEditRules={editRulesFromCalibration}
+      onExportShortlist={exportInterestedShortlist}
+      onSaveEditedJob={saveEditedJob}
+      onToggleCalibrationExclusion={toggleCalibrationExclusion}
       rulesConfigured={rulesConfigured}
       scoredJobs={scoredJobs}
     />
@@ -1088,100 +2504,40 @@ function HydratedPreUserAlphaApp() {
           </span>
           <span>
             <strong>RoleFox</strong>
-            <small>本地岗位决策</small>
+            <small>开源本地 Agent</small>
           </span>
         </div>
 
-        <PageNav className="page-nav--desktop" label="页面内导航" />
+        <div className="app-task-title">
+          <span>当前任务</span>
+          <strong>
+            {rulesConfigured
+              ? `${state.rules.targetRole} · ${state.rules.targetLocation}`
+              : "岗位机会评估"}
+          </strong>
+        </div>
 
-        <div className="sidebar-status" aria-live="polite">
-          <span className={`status-dot ${storageMode}`} aria-hidden="true" />
+        <div
+          className={`sidebar-status phase-${agentPhase}`}
+          data-agent-phase={agentPhase}
+        >
+          <span className="status-dot" aria-hidden="true" />
           <div>
-            <strong>
-              {storageMode === "ready"
-                ? "仅保存在此设备"
-                : storageMode === "loading"
-                  ? "正在读取本地数据"
-                  : "本地数据已锁定"}
-            </strong>
-            <span>无账号 · 无云端</span>
+            <strong>本地判断 Agent</strong>
+            <span>{AGENT_PHASE_COPY[agentPhase].label} · 仅本机</span>
           </div>
           <span className="mobile-storage-label">
-            {storageMode === "ready"
-              ? "本机就绪"
-              : storageMode === "loading"
-                ? "读取中"
-                : "已锁定"}
+            {AGENT_PHASE_COPY[agentPhase].label}
           </span>
         </div>
       </header>
 
       <main
-        className={`alpha-main ${scoredJobs.length > 0 ? "has-results" : "is-empty"}`}
+        className="alpha-main"
         id="main-content"
         inert={modalOpen ? true : undefined}
         tabIndex={-1}
       >
-        <header
-          aria-labelledby="hero-title"
-          className="alpha-header"
-          id="overview"
-        >
-          <div className="hero-copy">
-            <p className="eyebrow">个人机会工作台</p>
-            <h1 id="hero-title">把求职选择变得清楚</h1>
-            <p className="lede">
-              用自己的规则筛选岗位，把真正值得看的机会放在前面。
-            </p>
-          </div>
-
-          <section className="release-meta" aria-labelledby="local-view-title">
-            <div className="hero-score-row">
-              <div>
-                <strong>{eligibleCount}</strong>
-                <span>符合硬规则</span>
-              </div>
-              <div>
-                <strong>{state.jobs.length}</strong>
-                <span>已录入岗位</span>
-              </div>
-            </div>
-            <div className="hero-progress-copy">
-              <div>
-                <span id="local-view-title">已标记</span>
-                <strong>
-                  {state.jobs.length === 0
-                    ? "0%"
-                    : `${Math.round((decidedCount / state.jobs.length) * 100)}%`}
-                </strong>
-              </div>
-              <progress
-                aria-label="判断进度"
-                max={Math.max(state.jobs.length, 1)}
-                value={decidedCount}
-              >
-                {decidedCount} / {state.jobs.length}
-              </progress>
-              <p>
-                已判断 {decidedCount} 个 · 感兴趣 {interestedCount} 个
-              </p>
-            </div>
-          </section>
-        </header>
-
-        <details className="disclosure">
-          <summary>
-            <span className="disclosure-icon" aria-hidden="true" />
-            <strong>仅保存在此设备</strong>
-            <span className="disclosure-hint">
-              了解隐私边界 <i aria-hidden="true">⌄</i>
-            </span>
-          </summary>
-          <p>
-            这个开源 Alpha 没有账号、服务器存储或云同步，也不会扫描、投递、回复、连接邮箱/日历或调用 AI Provider。清除浏览器数据前请先导出备份。
-          </p>
-        </details>
-
         {recovery ? (
           <section className="recovery-panel" role="alert">
             <div>
@@ -1221,21 +2577,91 @@ function HydratedPreUserAlphaApp() {
           </div>
         ) : null}
 
-        <div
-          className={`workbench-grid ${scoredJobs.length > 0 ? "has-results" : "is-empty"}`}
+        {saveError ? (
+          <div className="notice notice-error" role="alert">
+            <span aria-hidden="true">!</span> {saveError}
+            <button
+              aria-label="关闭保存错误提示"
+              onClick={() => setSaveError("")}
+              type="button"
+            >
+              ×
+            </button>
+          </div>
+        ) : null}
+
+        {lastCalibration ? (
+          <div className="calibration-undo" role="status">
+            <div>
+              <strong>规则校准已应用 · 本次页面内可撤销</strong>
+              <span>{lastCalibration.summary}；刷新后规则保留，撤销入口会结束。</span>
+            </div>
+            <button
+              className="secondary-button"
+              disabled={!canEdit}
+              onClick={undoLastCalibration}
+              type="button"
+            >
+              撤销最近校准
+            </button>
+          </div>
+        ) : null}
+
+        <section
+          className={`task-workspace ${state.jobs.length > 0 ? "has-results" : "is-empty"} ${rulesConfigured ? "rules-ready" : "needs-context"}`}
+          aria-label="本地判断 Agent 工作区"
         >
-        {resultsSection}
-        <div className="two-column-grid">
-          <section className="panel" id="rules" aria-labelledby="rules-title">
+        <AgentRunStatus
+          agentPhase={agentPhase}
+          decidedCount={decidedCount}
+          eligibleCount={eligibleCount}
+          jobCount={state.jobs.length}
+          rulesConfigured={rulesConfigured}
+          taskName={
+            rulesConfigured
+              ? `${state.rules.targetRole} 机会筛选`
+              : "创建你的岗位筛选任务"
+          }
+          updatedAt={state.updatedAt}
+        />
+        <div className="task-controls">
+          <section className="panel context-panel" id="rules" aria-labelledby="rules-title">
             <div className="section-heading compact">
               <div>
-                <h2 id="rules-title">你想找什么</h2>
+                <span className="context-kicker">02 / 判断简报</span>
+                <h2 id="rules-title" tabIndex={-1}>我的判断简报</h2>
+                <p>RoleFox 每次都会按这份简报判断。</p>
               </div>
-              <span className={`completion-chip ${rulesConfigured ? "complete" : ""}`}>
-                {rulesConfigured ? "已配置" : "待配置"}
-              </span>
+              <button
+                aria-expanded={contextOpen}
+                className="context-toggle"
+                disabled={!canEdit}
+                onClick={() => setContextOpen((current) => !current)}
+                type="button"
+              >
+                {contextOpen ? "收起" : "编辑"}
+              </button>
             </div>
 
+            {!contextOpen ? <dl className="context-summary">
+              <div>
+                <dt>目标职位</dt>
+                <dd>{state.rules.targetRole || "尚未设置"}</dd>
+              </div>
+              <div>
+                <dt>目标地点</dt>
+                <dd>{state.rules.targetLocation || "尚未设置"}</dd>
+              </div>
+              <div>
+                <dt>判断规则</dt>
+                <dd>
+                  {state.rules.includeKeywords.length} 个加分词 · {state.rules.excludeKeywords.length} 个排除词
+                </dd>
+              </div>
+            </dl> : null}
+
+            {contextOpen ? (
+            <div className="context-editor">
             <div className="form-grid">
               <label>
                 <span>目标职位 *</span>
@@ -1328,20 +2754,26 @@ function HydratedPreUserAlphaApp() {
               </p>
             ) : null}
             <button className="primary-button" disabled={!canEdit} onClick={saveRules} type="button">
-              保存并重新评分
+              {state.jobs.length > 0 ? "更新上下文并重新分析" : "保存并继续添加岗位"}
             </button>
+            </div>
+            ) : null}
           </section>
 
-          <section className="panel" id="job-entry" aria-labelledby="job-entry-title">
+          <section className="panel command-dock" id="job-entry" aria-labelledby="job-entry-title">
             <div className="section-heading compact">
-              <div>
-                <h2 id="job-entry-title">把岗位放进来</h2>
+              <div className="composer-heading">
+                <div>
+                  <span className="composer-kicker">03 / 岗位输入台</span>
+                  <h2 id="job-entry-title" tabIndex={-1}>把一个岗位放到桌面上</h2>
+                  <p className="command-hint">RoleFox 会按已保存的判断简报在本机留下批注。</p>
+                </div>
               </div>
-              <span className="privacy-chip">仅手动输入</span>
+              <span className="composer-mode"><i aria-hidden="true" />本地规则 · 未联网</span>
             </div>
 
             <div className="form-grid job-form">
-              <label>
+              <label className="composer-meta-field">
                 <span>职位 *</span>
                 <input
                   aria-describedby={
@@ -1360,7 +2792,7 @@ function HydratedPreUserAlphaApp() {
                   value={jobForm.title}
                 />
               </label>
-              <label>
+              <label className="composer-meta-field">
                 <span>公司 *</span>
                 <input
                   aria-describedby={
@@ -1379,7 +2811,7 @@ function HydratedPreUserAlphaApp() {
                   value={jobForm.company}
                 />
               </label>
-              <label className="full-width">
+              <label className="composer-meta-field">
                 <span>地点</span>
                 <input
                   disabled={!canEdit}
@@ -1391,7 +2823,7 @@ function HydratedPreUserAlphaApp() {
                   value={jobForm.location}
                 />
               </label>
-              <label className="full-width">
+              <label className="full-width job-description-field composer-prompt-field">
                 <span>岗位描述</span>
                 <textarea
                   disabled={!canEdit}
@@ -1402,40 +2834,92 @@ function HydratedPreUserAlphaApp() {
                       description: event.target.value,
                     }))
                   }
-                  placeholder="粘贴与判断相关的描述；内容只保存在本浏览器。"
-                  rows={4}
+                  placeholder="粘贴岗位描述，或写下你希望 RoleFox 判断的关键信息…"
+                  rows={3}
                   value={jobForm.description}
                 />
               </label>
             </div>
-            <button className="primary-button" disabled={!canEdit} onClick={addManualJob} type="button">
-              添加并评分
-            </button>
 
-            <details className="batch-entry">
-              <summary>批量粘贴</summary>
-              <label>
-                <span>每行一个岗位</span>
-                <textarea
-                  aria-describedby={
-                    batchErrors.length > 0 ? "batch-errors" : undefined
-                  }
-                  aria-invalid={batchErrors.length > 0}
+            {!rulesConfigured || rulesDirty ? (
+              <p className="composer-blocker" role="status">
+                {!rulesConfigured
+                  ? "先保存任务目标，再开始分析。"
+                  : "任务上下文有未保存修改，请先更新。"}
+              </p>
+            ) : null}
+            {rulesConfigured && !rulesDirty ? (
+              <div className="composer-context-line" aria-label="本次判断使用的 Agent 记忆">
+                <span aria-hidden="true" />
+                使用 {state.rules.targetRole} · {state.rules.targetLocation} · {state.rules.includeKeywords.length + state.rules.excludeKeywords.length} 条规则
+              </div>
+            ) : null}
+            <div className="composer-actions">
+              <div className="composer-tools">
+                <button
+                  className="sample-link"
                   disabled={!canEdit}
-                  maxLength={MAX_TEXT_LENGTH}
-                  onChange={(event) => setBatchInput(event.target.value)}
-                  placeholder={
-                    "AI 产品经理 | Atlas Labs | 远程 | B2B AI 工作流\n产品运营 | Northstar | 上海 | 跨团队运营"
-                  }
-                  rows={5}
-                  value={batchInput}
-                />
-                <small>格式：职位 | 公司 | 地点 | 描述。一次最多 100 行。</small>
-              </label>
-              <button className="secondary-button" disabled={!canEdit} onClick={addBatchJobs} type="button">
-                检查并导入
+                  onClick={loadSamples}
+                  type="button"
+                >
+                  加载合成示例
+                </button>
+                <details className="batch-entry">
+                  <summary>批量输入</summary>
+                  <div className="batch-entry-popover">
+                    <label>
+                      <span>每行一个岗位</span>
+                      <textarea
+                        aria-describedby={
+                          batchErrors.length > 0 ? "batch-errors" : undefined
+                        }
+                        aria-invalid={batchErrors.length > 0}
+                        disabled={!canEdit}
+                        maxLength={MAX_TEXT_LENGTH}
+                        onChange={(event) => setBatchInput(event.target.value)}
+                        placeholder={
+                          "AI 产品经理 | Atlas Labs | 远程 | B2B AI 工作流\n产品运营 | Northstar | 上海 | 跨团队运营"
+                        }
+                        rows={5}
+                        value={batchInput}
+                      />
+                      <small>格式：职位 | 公司 | 地点 | 描述。一次最多 100 行。</small>
+                    </label>
+                    <button
+                      className="secondary-button"
+                      disabled={!canEdit}
+                      onClick={addBatchJobs}
+                      type="button"
+                    >
+                      检查并导入
+                    </button>
+                  </div>
+                </details>
+                <label className="import-control">
+                  <span>从 CSV / JSON 导入</span>
+                  <input
+                    accept=".csv,.json,text/csv,application/json"
+                    aria-describedby="job-import-help"
+                    disabled={!canEdit}
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      void stageJobImport(file);
+                      event.target.value = "";
+                    }}
+                    ref={jobImportInputRef}
+                    type="file"
+                  />
+                </label>
+              </div>
+              <button
+                className="composer-submit"
+                disabled={!canEdit || !rulesConfigured || rulesDirty}
+                onClick={addManualJob}
+                type="button"
+              >
+                运行判断
               </button>
-            </details>
+            </div>
             {jobError ? (
               <p className="field-error" id="job-error" role="alert">
                 {jobError}
@@ -1455,11 +2939,185 @@ function HydratedPreUserAlphaApp() {
                 ))}
               </ul>
             ) : null}
+            <p className="sr-only" id="job-import-help">
+              文件只在当前浏览器读取。选择后先显示预览和重复检查，确认前不会写入岗位。
+            </p>
+            {stagedJobImport ? (
+              <section
+                aria-labelledby="job-import-title"
+                className="import-preview"
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    cancelJobImport();
+                  }
+                }}
+              >
+                <div className="import-preview-header">
+                  <div>
+                    <span>{stagedJobImport.format.toUpperCase()} · 本地预览</span>
+                    <h3 id="job-import-title">{stagedJobImport.fileName}</h3>
+                  </div>
+                  <button
+                    className="text-button"
+                    onClick={cancelJobImport}
+                    type="button"
+                  >
+                    取消导入
+                  </button>
+                </div>
+                <div className="import-preview-summary" aria-live="polite">
+                  <span>
+                    有效 <strong>{stagedJobImport.candidates.length}</strong>
+                  </span>
+                  <span>
+                    新岗位{" "}
+                    <strong>
+                      {
+                        stagedJobImport.candidates.filter(
+                          ({ kind }) => kind === "new",
+                        ).length
+                      }
+                    </strong>
+                  </span>
+                  <span>
+                    疑似重复{" "}
+                    <strong>
+                      {
+                        stagedJobImport.candidates.filter(
+                          ({ kind }) => kind === "possible_duplicate",
+                        ).length
+                      }
+                    </strong>
+                  </span>
+                  <span>
+                    精确重复{" "}
+                    <strong>
+                      {
+                        stagedJobImport.candidates.filter(({ kind }) =>
+                          ["exact_duplicate", "within_file_duplicate"].includes(
+                            kind,
+                          ),
+                        ).length
+                      }
+                    </strong>
+                  </span>
+                  <span>
+                    将导入 <strong>{stagedJobImport.selectedIndexes.length}</strong>
+                  </span>
+                  <span>
+                    格式问题 <strong>{stagedJobImport.errors.length}</strong>
+                  </span>
+                </div>
+                {stagedJobImport.errors.length > 0 ? (
+                  <ul className="import-error-list" aria-label="文件导入错误">
+                    {stagedJobImport.errors.map((error, index) => (
+                      <li key={`${error.line}-${index}-${error.message}`}>
+                        {error.line > 0 ? `第 ${error.line} 行：` : ""}
+                        {error.message}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+                {stagedJobImport.candidates.length > 0 ? (
+                  <div className="import-list">
+                    {stagedJobImport.candidates.map((candidate) => {
+                      const selectable =
+                        candidate.kind === "new" ||
+                        candidate.kind === "possible_duplicate";
+                      const selected = stagedJobImport.selectedIndexes.includes(
+                        candidate.index,
+                      );
+                      const status =
+                        candidate.kind === "new"
+                          ? "可导入"
+                          : candidate.kind === "possible_duplicate"
+                            ? "疑似重复 · 默认跳过"
+                            : candidate.kind === "within_file_duplicate"
+                              ? `文件内重复 · 第 ${(candidate.duplicateOfDraftIndex ?? 0) + 1} 条`
+                              : "与现有岗位完全重复";
+                      return (
+                        <div
+                          className={`import-row ${
+                            candidate.kind === "possible_duplicate"
+                              ? "possible-duplicate"
+                              : selectable
+                                ? ""
+                                : "duplicate"
+                          }`}
+                          key={`${candidate.index}-${candidate.fingerprint}`}
+                        >
+                          <label className="import-row-main">
+                            <span>
+                              <input
+                                aria-label={`${selectable ? "选择" : "不可选择"} ${candidate.draft.title}，${status}`}
+                                checked={selected}
+                                disabled={!selectable}
+                                onChange={() =>
+                                  toggleImportCandidate(candidate.index)
+                                }
+                                type="checkbox"
+                              />{" "}
+                              <strong>{candidate.draft.title}</strong>
+                            </span>
+                            <p>
+                              {candidate.draft.company} ·{" "}
+                              {candidate.draft.location || "地点未填写"}
+                            </p>
+                          </label>
+                          <span className="import-status">{status}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : null}
+                {jobImportError ? (
+                  <p className="field-error" role="alert">
+                    {jobImportError}
+                  </p>
+                ) : null}
+                <div className="import-actions">
+                  <button
+                    className="secondary-button"
+                    onClick={cancelJobImport}
+                    type="button"
+                  >
+                    取消
+                  </button>
+                  <button
+                    className="primary-button"
+                    disabled={
+                      !canEdit ||
+                      !rulesConfigured ||
+                      rulesDirty ||
+                      stagedJobImport.errors.length > 0 ||
+                      stagedJobImport.selectedIndexes.length === 0
+                    }
+                    onClick={confirmJobImport}
+                    type="button"
+                  >
+                    确认导入 {stagedJobImport.selectedIndexes.length} 个岗位
+                  </button>
+                </div>
+              </section>
+            ) : jobImportError ? (
+              <p className="field-error" role="alert">
+                {jobImportError}
+              </p>
+            ) : null}
           </section>
         </div>
 
+        <div className="task-output">
+          {resultsSection}
         </div>
+        </section>
 
+        <details className="workspace-utilities">
+          <summary>
+            <span>数据、开源与反馈</span>
+            <small>备份、恢复与项目链接</small>
+          </summary>
         <div className="colophon-grid">
         <section className="data-panel" id="data-controls" aria-labelledby="data-title">
           <div>
@@ -1524,6 +3182,7 @@ function HydratedPreUserAlphaApp() {
           </a>
         </section>
         </div>
+        </details>
 
         <footer className="alpha-footer">
           <div className="footer-topline">
@@ -1552,12 +3211,10 @@ function HydratedPreUserAlphaApp() {
             </nav>
           </div>
           <div className="footer-meta">
-            <span>仅在当前浏览器运行</span>
-            <span>不会产生外部求职动作</span>
+            <span>没有账号、服务器存储或云同步</span>
+            <span>不会扫描、投递、回复、连接邮箱/日历或调用 AI Provider</span>
           </div>
         </footer>
-
-        <PageNav className="page-nav--mobile" label="移动页面内导航" />
       </main>
 
       {showClearConfirmation ? (
@@ -1611,7 +3268,7 @@ function HydratedPreUserAlphaApp() {
           icon="↺"
           iconClassName="restore"
           id="restore"
-          onCancel={() => setPendingRestore(null)}
+          onCancel={cancelRestore}
           onConfirm={restoreStagedData}
           returnFocusTo={dialogReturnFocusTo}
           title="用导出文件覆盖当前本地数据？"
