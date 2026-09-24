@@ -76,6 +76,23 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: pnpm check
 
+      - name: Install Chromium for browser E2E
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Verify tagged browser workflows
+        run: pnpm test:e2e:run
+
+      - name: Upload Playwright failure report
+        if: failure()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: playwright-report-release-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 14
+
       - name: Package the browser-local static build
         env:
           RELEASE_TAG: ${{ github.ref_name }}

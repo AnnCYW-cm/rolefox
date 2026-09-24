@@ -72,7 +72,12 @@ Before submitting changes, run:
 
 ```bash
 pnpm check
+pnpm exec playwright install chromium # run once before the first E2E test
+pnpm test:e2e
 ```
+
+`pnpm test:e2e` builds and serves the static export, then exercises the critical user journeys with synthetic data in isolated Chromium browser contexts. CI, tagged Alpha releases, and the post-deploy Pages check run the corresponding Playwright gates too; failure screenshots, traces, and HTML reports are never included in the release archive.
+On a clean Linux environment without Chromium system libraries, use `pnpm exec playwright install --with-deps chromium` instead.
 
 ## Verification Gate and the next phase
 

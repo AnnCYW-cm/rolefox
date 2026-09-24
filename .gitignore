@@ -4,6 +4,8 @@ node_modules/
 dist/
 out/
 coverage/
+playwright-report/
+test-results/
 *.tsbuildinfo
 
 # Environment and secrets

@@ -70,7 +70,12 @@ pnpm dev
 
 ```bash
 pnpm check
+pnpm exec playwright install chromium # 首次运行 E2E 前执行一次
+pnpm test:e2e
 ```
+
+`pnpm test:e2e` 会构建并启动本地静态导出，在隔离的 Chromium 浏览器上下文中使用合成数据验证关键用户流程。CI、正式 Alpha 发布和 Pages 部署后检查也会运行对应的 Playwright 门禁；失败截图、trace 与 HTML 报告不会进入发布包。
+全新 Linux 环境若尚未安装 Chromium 的系统库，请把安装命令改为 `pnpm exec playwright install --with-deps chromium`。
 
 ## 验证 Gate 与下一阶段
 

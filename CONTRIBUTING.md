@@ -20,7 +20,12 @@ pnpm dev
 
 ```bash
 pnpm check
+pnpm exec playwright install chromium # 首次运行 E2E 前执行一次
+pnpm test:e2e
 ```
+
+Playwright E2E 只使用合成数据并在隔离浏览器上下文中运行。失败报告位于 `playwright-report/` 与 `test-results/`，不要提交这些本地产物。
+全新 Linux 环境若缺少 Chromium 系统库，请使用 `pnpm exec playwright install --with-deps chromium`。
 
 ## Pull Request 要求
 
